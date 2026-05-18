@@ -1,10 +1,14 @@
-import { View } from "react-native";
-import LeadDetailsScreen from "./src/app/lead-details";
+import { useEffect } from 'react';
+import * as SplashScreen from 'expo-splash-screen';
+import { Stack } from 'expo-router/stack';
 
-export default function App() {
-  return (
-    <View style={{ flex: 1 }}>
-      <LeadDetailsScreen />
-    </View>
-  );
+// Keep the splash screen visible while we fetch resources
+SplashScreen.preventAutoHideAsync();
+
+export default function RootLayout() {
+  useEffect(() => {
+    SplashScreen.hideAsync();
+  }, []);
+
+  return <Stack screenOptions={{ headerShown: false }} />;
 }

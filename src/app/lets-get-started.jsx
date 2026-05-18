@@ -1,4 +1,4 @@
-// LetsGetStarted.tsx
+// LetsGetStarted.jsx
 // React Native + Expo version of the screen in your image
 
 import React from "react";
@@ -13,15 +13,8 @@ import {
   StatusBar,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
 
 export default function LetsGetStarted() {
-  const router = useRouter();
-
-  const handleGetStarted = () => {
-    router.push("/dashboard");
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" />
@@ -65,11 +58,7 @@ export default function LetsGetStarted() {
               Let's Get{"\n"}Started!
             </Text>
 
-            <TouchableOpacity 
-              style={styles.arrowButton}
-              onPress={handleGetStarted}
-              activeOpacity={0.8}
-            >
+            <TouchableOpacity style={styles.arrowButton}>
               <Ionicons name="arrow-forward" size={28} color="#fff" />
             </TouchableOpacity>
           </View>
