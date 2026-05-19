@@ -11,7 +11,7 @@ import {
   SafeAreaView,
   StatusBar,
 } from 'react-native';
-import { styles } from '../styles/leadDetailsStyles';
+import { styles } from '../src/styles/leadDetailsStyles';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
