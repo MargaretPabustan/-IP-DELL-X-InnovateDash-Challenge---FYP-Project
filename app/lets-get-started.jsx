@@ -1,6 +1,3 @@
-// LetsGetStarted.jsx
-// React Native + Expo version of the screen in your image
-
 import React from "react";
 import {
   View,
@@ -11,102 +8,93 @@ import {
   TouchableOpacity,
   Image,
   StatusBar,
+  Platform,
+  Dimensions,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+
+const { width } = Dimensions.get("window");
 
 export default function LetsGetStarted() {
+  const router = useRouter();
+
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" />
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      <View style={styles.phoneFrame}>
-        <ImageBackground
-          source={{
-            uri: "https://images.unsplash.com/photo-1511578314322-379afb476865?q=80&w=1200&auto=format&fit=crop",
-          }}
-          style={styles.background}
-          imageStyle={styles.imageStyle}
+      <ImageBackground
+        source={{
+          uri: "https://images.unsplash.com/photo-1511578314322-379afb476865?q=80&w=1200&auto=format&fit=crop",
+        }}
+        style={styles.background}
+        resizeMode="cover"
+      >
+        {/* Dark Overlay */}
+        <View style={styles.overlay} />
+
+        {/* Top Row */}
+        <View
+          style={[
+            styles.topRow,
+            { paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12 },
+          ]}
         >
-          {/* Dark Overlay */}
-          <View style={styles.overlay} />
-
-          {/* Top Section */}
-          <View style={styles.topRow}>
-            <View style={styles.profileContainer}>
-              <Image
-                source={{
-                  uri: "https://i.pravatar.cc/100",
-                }}
-                style={styles.profileImage}
-              />
-              <View style={styles.onlineDot} />
-            </View>
-
-            <Text style={styles.logo}>Boothflow</Text>
+          <View style={styles.profileContainer}>
+            <Image
+              source={{ uri: "https://i.pravatar.cc/100" }}
+              style={styles.profileImage}
+            />
+            <View style={styles.onlineDot} />
           </View>
 
-          {/* Main Title */}
-          <View style={styles.middleContent}>
-            <Text style={styles.heading}>
-              Smart lead{"\n"}capture with AI
-            </Text>
-          </View>
+          <Text style={styles.logo}>Boothflow</Text>
+        </View>
 
-          {/* Bottom CTA */}
-          <View style={styles.bottomContainer}>
-            <Text style={styles.ctaText}>
-              Let's Get{"\n"}Started!
-            </Text>
+        {/* Middle Heading */}
+        <View style={styles.middleContent}>
+          <Text style={styles.heading}>
+            Smart lead{"\n"}capture with AI
+          </Text>
+        </View>
 
-            <TouchableOpacity style={styles.arrowButton}>
-              <Ionicons name="arrow-forward" size={28} color="#fff" />
-            </TouchableOpacity>
-          </View>
-        </ImageBackground>
-      </View>
+        {/* Bottom CTA */}
+        <View
+          style={[
+            styles.bottomContainer,
+            { paddingBottom: Platform.OS === 'ios' ? 40 : 28 },
+          ]}
+        >
+          <Text style={styles.ctaText}>Let's Get{"\n"}Started!</Text>
+
+          <TouchableOpacity
+            style={styles.arrowButton}
+            onPress={() => router.push("/dashboard")}
+            activeOpacity={0.85}
+          >
+            <Ionicons name="arrow-forward" size={28} color="#fff" />
+          </TouchableOpacity>
+        </View>
+      </ImageBackground>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: "#e5e5e5",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-
-  phoneFrame: {
-    width: 320,
-    height: 680,
-    borderRadius: 35,
-    overflow: "hidden",
-    backgroundColor: "#fff",
-    elevation: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 10,
-    shadowOffset: {
-      width: 0,
-      height: 5,
-    },
+    backgroundColor: "#000",
   },
 
   background: {
     flex: 1,
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 40,
-  },
-
-  imageStyle: {
-    borderRadius: 35,
+    paddingHorizontal: 28,
   },
 
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0,0,0,0.35)",
+    backgroundColor: "rgba(0,0,0,0.40)",
   },
 
   topRow: {
@@ -124,62 +112,67 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: "#fff",
   },
 
   onlineDot: {
-    width: 14,
-    height: 14,
+    width: 13,
+    height: 13,
     borderRadius: 7,
     backgroundColor: "red",
     position: "absolute",
-    top: -2,
-    right: -2,
+    top: -1,
+    right: -1,
     borderWidth: 2,
     borderColor: "#fff",
   },
 
   logo: {
     color: "#fff",
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: "300",
-    fontFamily: "serif",
+    fontStyle: "italic",
   },
 
   middleContent: {
     zIndex: 2,
-    marginTop: 80,
+    flex: 1,
+    justifyContent: "center",
   },
 
   heading: {
     color: "#fff",
-    fontSize: 42,
+    fontSize: Math.min(width * 0.11, 46),
     fontWeight: "800",
-    lineHeight: 48,
-    width: "90%",
+    lineHeight: Math.min(width * 0.13, 54),
   },
 
   bottomContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-end",
     zIndex: 2,
   },
 
   ctaText: {
     color: "#fff",
-    fontSize: 28,
+    fontSize: Math.min(width * 0.075, 30),
     fontWeight: "700",
-    lineHeight: 34,
+    lineHeight: Math.min(width * 0.09, 36),
   },
 
   arrowButton: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: "#ffb000",
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: "#FFB000",
     justifyContent: "center",
     alignItems: "center",
+    shadowColor: "#FFB000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 6,
   },
 });
