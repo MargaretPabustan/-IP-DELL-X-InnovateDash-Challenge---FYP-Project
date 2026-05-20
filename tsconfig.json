@@ -28,6 +28,6 @@
     ".expo/types/**/*.ts",
     "expo-env.d.ts",
     "expo-env.d.ts"
-  ],
+, "src/styles/SuccessfullySubmittedScreen.ts"  ],
   "extends": "expo/tsconfig.base"
 }
