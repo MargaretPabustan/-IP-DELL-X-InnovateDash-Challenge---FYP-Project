@@ -1,11 +1,9 @@
+// Import required modules for the FYP project //
 const express = require('express');
 const mysql = require('mysql2');
-const cors = require('cors');
-
 const app = express();
 
 app.use(express.json());
-app.use(cors());
 
 const connection = mysql.createConnection({
     host: '5-aozg.h.filess.io',
@@ -23,189 +21,67 @@ connection.connect((err) => {
     console.log('Connected to MySQL database');
 });
 
-
-// validation
-function validateLead(name, email, phone) {
-    if (!name || !email || !phone) {
-        return "All fields (name, email, phone) are required";
-    }
-
-    // simple email check
-    const emailRegex = /\S+@\S+\.\S+/;
-    if (!emailRegex.test(email)) {
-        return "Invalid email format";
-    }
-
-    if (phone.length < 8) {
-        return "Phone number is too short";
-    }
-
-    return null;
-}
-
-
-// =========================
-// GET ALL LEADS
-// =========================
-app.get('/leads', (req, res) => {
-    connection.query('SELECT * FROM leads', (err, results) => {
+// Basic Routes//
+//teams routes//
+// GET all teams
+app.get("/teams", (req, res) => {
+    db.query("SELECT * FROM teams", (err, results) => {
         if (err) {
-            console.error(err);
+            console.error("Error fetching teams:", err);
             return res.status(500).json({
-                success: false,
-                message: 'Failed to fetch leads'
+                message: "Error retrieving teams from database"
             });
         }
 
-        res.json({
-            success: true,
-            data: results
-        });
+        res.status(200).json(results);
     });
 });
 
-
-// =========================
-// GET LEAD BY ID
-// =========================
-app.get('/leads/:id', (req, res) => {
-    connection.query(
-        'SELECT * FROM leads WHERE lead_id = ?',
+// GET a specific team by their id//
+app.get("/teams/:id", (req, res) => {
+    db.query(
+        "SELECT * FROM teams WHERE team_id = ?",
         [req.params.id],
         (err, results) => {
             if (err) {
+                console.error("Error fetching team:", err);
                 return res.status(500).json({
-                    success: false,
-                    message: 'Database error'
+                    message: "Error retrieving team from database"
                 });
             }
 
             if (results.length === 0) {
                 return res.status(404).json({
-                    success: false,
-                    message: 'Lead not found'
+                    message: "Team not found"
                 });
             }
 
-            res.json({
-                success: true,
-                data: results[0]
-            });
+            res.status(200).json(results[0]);
         }
     );
 });
 
 
-// =========================
-// CREATE LEAD (WITH VALIDATION)
-// =========================
-app.post('/leads', (req, res) => {
-    const { name, email, phone } = req.body;
+// CREATE team
+app.post("/teams", (req, res) => {
+    const { team_name, territory, description } = req.body;
 
-    const error = validateLead(name, email, phone);
-    if (error) {
-        return res.status(400).json({
-            success: false,
-            message: error
-        });
-    }
-
-    const sql = `
-        INSERT INTO leads (name, email, phone)
-        VALUES (?, ?, ?)
-    `;
-
-    connection.query(sql, [name, email, phone], (err, result) => {
-        if (err) {
-            console.error(err);
-            return res.status(500).json({
-                success: false,
-                message: 'Failed to create lead'
-            });
-        }
-
-        res.status(201).json({
-            success: true,
-            message: 'Lead created successfully',
-            lead_id: result.insertId
-        });
-    });
-});
-
-
-// =========================
-// UPDATE LEAD
-// =========================
-app.put('/leads/:id', (req, res) => {
-    const { name, email, phone } = req.body;
-
-    const error = validateLead(name, email, phone);
-    if (error) {
-        return res.status(400).json({
-            success: false,
-            message: error
-        });
-    }
-
-    connection.query(
-        `UPDATE leads SET name=?, email=?, phone=? WHERE lead_id=?`,
-        [name, email, phone, req.params.id],
+    db.query(
+        "INSERT INTO teams (team_name, territory, description) VALUES (?, ?, ?)",
+        [team_name, territory, description],
         (err, result) => {
             if (err) {
+                console.error("Error creating team:", err);
                 return res.status(500).json({
-                    success: false,
-                    message: 'Failed to update lead'
+                    message: "Error creating team"
                 });
             }
 
-            if (result.affectedRows === 0) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Lead not found'
-                });
-            }
-
-            res.json({
-                success: true,
-                message: 'Lead updated successfully'
+            res.status(200).json({
+                message: "Team created successfully"
             });
         }
     );
 });
 
 
-// =========================
-// DELETE LEAD
-// =========================
-app.delete('/leads/:id', (req, res) => {
-    connection.query(
-        'DELETE FROM leads WHERE lead_id = ?',
-        [req.params.id],
-        (err, result) => {
-            if (err) {
-                return res.status(500).json({
-                    success: false,
-                    message: 'Failed to delete lead'
-                });
-            }
-
-            if (result.affectedRows === 0) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Lead not found'
-                });
-            }
-
-            res.json({
-                success: true,
-                message: 'Lead deleted successfully'
-            });
-        }
-    );
-});
-
-
-// START SERVER
-app.listen(3000, () => {
-    console.log('Server running on port 3000');
-});
