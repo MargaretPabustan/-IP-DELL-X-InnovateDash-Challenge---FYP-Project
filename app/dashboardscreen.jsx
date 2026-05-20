@@ -1,6 +1,5 @@
-// DashboardScreen.js
-
 import React from "react";
+import { router } from "expo-router";
 import {
   View,
   Text,
@@ -8,44 +7,38 @@ import {
   SafeAreaView,
   TouchableOpacity,
 } from "react-native";
-import { useRouter } from "expo-router";
 
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 
 export default function DashboardScreen() {
-  const router = useRouter();
 
   const handleScan = () => {
-    router.push('/lead-details');
+    console.log("Scan pressed");
   };
 
   return (
     <SafeAreaView style={styles.container}>
+
       <View style={styles.phoneFrame}>
-        
+
         {/* Header */}
         <View style={styles.header}>
           <Text style={styles.logo}>Boothflow</Text>
         </View>
 
-        {/* Scan Area */}
+        {/* Scan Section */}
         <TouchableOpacity style={styles.scanSection} onPress={handleScan}>
-          <MaterialIcons
-            name="qr-code-scanner"
-            size={140}
-            color="#333"
-          />
-
+          <MaterialIcons name="qr-code-scanner" size={140} color="#333" />
           <Text style={styles.scanText}>Tap to Scan</Text>
         </TouchableOpacity>
 
         {/* Divider */}
         <View style={styles.divider} />
 
-        {/* Dashboard Title */}
+        {/* Title */}
         <Text style={styles.dashboardTitle}>Lead Dashboard</Text>
 
-        {/* Total Leads Card */}
+        {/* Total Leads */}
         <View style={styles.totalCard}>
           <Text style={styles.cardLabel}>Total Leads</Text>
           <Text style={styles.totalNumber}>100</Text>
@@ -53,52 +46,43 @@ export default function DashboardScreen() {
 
         {/* Stats Row */}
         <View style={styles.statsRow}>
-          
-          {/* Ready Followups */}
-          <View style={styles.smallCard}>
-            <View style={[styles.iconCircle, { backgroundColor: "#22c55e" }]}>
-              <Ionicons name="person" size={30} color="#fff" />
-            </View>
 
-            <Text style={styles.smallNumber}>10</Text>
+          {/* Ready Follow-ups */}
+         <TouchableOpacity
+  style={styles.smallCard}
+  onPress={() => router.push("/FollowupsDone")}
+>
+  <View style={[styles.iconCircle, { backgroundColor: "#22c55e" }]}>
+    <Ionicons name="person" size={30} color="#fff" />
+  </View>
 
-            <Text style={styles.smallText}>
-              Ready for Follow-ups
-            </Text>
-          </View>
+  <Text style={styles.smallNumber}>10</Text>
 
-          {/* No Followups */}
-          <View style={styles.smallCard}>
+  <Text style={styles.smallText}>
+    Ready for Follow-ups
+  </Text>
+</TouchableOpacity>
+
+          {/* No Follow-ups */}
+          <TouchableOpacity style={styles.smallCard}>
             <View style={[styles.iconCircle, { backgroundColor: "#ef4444" }]}>
               <Ionicons name="person" size={30} color="#fff" />
             </View>
-
             <Text style={styles.smallNumber}>10</Text>
+            <Text style={styles.smallText}>No follow-ups yet</Text>
+          </TouchableOpacity>
 
-            <Text style={styles.smallText}>
-              No follow-ups yet
-            </Text>
-          </View>
         </View>
 
-        {/* Testing Button */}
-        <TouchableOpacity style={styles.testButton} onPress={handleScan}>
-          <Text style={styles.testButtonText}>Test Lead Entry</Text>
-        </TouchableOpacity>
-
-        {/* Bottom Navigation */}
+        {/* Bottom Nav */}
         <View style={styles.bottomNav}>
-          
+
           <TouchableOpacity>
             <Ionicons name="person" size={34} color="#000" />
           </TouchableOpacity>
 
           <TouchableOpacity onPress={handleScan}>
-            <MaterialIcons
-              name="qr-code-scanner"
-              size={40}
-              color="#000"
-            />
+            <MaterialIcons name="qr-code-scanner" size={40} color="#000" />
           </TouchableOpacity>
 
           <TouchableOpacity>
@@ -106,12 +90,15 @@ export default function DashboardScreen() {
           </TouchableOpacity>
 
         </View>
+
       </View>
+
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
+
   container: {
     flex: 1,
     backgroundColor: "#e5e5e5",
@@ -138,9 +125,8 @@ const styles = StyleSheet.create({
 
   logo: {
     color: "#fff",
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "600",
-    fontFamily: "serif",
   },
 
   scanSection: {
@@ -149,26 +135,23 @@ const styles = StyleSheet.create({
   },
 
   scanText: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: "700",
     marginTop: 10,
-    color: "#333",
   },
 
   divider: {
     borderBottomWidth: 1,
     borderStyle: "dashed",
-    borderColor: "#666",
     marginHorizontal: 18,
     marginTop: 15,
   },
 
   dashboardTitle: {
     textAlign: "center",
-    fontSize: 30,
+    fontSize: 26,
     fontWeight: "700",
-    marginTop: 12,
-    color: "#222",
+    marginTop: 10,
   },
 
   totalCard: {
@@ -177,20 +160,16 @@ const styles = StyleSheet.create({
     marginTop: 18,
     borderRadius: 14,
     padding: 18,
-    height: 110,
-    justifyContent: "center",
   },
 
   cardLabel: {
-    fontSize: 18,
-    color: "#333",
-    marginBottom: 10,
+    fontSize: 16,
+    marginBottom: 8,
   },
 
   totalNumber: {
-    fontSize: 42,
-    fontWeight: "700",
-    color: "#111",
+    fontSize: 38,
+    fontWeight: "bold",
   },
 
   statsRow: {
@@ -204,54 +183,36 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
     width: "47%",
     borderRadius: 14,
-    paddingVertical: 20,
+    paddingVertical: 18,
     alignItems: "center",
   },
 
   iconCircle: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
+    width: 55,
+    height: 55,
+    borderRadius: 28,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 10,
+    marginBottom: 8,
   },
 
   smallNumber: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#111",
+    fontSize: 16,
+    fontWeight: "bold",
   },
 
   smallText: {
+    fontSize: 11,
     textAlign: "center",
-    fontSize: 12,
-    marginTop: 6,
+    marginTop: 5,
     color: "#555",
-    paddingHorizontal: 8,
-  },
-
-  testButton: {
-    backgroundColor: "#143c8c",
-    marginHorizontal: 18,
-    marginTop: 16,
-    marginBottom: 80,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-
-  testButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
   },
 
   bottomNav: {
     position: "absolute",
     bottom: 0,
     width: "100%",
-    height: 72,
+    height: 70,
     backgroundColor: "#fff",
     flexDirection: "row",
     justifyContent: "space-around",
@@ -259,4 +220,5 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderColor: "#ddd",
   },
+
 });
