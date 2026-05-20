@@ -105,7 +105,7 @@ export default function SuccessfullySubmittedScreen({
         {/* Actions */}
         <TouchableOpacity
           style={styles.primaryButton}
-          onPress={() => router.push('/lead-details')}
+          onPress={() => router.push('/lead-details' as any)}
           activeOpacity={0.85}
         >
           <Text style={styles.primaryButtonText}>Scan Next Lead</Text>
@@ -113,21 +113,21 @@ export default function SuccessfullySubmittedScreen({
 
         <TouchableOpacity
           style={styles.secondaryButton}
-          onPress={() => router.push('/dashboard')}
+          onPress={() => router.push('/dashboardscreen' as any)}
           activeOpacity={0.85}
         >
           <Text style={styles.secondaryButtonText}>View All Leads</Text>
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Bottom Nav — same icons as dashboard */}
+      {/* Bottom Nav */}
       <View
         style={[
           styles.bottomNav,
           { paddingBottom: Platform.OS === 'ios' ? 28 : 12 },
         ]}
       >
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/dashboard')}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/dashboardscreen' as any)}>
           <Ionicons name="person" size={28} color="#000" />
         </TouchableOpacity>
 
@@ -135,7 +135,7 @@ export default function SuccessfullySubmittedScreen({
           <MaterialIcons name="qr-code-scanner" size={32} color="#1B3A6B" />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/dashboard')}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/dashboardscreen' as any)}>
           <FontAwesome5 name="home" size={26} color="#000" />
         </TouchableOpacity>
       </View>

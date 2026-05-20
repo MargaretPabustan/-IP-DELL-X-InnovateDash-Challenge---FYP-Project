@@ -14,8 +14,6 @@ import { useRouter } from 'expo-router';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { styles } from '../src/styles/leadDetailsStyles';
 
-// ─── Constants ───────────────────────────────────────────────────────────────
-
 const INTEREST_OPTIONS = ['AI PCs', 'Multi-cloud', 'Storage', 'Service'];
 
 const INTENT_OPTIONS = [
@@ -30,8 +28,6 @@ const INTENT_COLORS = {
   medium: '#9A6700',
   low: '#CF222E',
 };
-
-// ─── Subcomponents ────────────────────────────────────────────────────────────
 
 const AutofillField = ({ label, value }: { label: string; value: string }) => (
   <View style={styles.autofillRow}>
@@ -67,8 +63,6 @@ const OthersInput = ({
     />
   </View>
 );
-
-// ─── Main Screen ──────────────────────────────────────────────────────────────
 
 const LeadDetailsScreen = ({
   leadName = 'John Tan',
@@ -111,7 +105,7 @@ const LeadDetailsScreen = ({
     } else {
       console.log('Form submitted:', formData);
     }
-    router.push('/successfullysubmitted');
+    router.push('/successfullysubmitted' as any);
   };
 
   return (
@@ -216,14 +210,14 @@ const LeadDetailsScreen = ({
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Bottom Nav — same icons as dashboard */}
+      {/* Bottom Nav */}
       <View
         style={[
           styles.bottomNav,
           { paddingBottom: Platform.OS === 'ios' ? 28 : 12 },
         ]}
       >
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/dashboard')}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/dashboardscreen' as any)}>
           <Ionicons name="person" size={28} color="#000" />
         </TouchableOpacity>
 
@@ -231,7 +225,7 @@ const LeadDetailsScreen = ({
           <MaterialIcons name="qr-code-scanner" size={32} color="#1A3C6E" />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/dashboard')}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/dashboardscreen' as any)}>
           <FontAwesome5 name="home" size={26} color="#000" />
         </TouchableOpacity>
       </View>

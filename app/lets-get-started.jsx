@@ -6,7 +6,6 @@ import {
   StyleSheet,
   SafeAreaView,
   TouchableOpacity,
-  Image,
   StatusBar,
   Platform,
   Dimensions,
@@ -40,14 +39,6 @@ export default function LetsGetStarted() {
             { paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12 },
           ]}
         >
-          <View style={styles.profileContainer}>
-            <Image
-              source={{ uri: "https://i.pravatar.cc/100" }}
-              style={styles.profileImage}
-            />
-            <View style={styles.onlineDot} />
-          </View>
-
           <Text style={styles.logo}>Boothflow</Text>
         </View>
 
@@ -69,7 +60,7 @@ export default function LetsGetStarted() {
 
           <TouchableOpacity
             style={styles.arrowButton}
-            onPress={() => router.push("/dashboard")}
+            onPress={() => router.push("/dashboardscreen")}
             activeOpacity={0.85}
           >
             <Ionicons name="arrow-forward" size={28} color="#fff" />
@@ -85,83 +76,50 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#000",
   },
-
   background: {
     flex: 1,
     justifyContent: "space-between",
     paddingHorizontal: 28,
   },
-
   overlay: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.40)",
   },
-
   topRow: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "flex-start",
     alignItems: "center",
     zIndex: 2,
   },
-
-  profileContainer: {
-    position: "relative",
-  },
-
-  profileImage: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    borderWidth: 2,
-    borderColor: "#fff",
-  },
-
-  onlineDot: {
-    width: 13,
-    height: 13,
-    borderRadius: 7,
-    backgroundColor: "red",
-    position: "absolute",
-    top: -1,
-    right: -1,
-    borderWidth: 2,
-    borderColor: "#fff",
-  },
-
   logo: {
     color: "#fff",
     fontSize: 26,
     fontWeight: "300",
     fontStyle: "italic",
   },
-
   middleContent: {
     zIndex: 2,
     flex: 1,
     justifyContent: "center",
   },
-
   heading: {
     color: "#fff",
     fontSize: Math.min(width * 0.11, 46),
     fontWeight: "800",
     lineHeight: Math.min(width * 0.13, 54),
   },
-
   bottomContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-end",
     zIndex: 2,
   },
-
   ctaText: {
     color: "#fff",
     fontSize: Math.min(width * 0.075, 30),
     fontWeight: "700",
     lineHeight: Math.min(width * 0.09, 36),
   },
-
   arrowButton: {
     width: 64,
     height: 64,

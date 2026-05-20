@@ -7,27 +7,13 @@ export default function RootLayout() {
         headerShown: false,
       }}
     >
-      <Stack.Screen 
-        name="index" 
-        options={{ 
-          title: 'Get Started',
-          headerShown: false,
-        }} 
-      />
-      <Stack.Screen 
-        name="dashboard" 
-        options={{ 
-          title: 'Dashboard',
-          headerShown: false,
-        }} 
-      />
-      <Stack.Screen 
-        name="lead-details" 
-        options={{ 
-          title: 'Lead Details',
-          headerShown: false,
-        }} 
-      />
+      <Stack.Screen name="index" />
+      <Stack.Screen name="lets-get-started" />
+      <Stack.Screen name="dashboardscreen" />
+      <Stack.Screen name="lead-details" />
+      <Stack.Screen name="successfullysubmitted" />
+      <Stack.Screen name="FollowupsDone" />
+      <Stack.Screen name="Followups-not done" />
     </Stack>
   );
 }
