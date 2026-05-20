@@ -88,11 +88,6 @@ export default function DashboardScreen() {
             <Text style={styles.smallText}>No follow-ups yet</Text>
           </TouchableOpacity>
         </View>
-
-        {/* Test Button */}
-        <TouchableOpacity style={styles.testButton} onPress={handleScan}>
-          <Text style={styles.testButtonText}>Test Lead Entry</Text>
-        </TouchableOpacity>
       </ScrollView>
 
       {/* Bottom Navigation */}
@@ -102,7 +97,7 @@ export default function DashboardScreen() {
           { paddingBottom: Platform.OS === "ios" ? 28 : 12 },
         ]}
       >
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push("/dashboardscreen")}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push("/recent-leads")}>
           <Ionicons name="person" size={28} color="#000" />
         </TouchableOpacity>
 
@@ -123,40 +118,33 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#efefef",
   },
-
   header: {
     backgroundColor: NAVY,
     paddingHorizontal: 20,
     paddingBottom: 14,
     alignItems: "flex-end",
   },
-
   logo: {
     color: "#fff",
     fontSize: 22,
     fontWeight: "600",
     fontStyle: "italic",
   },
-
   body: {
     flex: 1,
   },
-
   bodyContent: {
     paddingTop: 20,
   },
-
   scanSection: {
     alignItems: "center",
   },
-
   scanText: {
     fontSize: 18,
     fontWeight: "700",
     marginTop: 8,
     color: "#333",
   },
-
   divider: {
     borderBottomWidth: 1,
     borderStyle: "dashed",
@@ -164,7 +152,6 @@ const styles = StyleSheet.create({
     marginHorizontal: 18,
     marginTop: 16,
   },
-
   dashboardTitle: {
     textAlign: "center",
     fontSize: 24,
@@ -172,7 +159,6 @@ const styles = StyleSheet.create({
     marginTop: 12,
     color: "#222",
   },
-
   totalCard: {
     backgroundColor: "#fff",
     marginHorizontal: 18,
@@ -186,26 +172,22 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
-
   cardLabel: {
     fontSize: 15,
     color: "#333",
     marginBottom: 4,
   },
-
   totalNumber: {
     fontSize: 36,
     fontWeight: "700",
     color: "#111",
   },
-
   statsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginHorizontal: 18,
     marginTop: 12,
   },
-
   smallCard: {
     backgroundColor: "#fff",
     width: "47%",
@@ -218,7 +200,6 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
-
   iconCircle: {
     width: 50,
     height: 50,
@@ -227,13 +208,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
   },
-
   smallNumber: {
     fontSize: 18,
     fontWeight: "700",
     color: "#111",
   },
-
   smallText: {
     fontSize: 12,
     textAlign: "center",
@@ -241,27 +220,6 @@ const styles = StyleSheet.create({
     color: "#555",
     paddingHorizontal: 8,
   },
-
-  testButton: {
-    backgroundColor: NAVY,
-    marginHorizontal: 18,
-    marginTop: 14,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    shadowColor: NAVY,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-
-  testButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-
   bottomNav: {
     flexDirection: "row",
     backgroundColor: "#fff",
@@ -272,7 +230,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-
   navItem: {
     padding: 6,
   },
