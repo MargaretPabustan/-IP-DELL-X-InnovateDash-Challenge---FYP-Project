@@ -1,4 +1,5 @@
 // Import required modules for the FYP project //
+const { dismissBrowser } = require('expo-web-browser');
 const express = require('express');
 const mysql = require('mysql2');
 const app = express();
@@ -20,5 +21,53 @@ connection.connect((err) => {
     console.log('Connected to MySQL database'); 
 });
 
+//Basic routing//
 
+// Define a route to retrieve information for all teams//
+app.get('/teams', (req, res) => {
+    // Handle the GET request for /teams
+    connection.query('SELECT * FROM teams', (err, results) => {
+        if (err) {
+            console.error('Error fetching teams:', err);
+            res.status(500).json({ error: 'Internal Server Error' });
+            return;
+        }
+        res.json(results[0]);
+    });
+});
 
+// Define a route to retrieve information for a specific team by ID//
+app.get('/teams/:id', (req, res) => {
+    connection.query
+    ("SELECT * FROM teams WHERE id = ?", [req.params.id], (err, results) => {
+        if (err) {
+            console.error('Error fetching team:', err);
+            res.status(500).json({ error: 'Internal Server Error' });
+            return;
+        }
+        res.json(results[0]);
+    });
+});
+
+//Define a route to insert teams information into DB//
+app.post("/teams", (req, res) => {
+    const { team_name, territory, description } = req.body;
+
+    connection.query(
+        "INSERT INTO teams (team_name, territory, description) VALUES (?, ?, ?)",
+        [team_name, territory, description],
+        (err, result) => {
+            if (err) {
+                console.error('Error inserting team:', err);
+                res.status(500).json({ error: 'Database Error' });
+                return;
+            }
+            res.status(201).json({
+                message: "Team created successfully",
+                team_id: result.insertId
+            });
+        }
+    );
+});
+
+ 
