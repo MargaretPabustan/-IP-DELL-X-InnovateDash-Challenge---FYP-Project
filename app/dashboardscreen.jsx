@@ -45,7 +45,7 @@ export default function DashboardScreen() {
 
       {/* BODY */}
       <ScrollView style={styles.body} contentContainerStyle={styles.bodyContent}>
-        
+
         {/* SCAN */}
         <TouchableOpacity style={styles.scanSection} onPress={handleScan}>
           <MaterialIcons name="qr-code-scanner" size={120} color="#333" />
@@ -73,55 +73,36 @@ export default function DashboardScreen() {
             onPress={() =>
               router.push({
                 pathname: "/FollowupsDone",
-                params: {
-                  title: "Ready for Follow-ups",
-                  count: 10,
-                  time: currentTime,
-                  status: "ready",
-                },
+                params: { title: "Ready for Follow-ups", count: 10, time: currentTime, status: "ready" },
               })
             }
           >
             <View style={[styles.iconCircle, { backgroundColor: "#22c55e" }]}>
               <Ionicons name="person" size={26} color="#fff" />
             </View>
-
             <Text style={styles.smallNumber}>10</Text>
-
             <Text style={styles.smallText}>Ready for Follow-ups</Text>
           </TouchableOpacity>
 
           {/* NO FOLLOW UPS */}
           <TouchableOpacity
-          
             style={styles.smallCard}
             onPress={() =>
               router.push({
-                pathname: "/Followups-not done",
-                params: {
-                  title: "No Follow-ups yet",
-                  count: 10,
-                  time: currentTime,
-                  status: "not_done",
-                },
+                pathname: "/Followups-not-done",
+                params: { title: "No Follow-ups yet", count: 10, time: currentTime, status: "not_done" },
               })
             }
           >
             <View style={[styles.iconCircle, { backgroundColor: "#ef4444" }]}>
               <Ionicons name="person" size={26} color="#fff" />
             </View>
-
             <Text style={styles.smallNumber}>10</Text>
-
             <Text style={styles.smallText}>No follow-ups yet</Text>
           </TouchableOpacity>
 
         </View>
 
-        {/* Test Button */}
-        <TouchableOpacity style={styles.testButton} onPress={handleScan}>
-          <Text style={styles.testButtonText}>Test Lead Entry</Text>
-        </TouchableOpacity>
       </ScrollView>
 
       {/* Bottom Navigation */}
@@ -131,23 +112,24 @@ export default function DashboardScreen() {
           { paddingBottom: Platform.OS === "ios" ? 28 : 12 },
         ]}
       >
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push("/dashboardscreen")}>
+        {/* Person → Recent Leads */}
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push("/recent-leads")}>
           <Ionicons name="person" size={28} color="#000" />
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={handleScan}>
+        {/* Scan → Lead Details */}
+        <TouchableOpacity style={styles.navItem} onPress={handleScan}>
           <MaterialIcons name="qr-code-scanner" size={32} color={NAVY} />
         </TouchableOpacity>
 
-        <TouchableOpacity onPress={() => router.push("/dashboardscreen")}>
+        {/* Home → Dashboard */}
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push("/dashboardscreen")}>
           <FontAwesome5 name="home" size={26} color="#000" />
         </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 }
-
-/* ================= STYLES ================= */
 
 const styles = StyleSheet.create({
   safeArea: {
@@ -247,27 +229,6 @@ const styles = StyleSheet.create({
     color: "#555",
     paddingHorizontal: 8,
   },
-
-  testButton: {
-    backgroundColor: NAVY,
-    marginHorizontal: 18,
-    marginTop: 14,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-    shadowColor: NAVY,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 6,
-    elevation: 4,
-  },
-
-  testButtonText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-
   bottomNav: {
     flexDirection: "row",
     backgroundColor: "#fff",
@@ -278,7 +239,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-
   navItem: {
     padding: 6,
   },
