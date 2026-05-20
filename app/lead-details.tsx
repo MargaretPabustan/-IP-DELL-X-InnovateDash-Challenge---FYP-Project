@@ -9,10 +9,16 @@ import {
   Platform,
   SafeAreaView,
   StatusBar,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { styles } from '../src/styles/leadDetailsStyles';
+
+// ─── ⚙️ Replace this with your actual backend URL when ready ─────────────────
+const API_URL = 'https://your-backend.com/api/leads';
+// ─────────────────────────────────────────────────────────────────────────────
 
 const INTEREST_OPTIONS = ['AI PCs', 'Multi-cloud', 'Storage', 'Service'];
 
@@ -32,7 +38,7 @@ const INTENT_COLORS = {
 const AutofillField = ({ label, value }: { label: string; value: string }) => (
   <View style={styles.autofillRow}>
     <Text style={styles.autofillLabel}>{label}:</Text>
-    <Text style={styles.autofillValue}>{value}</Text>
+    <Text style={styles.autofillValue}>{value || '—'}</Text>
   </View>
 );
 
@@ -65,23 +71,30 @@ const OthersInput = ({
 );
 
 const LeadDetailsScreen = ({
-  leadName = 'John Tan',
-  companyName = 'DBS',
-  title = 'IT Specialist',
   onSubmit,
 }: {
-  leadName?: string;
-  companyName?: string;
-  title?: string;
   onSubmit?: (formData: any) => void;
 }) => {
   const router = useRouter();
+  const params = useLocalSearchParams();
 
-  const [selectedInterests, setSelectedInterests] = useState<string[]>([]);
-  const [interestOthers, setInterestOthers] = useState('');
+  const leadName    = (params.leadName    as string) || 'John Tan';
+  const companyName = (params.companyName as string) || 'DBS';
+  const title       = (params.title       as string) || 'IT Specialist';
+  const phone       = (params.phone       as string) || '';
+  const email       = (params.email       as string) || '';
+  const interest    = (params.interest    as string) || '';
+
+  const [selectedInterests, setSelectedInterests] = useState<string[]>(
+    interest && INTEREST_OPTIONS.includes(interest) ? [interest] : []
+  );
+  const [interestOthers, setInterestOthers] = useState(
+    interest && !INTEREST_OPTIONS.includes(interest) ? interest : ''
+  );
   const [selectedIntent, setSelectedIntent] = useState<string | null>(null);
-  const [intentOthers, setIntentOthers] = useState('');
+  const [intentOthers, setIntentOthers]     = useState('');
   const [additionalNotes, setAdditionalNotes] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const toggleInterest = (option: string) => {
     setSelectedInterests((prev) =>
@@ -89,23 +102,62 @@ const LeadDetailsScreen = ({
     );
   };
 
-  const handleSubmit = () => {
-    const formData = {
-      leadName,
-      companyName,
-      title,
-      interests: selectedInterests,
-      interestOthers,
-      intent: selectedIntent,
-      intentOthers,
+  const handleSubmit = async () => {
+    const allInterests = [
+      ...selectedInterests,
+      ...(interestOthers.trim() ? [interestOthers.trim()] : []),
+    ].join(', ') || 'None';
+
+    const intent = selectedIntent || intentOthers.trim() || 'Not specified';
+
+    const payload = {
+      leadName, companyName, title,
+      phone, email,
+      interests: allInterests,
+      intent,
       additionalNotes,
     };
-    if (onSubmit) {
-      onSubmit(formData);
-    } else {
-      console.log('Form submitted:', formData);
+
+    if (onSubmit) onSubmit(payload);
+
+    setLoading(true);
+
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) throw new Error('Server error');
+
+      const result = await response.json();
+
+      router.push({
+        pathname: '/successfullysubmitted',
+        params: {
+          assignedTeam:    result.assignedTeam    || 'Pending Assignment',
+          intent:          result.intent          || intent,
+          interests:       result.interests       || allInterests,
+          aiNotes:         result.aiNotes         || additionalNotes || 'Pending AI analysis.',
+        },
+      });
+
+    } catch (error) {
+      // ── Backend not ready yet — use fallback so UI still works ──────────
+      console.warn('Backend not reachable, using fallback routing:', error);
+      router.push({
+        pathname: '/successfullysubmitted',
+        params: {
+          assignedTeam: 'Pending Assignment',
+          intent,
+          interests:    allInterests,
+          aiNotes:      additionalNotes || 'Pending AI analysis.',
+        },
+      });
+    } finally {
+      setLoading(false);
     }
-    router.push('/successfullysubmitted' as any);
   };
 
   return (
@@ -137,9 +189,11 @@ const LeadDetailsScreen = ({
           keyboardShouldPersistTaps="handled"
         >
           <SectionCard title="Details:">
-            <AutofillField label="Name" value={leadName} />
+            <AutofillField label="Name"    value={leadName} />
             <AutofillField label="Company" value={companyName} />
-            <AutofillField label="Title" value={title} />
+            <AutofillField label="Title"   value={title} />
+            <AutofillField label="Phone"   value={phone} />
+            <AutofillField label="Email"   value={email} />
           </SectionCard>
 
           <SectionCard title="Customer Interest:">
@@ -200,12 +254,21 @@ const LeadDetailsScreen = ({
             />
           </SectionCard>
 
+          {/* Submit Button */}
           <TouchableOpacity
-            style={styles.submitButton}
+            style={[styles.submitButton, loading && { opacity: 0.7 }]}
             onPress={handleSubmit}
             activeOpacity={0.85}
+            disabled={loading}
           >
-            <Text style={styles.submitText}>SUBMIT</Text>
+            {loading ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <ActivityIndicator color="#fff" size="small" />
+                <Text style={styles.submitText}>Submitting...</Text>
+              </View>
+            ) : (
+              <Text style={styles.submitText}>SUBMIT</Text>
+            )}
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -217,11 +280,11 @@ const LeadDetailsScreen = ({
           { paddingBottom: Platform.OS === 'ios' ? 28 : 12 },
         ]}
       >
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/dashboardscreen' as any)}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/recent-leads' as any)}>
           <Ionicons name="person" size={28} color="#000" />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/qr-scanner' as any)}>
           <MaterialIcons name="qr-code-scanner" size={32} color="#1A3C6E" />
         </TouchableOpacity>
 

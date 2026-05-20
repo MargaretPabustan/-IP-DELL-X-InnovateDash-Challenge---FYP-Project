@@ -12,14 +12,13 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 
-
 const NAVY = "#143c8c";
 
 export default function DashboardScreen() {
   const router = useRouter();
 
   const handleScan = () => {
-    router.push("/lead-details");
+    router.push("/qr-scanner");
   };
 
   const currentTime = new Date().toLocaleTimeString();
@@ -89,7 +88,7 @@ export default function DashboardScreen() {
             style={styles.smallCard}
             onPress={() =>
               router.push({
-                pathname: "/Followups-not done",
+                pathname: "/Followups-not-done",
                 params: { title: "No Follow-ups yet", count: 10, time: currentTime, status: "not_done" },
               })
             }
@@ -117,7 +116,7 @@ export default function DashboardScreen() {
           <Ionicons name="person" size={28} color="#000" />
         </TouchableOpacity>
 
-        {/* Scan → Lead Details */}
+        {/* Scan → QR Scanner */}
         <TouchableOpacity style={styles.navItem} onPress={handleScan}>
           <MaterialIcons name="qr-code-scanner" size={32} color={NAVY} />
         </TouchableOpacity>

@@ -13,8 +13,9 @@ export default function RootLayout() {
       <Stack.Screen name="lead-details" />
       <Stack.Screen name="successfullysubmitted" />
       <Stack.Screen name="FollowupsDone" />
-      <Stack.Screen name="Followups-not done" />
+      <Stack.Screen name="Followups-not-done" />
       <Stack.Screen name="recent-leads" />
+      <Stack.Screen name="qr-scanner" />
     </Stack>
   );
 }

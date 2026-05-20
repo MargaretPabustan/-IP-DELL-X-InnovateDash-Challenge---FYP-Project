@@ -9,7 +9,7 @@ import {
   StyleSheet,
   Platform,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 
 const colors = {
@@ -22,26 +22,15 @@ const colors = {
   border: '#DDE3EE',
 } as const;
 
-interface RoutingResult {
-  assignedTeam: string;
-  intent: string;
-  interests: string;
-}
-
-interface SuccessScreenProps {
-  routingResult?: RoutingResult;
-  aiNotes?: string;
-}
-
-export default function SuccessfullySubmittedScreen({
-  routingResult = {
-    assignedTeam: 'AI & Client Solution Team',
-    intent: 'Ready for Follow-UP',
-    interests: 'AI PCs',
-  },
-  aiNotes = 'Looking into upgrading employee devices with AI-enabled productivity tools. Requested follow-up demo.',
-}: SuccessScreenProps) {
+export default function SuccessfullySubmittedScreen() {
   const router = useRouter();
+  const params = useLocalSearchParams();
+
+  // Read routing result from form params
+  const assignedTeam = (params.assignedTeam as string) || 'Pending Assignment';
+  const intent       = (params.intent       as string) || 'Not specified';
+  const interests    = (params.interests    as string) || 'None';
+  const aiNotes      = (params.aiNotes      as string) || 'Pending AI analysis.';
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -72,26 +61,26 @@ export default function SuccessfullySubmittedScreen({
           <Text style={styles.successTitle}>SUCCESSFULLY{'\n'}SUBMITTED</Text>
         </View>
 
-        {/* Routing Result Card */}
+        {/* Routing Result Card — from form */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Routing Result:</Text>
           <View style={styles.routingRow}>
             <Text style={styles.routingLabel}>Assigned Team:</Text>
-            <Text style={styles.routingValue}>{routingResult.assignedTeam}</Text>
+            <Text style={styles.routingValue}>{assignedTeam}</Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.routingRow}>
             <Text style={styles.routingLabel}>Intent:</Text>
-            <Text style={styles.routingValue}>{routingResult.intent}</Text>
+            <Text style={styles.routingValue}>{intent}</Text>
           </View>
           <View style={styles.divider} />
           <View style={styles.routingRow}>
             <Text style={styles.routingLabel}>Interests:</Text>
-            <Text style={styles.routingValue}>{routingResult.interests}</Text>
+            <Text style={styles.routingValue}>{interests}</Text>
           </View>
         </View>
 
-        {/* AI Notes Card */}
+        {/* Notes Card */}
         <View style={styles.card}>
           <View style={styles.aiNotesHeader}>
             <View style={styles.aiChip}>
@@ -105,7 +94,7 @@ export default function SuccessfullySubmittedScreen({
         {/* Actions */}
         <TouchableOpacity
           style={styles.primaryButton}
-          onPress={() => router.push('/lead-details' as any)}
+          onPress={() => router.push('/qr-scanner' as any)}
           activeOpacity={0.85}
         >
           <Text style={styles.primaryButtonText}>Scan Next Lead</Text>
@@ -113,7 +102,7 @@ export default function SuccessfullySubmittedScreen({
 
         <TouchableOpacity
           style={styles.secondaryButton}
-          onPress={() => router.push('/dashboardscreen' as any)}
+          onPress={() => router.push('/recent-leads' as any)}
           activeOpacity={0.85}
         >
           <Text style={styles.secondaryButtonText}>View All Leads</Text>
@@ -127,11 +116,11 @@ export default function SuccessfullySubmittedScreen({
           { paddingBottom: Platform.OS === 'ios' ? 28 : 12 },
         ]}
       >
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/dashboardscreen' as any)}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/recent-leads' as any)}>
           <Ionicons name="person" size={28} color="#000" />
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/qr-scanner' as any)}>
           <MaterialIcons name="qr-code-scanner" size={32} color="#1B3A6B" />
         </TouchableOpacity>
 
