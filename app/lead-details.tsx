@@ -10,15 +10,13 @@ import {
   SafeAreaView,
   StatusBar,
   ActivityIndicator,
-  Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
+import { useAppTheme } from '../src/constants/useAppTheme';
 import { styles } from '../src/styles/leadDetailsStyles';
 
-// ─── ⚙️ Replace this with your actual backend URL when ready ─────────────────
 const API_URL = 'https://your-backend.com/api/leads';
-// ─────────────────────────────────────────────────────────────────────────────
 
 const INTEREST_OPTIONS = ['AI PCs', 'Multi-cloud', 'Storage', 'Service'];
 
@@ -76,6 +74,7 @@ const LeadDetailsScreen = ({
   onSubmit?: (formData: any) => void;
 }) => {
   const router = useRouter();
+  const { theme } = useAppTheme();
   const params = useLocalSearchParams();
 
   const leadName    = (params.leadName    as string) || 'John Tan';
@@ -119,7 +118,6 @@ const LeadDetailsScreen = ({
     };
 
     if (onSubmit) onSubmit(payload);
-
     setLoading(true);
 
     try {
@@ -130,21 +128,18 @@ const LeadDetailsScreen = ({
       });
 
       if (!response.ok) throw new Error('Server error');
-
       const result = await response.json();
 
       router.push({
         pathname: '/successfullysubmitted',
         params: {
-          assignedTeam:    result.assignedTeam    || 'Pending Assignment',
-          intent:          result.intent          || intent,
-          interests:       result.interests       || allInterests,
-          aiNotes:         result.aiNotes         || additionalNotes || 'Pending AI analysis.',
+          assignedTeam: result.assignedTeam || 'Pending Assignment',
+          intent:       result.intent       || intent,
+          interests:    result.interests    || allInterests,
+          aiNotes:      result.aiNotes      || additionalNotes || 'Pending AI analysis.',
         },
       });
-
     } catch (error) {
-      // ── Backend not ready yet — use fallback so UI still works ──────────
       console.warn('Backend not reachable, using fallback routing:', error);
       router.push({
         pathname: '/successfullysubmitted',
@@ -161,26 +156,29 @@ const LeadDetailsScreen = ({
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.navy }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
       {/* Header */}
       <View
         style={[
           styles.header,
-          { paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12 },
+          {
+            backgroundColor: theme.navy,
+            paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12,
+          },
         ]}
       >
-        <Text style={styles.headerText}>Boothflow</Text>
+        <Text style={[styles.headerText, { color: '#fff' }]}>Boothflow</Text>
       </View>
 
       <KeyboardAvoidingView
-        style={styles.flex}
+        style={[styles.flex, { backgroundColor: theme.bg }]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
       >
         <ScrollView
-          style={styles.scrollView}
+          style={[styles.scrollView, { backgroundColor: theme.bg }]}
           contentContainerStyle={[
             styles.scrollContent,
             { paddingBottom: Platform.OS === 'ios' ? 40 : 24 },
@@ -203,7 +201,10 @@ const LeadDetailsScreen = ({
                 return (
                   <TouchableOpacity
                     key={option}
-                    style={[styles.chip, active && styles.chipActive]}
+                    style={[
+                      styles.chip,
+                      active && { ...styles.chipActive, backgroundColor: theme.navy, borderColor: theme.navy },
+                    ]}
                     onPress={() => toggleInterest(option)}
                     activeOpacity={0.7}
                   >
@@ -224,16 +225,22 @@ const LeadDetailsScreen = ({
               return (
                 <TouchableOpacity
                   key={option.label}
-                  style={[styles.intentRow, active && styles.intentRowActive]}
+                  style={[
+                    styles.intentRow,
+                    active && { ...styles.intentRowActive, borderColor: theme.accent },
+                  ]}
                   onPress={() => setSelectedIntent(option.label)}
                   activeOpacity={0.7}
                 >
                   <View style={[styles.intentDot, { backgroundColor: dotColor }]} />
-                  <Text style={[styles.intentText, active && styles.intentTextActive]}>
+                  <Text style={[
+                    styles.intentText,
+                    active && { ...styles.intentTextActive, color: theme.accent },
+                  ]}>
                     {option.label}
                   </Text>
-                  <View style={styles.radioOuter}>
-                    {active && <View style={styles.radioInner} />}
+                  <View style={[styles.radioOuter, active && { borderColor: theme.accent }]}>
+                    {active && <View style={[styles.radioInner, { backgroundColor: theme.accent }]} />}
                   </View>
                 </TouchableOpacity>
               );
@@ -254,9 +261,12 @@ const LeadDetailsScreen = ({
             />
           </SectionCard>
 
-          {/* Submit Button */}
           <TouchableOpacity
-            style={[styles.submitButton, loading && { opacity: 0.7 }]}
+            style={[
+              styles.submitButton,
+              { backgroundColor: theme.navy },
+              loading && { opacity: 0.7 },
+            ]}
             onPress={handleSubmit}
             activeOpacity={0.85}
             disabled={loading}
@@ -277,19 +287,36 @@ const LeadDetailsScreen = ({
       <View
         style={[
           styles.bottomNav,
-          { paddingBottom: Platform.OS === 'ios' ? 28 : 12 },
+          {
+            backgroundColor: theme.navBg,
+            borderTopColor: theme.subText + '22',
+            paddingBottom: Platform.OS === 'ios' ? 28 : 12,
+          },
         ]}
       >
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/recent-leads' as any)}>
-          <Ionicons name="person" size={28} color="#000" />
+          <Ionicons name="person-outline" size={26} color={theme.subText} />
+          <Text style={{ fontSize: 10, fontWeight: '600', color: theme.subText, marginTop: 3 }}>Leads</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/qr-scanner' as any)}>
-          <MaterialIcons name="qr-code-scanner" size={32} color="#1A3C6E" />
+        <TouchableOpacity
+          style={{ alignItems: 'center', marginTop: -20 }}
+          onPress={() => router.push('/qr-scanner' as any)}
+        >
+          <View style={{
+            width: 58, height: 58, borderRadius: 18,
+            backgroundColor: theme.navy,
+            alignItems: 'center', justifyContent: 'center',
+            shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.2, shadowRadius: 8, elevation: 6,
+          }}>
+            <MaterialIcons name="qr-code-scanner" size={28} color="#fff" />
+          </View>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/dashboardscreen' as any)}>
-          <FontAwesome5 name="home" size={26} color="#000" />
+          <FontAwesome5 name="home" size={22} color={theme.accent} />
+          <Text style={{ fontSize: 10, fontWeight: '600', color: theme.accent, marginTop: 3 }}>Home</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
