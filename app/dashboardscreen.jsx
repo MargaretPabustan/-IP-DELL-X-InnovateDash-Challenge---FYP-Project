@@ -89,7 +89,7 @@ export default function DashboardScreen() {
             style={styles.smallCard}
             onPress={() =>
               router.push({
-                pathname: "/Followups-not-done",
+                pathname: "/Followups-not done",
                 params: { title: "No Follow-ups yet", count: 10, time: currentTime, status: "not_done" },
               })
             }
