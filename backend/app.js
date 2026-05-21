@@ -23,7 +23,7 @@ pool.getConnection((err, connection) => {
 });
 
 // Basic Routes//
-// CORE LEADS ROUTES//
+// CORE LEADS ROUTES - Thanmaee//
 // validation function
 function validateLead(name, email, company, title, phone, primary_interest) {
     if (!name || !email || !company || !title || !phone || !primary_interest) {
@@ -207,7 +207,7 @@ app.listen(3000, () => {
 
 
 
-//teams routes//
+//TEAMS ROUTES - Margaret//
 // GET all teams
 app.get("/teams", (req, res) => {
     pool.query("SELECT * FROM teams", (err, results) => {
@@ -269,6 +269,39 @@ app.post("/teams", (req, res) => {
         }
     );
 });
+
+// PUT update team by ID//
+app.put("/teams/:id", (req, res) => {
+    const { team_name, territory, description } = req.body;
+
+    pool.query(
+        "UPDATE teams SET team_name=?, territory=?, description=? WHERE team_id=?",
+        [team_name, territory, description, req.params.id],
+        (err) => {
+            if (err) {
+                return res.status(500).json({ message: "Error updating team" });
+            }
+
+            res.json({ message: "Team updated successfully" });
+        }
+    );
+});
+
+// DELETE team by ID//
+app.delete("/teams/:id", (req, res) => {
+    pool.query(
+        "DELETE FROM teams WHERE team_id=?",
+        [req.params.id],
+        (err) => {
+            if (err) {
+                return res.status(500).json({ message: "Error deleting team" });
+            }
+
+            res.json({ message: "Team deleted successfully" });
+        }
+    );
+});
+
 
 
 
