@@ -45,7 +45,7 @@ function validateLead(name, email, company, title, phone, primary_interest) {
 
 // get all leads
 app.get('/leads', (req, res) => {
-    connection.query('SELECT * FROM leads', (err, results) => {
+    pool.query('SELECT * FROM leads', (err, results) => {
         if (err) {
             return res.status(500).json({
                 success: false,
@@ -63,7 +63,7 @@ app.get('/leads', (req, res) => {
 
 // get lead by id
 app.get('/leads/:id', (req, res) => {
-    connection.query(
+    pool.query(
         'SELECT * FROM leads WHERE lead_id = ?',
         [req.params.id],
         (err, results) => {
@@ -108,7 +108,7 @@ app.post('/leads', (req, res) => {
         VALUES (?, ?, ?, ?, ?, ?)
     `;
 
-    connection.query(
+    pool.query(
         sql,
         [name, email, company, title, phone, primary_interest],
         (err, result) => {
@@ -141,7 +141,7 @@ app.put('/leads/:id', (req, res) => {
         });
     }
 
-    connection.query(
+    pool.query(
         `UPDATE leads 
          SET name=?, email=?, company=?, title=?, phone=?, primary_interest=? 
          WHERE lead_id=?`,
@@ -172,7 +172,7 @@ app.put('/leads/:id', (req, res) => {
 
 // delete lead
 app.delete('/leads/:id', (req, res) => {
-    connection.query(
+    pool.query(
         'DELETE FROM leads WHERE lead_id = ?',
         [req.params.id],
         (err, result) => {
@@ -197,12 +197,6 @@ app.delete('/leads/:id', (req, res) => {
         }
     );
 });
-
-
-app.listen(3000, () => {
-    console.log('Server running on port 3000');
-});
-
 
 
 
