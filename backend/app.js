@@ -6,11 +6,11 @@ const app = express();
 app.use(express.json());
 
 const pool = mysql.createPool({
-    host: '5-aozg.h.filess.io',
-    user: 'DELL Lead Database_molecular',
-    password: 'e813611a5f704c1464dc43713c3351e00c3949c3',
-    database: 'DELL Lead Database_molecular',
-    port: 3307
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+    port: process.env.DB_PORT
 });
 
 pool.getConnection((err, connection) => {
