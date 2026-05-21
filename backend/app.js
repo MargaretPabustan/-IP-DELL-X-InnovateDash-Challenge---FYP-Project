@@ -5,7 +5,7 @@ const app = express();
 
 app.use(express.json());
 
-const connection = mysql.createConnection({
+const pool = mysql.createPool({
     host: '5-aozg.h.filess.io',
     user: 'DELL Lead Database_molecular',
     password: 'e813611a5f704c1464dc43713c3351e00c3949c3',
@@ -13,7 +13,7 @@ const connection = mysql.createConnection({
     port: 3307
 });
 
-connection.connect((err) => {
+pool.getConnection((err, connection) => {
     if (err) {
         console.error('Database connection failed:', err.message);
         return;
@@ -25,7 +25,7 @@ connection.connect((err) => {
 //teams routes//
 // GET all teams
 app.get("/teams", (req, res) => {
-    db.query("SELECT * FROM teams", (err, results) => {
+    pool.query("SELECT * FROM teams", (err, results) => {
         if (err) {
             console.error("Error fetching teams:", err);
             return res.status(500).json({
@@ -37,9 +37,10 @@ app.get("/teams", (req, res) => {
     });
 });
 
-// GET a specific team by their id//
+
+// GET specific team by ID//
 app.get("/teams/:id", (req, res) => {
-    db.query(
+    pool.query(
         "SELECT * FROM teams WHERE team_id = ?",
         [req.params.id],
         (err, results) => {
@@ -61,12 +62,11 @@ app.get("/teams/:id", (req, res) => {
     );
 });
 
-
-// CREATE team
+// POST create new team//
 app.post("/teams", (req, res) => {
     const { team_name, territory, description } = req.body;
 
-    db.query(
+    pool.query(
         "INSERT INTO teams (team_name, territory, description) VALUES (?, ?, ?)",
         [team_name, territory, description],
         (err, result) => {
@@ -77,11 +77,18 @@ app.post("/teams", (req, res) => {
                 });
             }
 
-            res.status(200).json({
-                message: "Team created successfully"
+            res.status(201).json({
+                message: "Team created successfully",
+                team_id: result.insertId
             });
         }
     );
+});
+
+// Listen on specified port//
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`DELL Lead App Server running on port ${PORT}`);
 });
 
 
