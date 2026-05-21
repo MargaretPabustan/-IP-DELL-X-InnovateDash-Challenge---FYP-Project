@@ -1,31 +1,74 @@
-import React from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
-  StyleSheet,
   SafeAreaView,
-  ScrollView,
   TouchableOpacity,
+  StyleSheet,
+  ScrollView,
   StatusBar,
   Platform,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 import { useAppTheme } from '../src/constants/useAppTheme';
 
+const API_URL = 'https://fyp-project-cwrn.onrender.com';
 
-const getTime = () =>
-  new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+function mapLead(item) {
+  return {
+    id:          item.lead_id,
+    name:        item.name    || '—',
+    role:        item.title   || '—',
+    org:         item.company || '—',
+    email:       item.email   || '—',
+    phone:       item.phone   || '—',
+    interests:   item.primary_interest || '—',
+    intent:      item.intent  || 'Not specified',
+    notes:       item.additional_notes || 'No notes.',
+    submittedAt: item.created_at
+      ? new Date(item.created_at).toLocaleTimeString()
+      : '—',
+  };
+}
 
-const leads = [
-  { id: 1, name: "John Tan",    role: "Cloud Engineer",  company: "DBS" },
-  { id: 2, name: "Azirah Kim",  role: "IT Expert",       company: "OCBC" },
-  { id: 3, name: "Kim Namjoon", role: "IT Specialist",   company: "NCS" },
-];
-
-export default function FollowupsDone() {
+export default function FollowupsNotDone() {
   const router = useRouter();
   const { theme } = useAppTheme();
+
+  const [leads, setLeads]           = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError]           = useState(null);
+  const [selected, setSelected]     = useState(null);
+
+  const fetchLeads = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(API_URL);
+      const data = await response.json();
+      if (!data.success) throw new Error(data.message);
+
+      const pending = data.data.filter((item) =>
+        !((item.intent || '').toLowerCase().includes('high')) &&
+        item.followup_done !== 1
+      );
+
+      setLeads(pending.map(mapLead));
+    } catch {
+      setError('Could not load leads. Pull down to retry.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchLeads(); }, [fetchLeads]);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
@@ -36,7 +79,7 @@ export default function FollowupsDone() {
         style={[
           styles.header,
           {
-            backgroundColor: "#16a34a",
+            backgroundColor: "#dc2626",
             paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight ?? 24) + 8 : 12,
           },
         ]}
@@ -44,40 +87,78 @@ export default function FollowupsDone() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerText}>Follow-ups Done</Text>
+        <Text style={styles.headerText}>No Follow-ups Yet</Text>
         <View style={{ width: 22 }} />
       </View>
 
+      {/* LOADING */}
+      {loading && (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color="#dc2626" />
+          <Text style={[styles.loadingText, { color: theme.subText }]}>Loading...</Text>
+        </View>
+      )}
+
+      {/* ERROR */}
+      {!loading && error && (
+        <View style={styles.centered}>
+          <Ionicons name="cloud-offline-outline" size={48} color={theme.subText} />
+          <Text style={[styles.errorText, { color: theme.subText }]}>{error}</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => fetchLeads()}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* LIST */}
-      <ScrollView
-        contentContainerStyle={[
-          styles.content,
-          { paddingBottom: Platform.OS === "ios" ? 40 : 24 },
-        ]}
-        showsVerticalScrollIndicator={false}
-      >
-        {leads.map((lead) => (
-          <View key={lead.id} style={[styles.card, { backgroundColor: theme.card }]}>
-            <View style={styles.cardLeft}>
-              <View style={[styles.avatar, { backgroundColor: '#dcfce7' }]}>
-                <Ionicons name="person" size={20} color="#16a34a" />
-              </View>
-              <View style={styles.cardInfo}>
-                <Text style={[styles.name, { color: theme.text }]}>{lead.name}</Text>
-                <Text style={[styles.role, { color: theme.subText }]}>
-                  {lead.role} · {lead.company}
-                </Text>
-                <Text style={[styles.time, { color: theme.subText }]}>
-                  Submitted at: {getTime()}
-                </Text>
-              </View>
+      {!loading && !error && (
+        <ScrollView
+          contentContainerStyle={[
+            styles.content,
+            { paddingBottom: Platform.OS === "ios" ? 40 : 24 },
+          ]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => fetchLeads(true)}
+              tintColor="#dc2626"
+            />
+          }
+        >
+          {leads.length === 0 && (
+            <View style={styles.centered}>
+              <Ionicons name="checkmark-circle-outline" size={48} color="#16a34a" />
+              <Text style={[styles.emptyText, { color: theme.subText }]}>
+                All leads have been followed up!
+              </Text>
             </View>
-            <View style={styles.doneChip}>
-              <Text style={styles.doneChipText}>Done</Text>
-            </View>
-          </View>
-        ))}
-      </ScrollView>
+          )}
+
+          {leads.map((c) => (
+            <TouchableOpacity
+              key={c.id}
+              style={[styles.card, { backgroundColor: theme.card }]}
+              onPress={() => setSelected(c)}
+              activeOpacity={0.85}
+            >
+              <View style={styles.cardLeft}>
+                <View style={[styles.avatar, { backgroundColor: '#fee2e2' }]}>
+                  <Ionicons name="person" size={20} color="#dc2626" />
+                </View>
+                <View>
+                  <Text style={[styles.name, { color: theme.text }]}>{c.name}</Text>
+                  <Text style={[styles.role, { color: theme.subText }]}>{c.role} · {c.org}</Text>
+                  <Text style={[styles.time, { color: theme.subText }]}>{c.submittedAt}</Text>
+                </View>
+              </View>
+              <View style={styles.pendingChip}>
+                <Text style={styles.pendingChipText}>Pending</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
 
       {/* BOTTOM NAV */}
       <View
@@ -104,6 +185,55 @@ export default function FollowupsDone() {
           <Text style={[styles.navLabel, { color: theme.accent }]}>Home</Text>
         </TouchableOpacity>
       </View>
+
+      {/* POPUP */}
+      {selected && (
+        <View style={styles.overlay}>
+          <View style={[styles.popup, { backgroundColor: theme.card }]}>
+            <View style={[styles.popupAvatar, { backgroundColor: '#fee2e2' }]}>
+              <Ionicons name="person" size={32} color="#dc2626" />
+            </View>
+            <Text style={[styles.popupName, { color: theme.text }]}>{selected.name}</Text>
+            <Text style={[styles.popupRole, { color: theme.subText }]}>{selected.role} · {selected.org}</Text>
+
+            <View style={[styles.popupDivider, { backgroundColor: theme.bg }]} />
+
+            <View style={styles.popupRow}>
+              <Text style={styles.popupFieldLabel}>Email</Text>
+              <Text style={[styles.popupFieldValue, { color: theme.text }]}>{selected.email}</Text>
+            </View>
+            <View style={styles.popupRow}>
+              <Text style={styles.popupFieldLabel}>Phone</Text>
+              <Text style={[styles.popupFieldValue, { color: theme.text }]}>{selected.phone}</Text>
+            </View>
+            <View style={styles.popupRow}>
+              <Text style={styles.popupFieldLabel}>Interest</Text>
+              <Text style={[styles.popupFieldValue, { color: theme.text }]}>{selected.interests}</Text>
+            </View>
+            <View style={styles.popupRow}>
+              <Text style={styles.popupFieldLabel}>Intent</Text>
+              <Text style={[styles.popupFieldValue, { color: theme.text }]}>{selected.intent}</Text>
+            </View>
+            <View style={styles.popupRow}>
+              <Text style={styles.popupFieldLabel}>Notes</Text>
+              <Text style={[styles.popupFieldValue, { color: theme.text }]}>{selected.notes}</Text>
+            </View>
+
+            <Text style={[styles.popupTime, { color: theme.subText }]}>
+              Submitted at: {selected.submittedAt}
+            </Text>
+
+            <View style={[styles.popupDivider, { backgroundColor: theme.bg }]} />
+
+            <TouchableOpacity
+              onPress={() => setSelected(null)}
+              style={[styles.closeBtn, { backgroundColor: "#dc2626" }]}
+            >
+              <Text style={styles.closeBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }
@@ -111,52 +241,35 @@ export default function FollowupsDone() {
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   header: {
-    paddingHorizontal: 16,
-    paddingBottom: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    paddingHorizontal: 16, paddingBottom: 14,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
   },
   backBtn: { padding: 4 },
   headerText: { color: "#fff", fontSize: 17, fontWeight: "700", letterSpacing: 0.3 },
   content: { padding: 16, gap: 10 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 32 },
+  loadingText: { fontSize: 14, marginTop: 8 },
+  errorText: { fontSize: 14, textAlign: 'center' },
+  retryBtn: { backgroundColor: '#dc2626', borderRadius: 8, paddingVertical: 10, paddingHorizontal: 24 },
+  retryText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  emptyText: { fontSize: 14, textAlign: 'center', marginTop: 8 },
   card: {
-    borderRadius: 14,
-    padding: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    borderRadius: 14, padding: 14,
+    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
+    shadowColor: "#000", shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 4, elevation: 2,
   },
   cardLeft: { flexDirection: "row", alignItems: "center", gap: 12, flex: 1 },
-  avatar: {
-    width: 42, height: 42, borderRadius: 21,
-    alignItems: "center", justifyContent: "center",
-  },
-  cardInfo: { flex: 1 },
+  avatar: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center" },
   name: { fontSize: 14, fontWeight: "700" },
   role: { fontSize: 12, marginTop: 2 },
   time: { fontSize: 11, marginTop: 2 },
-  doneChip: {
-    backgroundColor: '#dcfce7',
-    borderRadius: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-  },
-  doneChipText: { color: '#16a34a', fontSize: 11, fontWeight: '700' },
-
-  // Nav
+  pendingChip: { backgroundColor: '#fee2e2', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
+  pendingChipText: { color: '#dc2626', fontSize: 11, fontWeight: '700' },
   bottomNav: {
-    flexDirection: "row",
-    borderTopWidth: 1,
-    paddingTop: 10,
-    paddingHorizontal: 32,
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: "row", borderTopWidth: 1,
+    paddingTop: 10, paddingHorizontal: 32,
+    justifyContent: "space-between", alignItems: "center",
   },
   navItem: { alignItems: "center", gap: 3, paddingHorizontal: 12 },
   navLabel: { fontSize: 10, fontWeight: "600", letterSpacing: 0.3 },
@@ -167,4 +280,24 @@ const styles = StyleSheet.create({
     shadowColor: "#000", shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2, shadowRadius: 8, elevation: 6,
   },
+  overlay: {
+    position: "absolute", top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center", alignItems: "center",
+  },
+  popup: {
+    width: 300, borderRadius: 20, padding: 24, alignItems: "center",
+    shadowColor: "#000", shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15, shadowRadius: 20, elevation: 10,
+  },
+  popupAvatar: { width: 64, height: 64, borderRadius: 32, alignItems: "center", justifyContent: "center", marginBottom: 14 },
+  popupName: { fontSize: 18, fontWeight: "800", letterSpacing: -0.3 },
+  popupRole: { fontSize: 13, marginTop: 4 },
+  popupRow: { flexDirection: 'row', width: '100%', marginTop: 6 },
+  popupFieldLabel: { fontSize: 11, fontWeight: '700', color: '#999', width: 60 },
+  popupFieldValue: { fontSize: 12, fontWeight: '500', flex: 1 },
+  popupTime: { fontSize: 12, marginTop: 10 },
+  popupDivider: { height: 1, width: "100%", marginVertical: 12 },
+  closeBtn: { borderRadius: 12, paddingVertical: 12, width: "100%", alignItems: "center" },
+  closeBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
 });

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -11,25 +11,50 @@ import {
   Modal,
   TextInput,
   Alert,
+  ActivityIndicator,
+  RefreshControl,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 import { useAppTheme } from '../src/constants/useAppTheme';
 
+const API_URL = 'https://fyp-project-cwrn.onrender.com';
 
-const INITIAL_LEADS = [
-  { id: '1', name: 'John Tan',     role: 'IT Specialist', company: 'DBS',  status: 'green', intent: 'Ready for Follow-UP',         interests: 'AI PCs',      team: 'AI & Client Solution Team', notes: 'Looking into upgrading employee devices with AI-enabled productivity tools. Requested follow-up demo.' },
-  { id: '2', name: 'Ivan Wee',     role: 'IT Specialist', company: 'HDB',  status: 'red',   intent: 'Low – Browsing',              interests: 'Storage',     team: 'Storage Team',              notes: 'Browsing options for storage solutions.' },
-  { id: '3', name: 'Azirah Kim',   role: 'IT Specialist', company: 'OCBC', status: 'green', intent: 'Medium – Pricing Inquiry',    interests: 'Multi-cloud', team: 'Cloud Team',                notes: 'Interested in multi-cloud pricing.' },
-  { id: '4', name: 'Nandini Chua', role: 'IT Specialist', company: 'RP',   status: 'red',   intent: 'Low – Browsing',              interests: 'Service',     team: 'Service Team',              notes: 'General enquiry about services.' },
-  { id: '5', name: 'Namjoon Kim',  role: 'IT Specialist', company: 'NCS',  status: 'green', intent: 'High – Ready for follow-up',  interests: 'AI PCs',      team: 'AI & Client Solution Team', notes: 'Very interested, requested a demo ASAP.' },
-  { id: '6', name: 'Joshua Tan',   role: 'IT Specialist', company: 'NP',   status: 'red',   intent: 'Medium – Interested in Demo', interests: 'Storage',     team: 'Storage Team',              notes: 'Wants a demo of the storage solutions.' },
-];
+type Lead = {
+  id: string;
+  lead_id: number;
+  name: string;
+  role: string;
+  company: string;
+  status: string;
+  intent: string;
+  interests: string;
+  team: string;
+  notes: string;
+  email: string;
+  phone: string;
+};
 
-type Lead = typeof INITIAL_LEADS[0];
+// ─── Helper: map server response to Lead type ─────────────────────────────────
+function mapLead(item: any): Lead {
+  return {
+    id:        String(item.lead_id),
+    lead_id:   item.lead_id,
+    name:      item.name       || '—',
+    role:      item.title      || '—',
+    company:   item.company    || '—',
+    email:     item.email      || '—',
+    phone:     item.phone      || '—',
+    interests: item.primary_interest || '—',
+    intent:    item.intent     || 'Not specified',
+    notes:     item.additional_notes || 'No notes.',
+    team:      item.assigned_team    || 'Pending Assignment',
+    // green for high intent, red otherwise
+    status: (item.intent || '').toLowerCase().includes('high') ? 'green' : 'red',
+  };
+}
 
 // ─── View Modal ───────────────────────────────────────────────────────────────
-
 function ViewModal({ lead, onClose, theme }: { lead: Lead; onClose: () => void; theme: any }) {
   return (
     <Modal visible animationType="slide" transparent>
@@ -48,6 +73,12 @@ function ViewModal({ lead, onClose, theme }: { lead: Lead; onClose: () => void; 
           </View>
 
           <View style={[modal.divider, { backgroundColor: theme.bg }]} />
+
+          <Text style={modal.fieldLabel}>Email</Text>
+          <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.email}</Text>
+
+          <Text style={modal.fieldLabel}>Phone</Text>
+          <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.phone}</Text>
 
           <Text style={modal.fieldLabel}>Assigned Team</Text>
           <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.team}</Text>
@@ -71,12 +102,39 @@ function ViewModal({ lead, onClose, theme }: { lead: Lead; onClose: () => void; 
 }
 
 // ─── Edit Modal ───────────────────────────────────────────────────────────────
-
 function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () => void; onSave: (updated: Lead) => void; theme: any }) {
   const [name, setName]       = useState(lead.name);
   const [role, setRole]       = useState(lead.role);
   const [company, setCompany] = useState(lead.company);
   const [notes, setNotes]     = useState(lead.notes);
+  const [saving, setSaving]   = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const response = await fetch(`${API_URL}/${lead.lead_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          title:            role,
+          company,
+          email:            lead.email,
+          phone:            lead.phone,
+          primary_interest: lead.interests,
+          intent:           lead.intent,
+          additional_notes: notes,
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to update');
+      onSave({ ...lead, name, role, company, notes });
+    } catch (error) {
+      Alert.alert('Error', 'Failed to update lead. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <Modal visible animationType="slide" transparent>
@@ -103,14 +161,18 @@ function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () =
           />
 
           <View style={modal.editBtns}>
-            <TouchableOpacity style={[modal.cancelBtn, { borderColor: theme.navy }]} onPress={onClose}>
+            <TouchableOpacity style={[modal.cancelBtn, { borderColor: theme.navy }]} onPress={onClose} disabled={saving}>
               <Text style={[modal.cancelText, { color: theme.navy }]}>Cancel</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[modal.saveBtn, { backgroundColor: theme.navy }]}
-              onPress={() => onSave({ ...lead, name, role, company, notes })}
+              style={[modal.saveBtn, { backgroundColor: theme.navy, opacity: saving ? 0.7 : 1 }]}
+              onPress={handleSave}
+              disabled={saving}
             >
-              <Text style={modal.saveBtnText}>Save</Text>
+              {saving
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <Text style={modal.saveBtnText}>Save</Text>
+              }
             </TouchableOpacity>
           </View>
         </View>
@@ -120,30 +182,70 @@ function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () =
 }
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
-
 export default function RecentLeadsScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
-  const [leads, setLeads]     = useState(INITIAL_LEADS);
-  const [viewing, setViewing] = useState<Lead | null>(null);
-  const [editing, setEditing] = useState<Lead | null>(null);
 
+  const [leads, setLeads]       = useState<Lead[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError]       = useState<string | null>(null);
+  const [viewing, setViewing]   = useState<Lead | null>(null);
+  const [editing, setEditing]   = useState<Lead | null>(null);
+
+  // ─── Fetch all leads ────────────────────────────────────────────────────────
+  const fetchLeads = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(API_URL);
+      const data = await response.json();
+      if (!data.success) throw new Error(data.message);
+      setLeads(data.data.map(mapLead));
+    } catch (err: any) {
+      setError('Could not load leads. Pull down to retry.');
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchLeads(); }, [fetchLeads]);
+
+  // ─── Save edited lead ───────────────────────────────────────────────────────
   const handleSave = (updated: Lead) => {
     setLeads((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
     setEditing(null);
   };
 
+  // ─── Delete lead ────────────────────────────────────────────────────────────
   const handleDelete = (lead: Lead) => {
     Alert.alert(
       'Delete Lead',
       `Are you sure you want to delete ${lead.name}? This cannot be undone.`,
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: () => setLeads((prev) => prev.filter((l) => l.id !== lead.id)) },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const response = await fetch(`${API_URL}/${lead.lead_id}`, { method: 'DELETE' });
+              const data = await response.json();
+              if (!data.success) throw new Error(data.message);
+              setLeads((prev) => prev.filter((l) => l.id !== lead.id));
+            } catch {
+              Alert.alert('Error', 'Failed to delete lead. Please try again.');
+            }
+          },
+        },
       ]
     );
   };
 
+  // ─── Render ─────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
@@ -165,40 +267,68 @@ export default function RecentLeadsScreen() {
         <View style={{ width: 22 }} />
       </View>
 
+      {/* Loading */}
+      {loading && (
+        <View style={styles.centered}>
+          <ActivityIndicator size="large" color={theme.navy} />
+          <Text style={[styles.loadingText, { color: theme.subText }]}>Loading leads...</Text>
+        </View>
+      )}
+
+      {/* Error */}
+      {!loading && error && (
+        <View style={styles.centered}>
+          <Ionicons name="cloud-offline-outline" size={48} color={theme.subText} />
+          <Text style={[styles.errorText, { color: theme.subText }]}>{error}</Text>
+          <TouchableOpacity style={[styles.retryBtn, { backgroundColor: theme.navy }]} onPress={() => fetchLeads()}>
+            <Text style={styles.retryText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* List */}
-      <ScrollView
-        contentContainerStyle={[styles.list, { paddingBottom: Platform.OS === "ios" ? 40 : 24 }]}
-        showsVerticalScrollIndicator={false}
-      >
-        {leads.length === 0 && (
-          <Text style={[styles.emptyText, { color: theme.subText }]}>No leads yet.</Text>
-        )}
+      {!loading && !error && (
+        <ScrollView
+          contentContainerStyle={[styles.list, { paddingBottom: Platform.OS === "ios" ? 40 : 24 }]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => fetchLeads(true)}
+              tintColor={theme.navy}
+            />
+          }
+        >
+          {leads.length === 0 && (
+            <Text style={[styles.emptyText, { color: theme.subText }]}>No leads yet.</Text>
+          )}
 
-        {leads.map((lead) => (
-          <View key={lead.id} style={[styles.card, { backgroundColor: theme.card }]}>
-            <View style={[styles.avatar, { backgroundColor: lead.status === 'green' ? '#22c55e' : '#ef4444' }]}>
-              <Ionicons name="person" size={20} color="#fff" />
-            </View>
+          {leads.map((lead) => (
+            <View key={lead.id} style={[styles.card, { backgroundColor: theme.card }]}>
+              <View style={[styles.avatar, { backgroundColor: lead.status === 'green' ? '#22c55e' : '#ef4444' }]}>
+                <Ionicons name="person" size={20} color="#fff" />
+              </View>
 
-            <View style={styles.info}>
-              <Text style={[styles.name, { color: theme.text }]}>{lead.name}</Text>
-              <Text style={[styles.sub, { color: theme.subText }]}>{lead.role} · {lead.company}</Text>
-            </View>
+              <View style={styles.info}>
+                <Text style={[styles.name, { color: theme.text }]}>{lead.name}</Text>
+                <Text style={[styles.sub, { color: theme.subText }]}>{lead.role} · {lead.company}</Text>
+              </View>
 
-            <View style={styles.actions}>
-              <TouchableOpacity style={[styles.editBtn, { borderColor: theme.navy }]} onPress={() => setEditing(lead)}>
-                <Text style={[styles.editBtnText, { color: theme.navy }]}>Edit</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.viewBtn, { backgroundColor: theme.navy }]} onPress={() => setViewing(lead)}>
-                <Text style={styles.viewBtnText}>View</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(lead)}>
-                <Ionicons name="trash-outline" size={16} color="#ef4444" />
-              </TouchableOpacity>
+              <View style={styles.actions}>
+                <TouchableOpacity style={[styles.editBtn, { borderColor: theme.navy }]} onPress={() => setEditing(lead)}>
+                  <Text style={[styles.editBtnText, { color: theme.navy }]}>Edit</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.viewBtn, { backgroundColor: theme.navy }]} onPress={() => setViewing(lead)}>
+                  <Text style={styles.viewBtnText}>View</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(lead)}>
+                  <Ionicons name="trash-outline" size={16} color="#ef4444" />
+                </TouchableOpacity>
+              </View>
             </View>
-          </View>
-        ))}
-      </ScrollView>
+          ))}
+        </ScrollView>
+      )}
 
       {/* Bottom Nav */}
       <View
@@ -236,7 +366,6 @@ export default function RecentLeadsScreen() {
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   header: {
@@ -250,21 +379,18 @@ const styles = StyleSheet.create({
   headerTitle: { color: "#fff", fontSize: 17, fontWeight: "700", letterSpacing: 0.4 },
   list: { padding: 16, gap: 10 },
   emptyText: { textAlign: "center", marginTop: 40, fontSize: 14 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  loadingText: { fontSize: 14, marginTop: 8 },
+  errorText: { fontSize: 14, textAlign: 'center', paddingHorizontal: 32 },
+  retryBtn: { borderRadius: 8, paddingVertical: 10, paddingHorizontal: 24, marginTop: 4 },
+  retryText: { color: '#fff', fontWeight: '700', fontSize: 14 },
   card: {
-    borderRadius: 12,
-    padding: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 2,
+    borderRadius: 12, padding: 14,
+    flexDirection: "row", alignItems: "center",
+    shadowColor: "#000", shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06, shadowRadius: 3, elevation: 2,
   },
-  avatar: {
-    width: 42, height: 42, borderRadius: 21,
-    alignItems: "center", justifyContent: "center", marginRight: 12,
-  },
+  avatar: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center", marginRight: 12 },
   info: { flex: 1 },
   name: { fontSize: 14, fontWeight: "700" },
   sub: { fontSize: 12, marginTop: 2 },
@@ -273,36 +399,17 @@ const styles = StyleSheet.create({
   editBtnText: { fontSize: 12, fontWeight: "600" },
   viewBtn: { borderRadius: 8, paddingVertical: 5, paddingHorizontal: 12 },
   viewBtnText: { color: "#fff", fontSize: 12, fontWeight: "600" },
-  deleteBtn: {
-    padding: 6, borderRadius: 8,
-    borderWidth: 1.5, borderColor: "#ef4444",
-    alignItems: "center", justifyContent: "center",
-  },
-  bottomNav: {
-    flexDirection: "row",
-    borderTopWidth: 1,
-    paddingTop: 10,
-    paddingHorizontal: 32,
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
+  deleteBtn: { padding: 6, borderRadius: 8, borderWidth: 1.5, borderColor: "#ef4444", alignItems: "center", justifyContent: "center" },
+  bottomNav: { flexDirection: "row", borderTopWidth: 1, paddingTop: 10, paddingHorizontal: 32, justifyContent: "space-between", alignItems: "center" },
   navItem: { alignItems: "center", gap: 3, paddingHorizontal: 12 },
   navLabel: { fontSize: 10, fontWeight: "600", letterSpacing: 0.3 },
   navItemCenter: { alignItems: "center", marginTop: -20 },
-  navCenterBtn: {
-    width: 58, height: 58, borderRadius: 18,
-    alignItems: "center", justifyContent: "center",
-    shadowColor: "#000", shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2, shadowRadius: 8, elevation: 6,
-  },
+  navCenterBtn: { width: 58, height: 58, borderRadius: 18, alignItems: "center", justifyContent: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 6 },
 });
 
 const modal = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)", justifyContent: "flex-end" },
-  sheet: {
-    borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    padding: 24, paddingBottom: Platform.OS === "ios" ? 40 : 24,
-  },
+  sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: Platform.OS === "ios" ? 40 : 24 },
   handle: { width: 40, height: 4, backgroundColor: "#ddd", borderRadius: 2, alignSelf: "center", marginBottom: 20 },
   leadHeader: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
   avatar: { width: 46, height: 46, borderRadius: 23, alignItems: "center", justifyContent: "center" },

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -15,15 +15,56 @@ import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 import { useAppTheme, THEMES } from '../src/constants/useAppTheme';
 
+const API_URL = 'https://backend-deployment-for-fyp-project.onrender.com/leads';
+
 export default function DashboardScreen() {
   const router = useRouter();
-
-  // ✅ useAppTheme called INSIDE the component
   const { theme, themeIndex, setThemeIndex } = useAppTheme();
   const [showThemePicker, setShowThemePicker] = useState(false);
 
+  // ─── Stats state ────────────────────────────────────────────────────────────
+  const [totalLeads,    setTotalLeads]    = useState(0);
+  const [readyCount,    setReadyCount]    = useState(0);
+  const [pendingCount,  setPendingCount]  = useState(0);
+  const [lastUpdated,   setLastUpdated]   = useState('—');
+  const [loadingStats,  setLoadingStats]  = useState(true);
+
+  // ─── Fetch stats ────────────────────────────────────────────────────────────
+  const fetchStats = useCallback(async () => {
+    setLoadingStats(true);
+    try {
+      const response = await fetch(API_URL);
+      const data = await response.json();
+      if (!data.success) throw new Error(data.message);
+
+      const leads = data.data;
+      const total   = leads.length;
+      const ready   = leads.filter((l) =>
+        (l.intent || '').toLowerCase().includes('high') ||
+        (l.followup_done === 1)
+      ).length;
+      const pending = total - ready;
+
+      setTotalLeads(total);
+      setReadyCount(ready);
+      setPendingCount(pending);
+      setLastUpdated(new Date().toLocaleTimeString());
+    } catch {
+      // keep previous values on error, don't crash the screen
+    } finally {
+      setLoadingStats(false);
+    }
+  }, []);
+
+  // fetch on mount + refresh every 60s
+  useEffect(() => {
+    fetchStats();
+    const interval = setInterval(fetchStats, 60000);
+    return () => clearInterval(interval);
+  }, [fetchStats]);
+
   const currentTime = new Date().toLocaleTimeString();
-  const handleScan = () => router.push("/qr-scanner");
+  const handleScan  = () => router.push("/qr-scanner");
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
@@ -35,9 +76,22 @@ export default function DashboardScreen() {
           <Text style={styles.logoSub}>BOOTH MANAGEMENT</Text>
           <Text style={styles.logo}>Boothflow</Text>
         </View>
-        <TouchableOpacity style={[styles.themeBtn, { borderColor: 'rgba(255,255,255,0.25)' }]} onPress={() => setShowThemePicker(true)}>
-          <Ionicons name="color-palette-outline" size={20} color="#fff" />
-        </TouchableOpacity>
+        <View style={styles.headerRight}>
+          {/* Refresh button */}
+          <TouchableOpacity
+            style={[styles.themeBtn, { borderColor: 'rgba(255,255,255,0.25)', marginRight: 8 }]}
+            onPress={fetchStats}
+          >
+            <Ionicons name="refresh-outline" size={20} color="#fff" />
+          </TouchableOpacity>
+          {/* Theme button */}
+          <TouchableOpacity
+            style={[styles.themeBtn, { borderColor: 'rgba(255,255,255,0.25)' }]}
+            onPress={() => setShowThemePicker(true)}
+          >
+            <Ionicons name="color-palette-outline" size={20} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* BODY */}
@@ -62,42 +116,66 @@ export default function DashboardScreen() {
           <View style={styles.totalCardRow}>
             <View>
               <Text style={[styles.totalCardLabel, { color: theme.subText }]}>Total Leads Captured</Text>
-              <Text style={[styles.totalNumber, { color: theme.text }]}>100</Text>
+              <Text style={[styles.totalNumber, { color: theme.text }]}>
+                {loadingStats ? '—' : totalLeads}
+              </Text>
             </View>
             <View style={[styles.totalBadge, { backgroundColor: theme.accent + '18' }]}>
               <Ionicons name="people" size={28} color={theme.accent} />
             </View>
           </View>
           <View style={[styles.totalDivider, { backgroundColor: theme.bg }]} />
-          <Text style={[styles.totalCardFooter, { color: theme.subText }]}>Updated just now</Text>
+          <Text style={[styles.totalCardFooter, { color: theme.subText }]}>
+            {loadingStats ? 'Updating...' : `Updated at ${lastUpdated}`}
+          </Text>
         </View>
 
         {/* FOLLOW-UP STATUS */}
         <Text style={[styles.sectionLabel, { color: theme.subText }]}>FOLLOW-UP STATUS</Text>
         <View style={styles.statsRow}>
-          <TouchableOpacity style={[styles.statCard, { backgroundColor: theme.card }]} activeOpacity={0.85}
-            onPress={() => router.push({ pathname: "/FollowupsDone", params: { title: "Ready for Follow-ups", count: 10, time: currentTime, status: "ready" } })}>
+
+          {/* Ready for Follow-ups */}
+          <TouchableOpacity
+            style={[styles.statCard, { backgroundColor: theme.card }]}
+            activeOpacity={0.85}
+            onPress={() => router.push({
+              pathname: "/FollowupsDone",
+              params: { title: "Ready for Follow-ups", count: readyCount, time: currentTime, status: "ready" }
+            })}
+          >
             <View style={[styles.statIconBox, { backgroundColor: '#dcfce7' }]}>
               <Ionicons name="checkmark-circle" size={24} color="#16a34a" />
             </View>
-            <Text style={[styles.statNumber, { color: theme.text }]}>10</Text>
+            <Text style={[styles.statNumber, { color: theme.text }]}>
+              {loadingStats ? '—' : readyCount}
+            </Text>
             <Text style={[styles.statLabel, { color: theme.subText }]}>Ready for{'\n'}Follow-ups</Text>
             <View style={[styles.statChip, { backgroundColor: '#dcfce7' }]}>
               <Text style={[styles.statChipText, { color: '#16a34a' }]}>Active</Text>
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity style={[styles.statCard, { backgroundColor: theme.card }]} activeOpacity={0.85}
-            onPress={() => router.push({ pathname: "/Followups-not-done", params: { title: "No Follow-ups yet", count: 10, time: currentTime, status: "not_done" } })}>
+          {/* No Follow-ups yet */}
+          <TouchableOpacity
+            style={[styles.statCard, { backgroundColor: theme.card }]}
+            activeOpacity={0.85}
+            onPress={() => router.push({
+              pathname: "/Followups-not-done",
+              params: { title: "No Follow-ups yet", count: pendingCount, time: currentTime, status: "not_done" }
+            })}
+          >
             <View style={[styles.statIconBox, { backgroundColor: '#fee2e2' }]}>
               <Ionicons name="time" size={24} color="#dc2626" />
             </View>
-            <Text style={[styles.statNumber, { color: theme.text }]}>10</Text>
+            <Text style={[styles.statNumber, { color: theme.text }]}>
+              {loadingStats ? '—' : pendingCount}
+            </Text>
             <Text style={[styles.statLabel, { color: theme.subText }]}>No{'\n'}Follow-ups yet</Text>
             <View style={[styles.statChip, { backgroundColor: '#fee2e2' }]}>
               <Text style={[styles.statChipText, { color: '#dc2626' }]}>Pending</Text>
             </View>
           </TouchableOpacity>
+
         </View>
       </ScrollView>
 
@@ -127,7 +205,8 @@ export default function DashboardScreen() {
             <Text style={styles.modalSub}>Choose a colour theme</Text>
             <View style={styles.themeGrid}>
               {THEMES.map((t, index) => (
-                <TouchableOpacity key={t.name}
+                <TouchableOpacity
+                  key={t.name}
                   style={[styles.themeOption, themeIndex === index && { borderColor: t.accent, borderWidth: 2, backgroundColor: t.accent + '08' }]}
                   onPress={() => { setThemeIndex(index); setShowThemePicker(false); }}
                 >
@@ -152,7 +231,8 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 22, paddingBottom: 18, flexDirection: "row", alignItems: "flex-end", justifyContent: "space-between" },
   logoSub: { color: 'rgba(255,255,255,0.5)', fontSize: 10, fontWeight: '600', letterSpacing: 2, marginBottom: 2 },
   logo: { color: "#fff", fontSize: 24, fontWeight: "800", letterSpacing: -0.5 },
-  themeBtn: { padding: 8, borderRadius: 10, borderWidth: 1, marginBottom: 2 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
+  themeBtn: { padding: 8, borderRadius: 10, borderWidth: 1 },
   body: { flex: 1 },
   bodyContent: { paddingHorizontal: 18, paddingTop: 20, paddingBottom: 24 },
   sectionLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1.5, marginBottom: 10, marginTop: 20 },

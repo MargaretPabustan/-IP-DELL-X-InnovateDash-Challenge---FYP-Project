@@ -16,7 +16,7 @@ import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useAppTheme } from '../src/constants/useAppTheme';
 import { styles } from '../src/styles/leadDetailsStyles';
 
-const API_URL = 'https://your-backend.com/api/leads';
+const API_URL = 'https://fyp-project-cwrn.onrender.com';
 
 const INTEREST_OPTIONS = ['AI PCs', 'Multi-cloud', 'Storage', 'Service'];
 
@@ -96,8 +96,8 @@ const LeadDetailsScreen = ({
   const [loading, setLoading] = useState(false);
 
   const toggleInterest = (option: string) => {
-    setSelectedInterests((prev) =>
-      prev.includes(option) ? prev.filter((o) => o !== option) : [...prev, option]
+    setSelectedInterests((prev: string[]) =>
+      prev.includes(option) ? prev.filter((o: string) => o !== option) : [...prev, option]
     );
   };
 
@@ -109,18 +109,22 @@ const LeadDetailsScreen = ({
 
     const intent = selectedIntent || intentOthers.trim() || 'Not specified';
 
-    const payload = {
-      leadName, companyName, title,
-      phone, email,
-      interests: allInterests,
-      intent,
-      additionalNotes,
-    };
-
-    if (onSubmit) onSubmit(payload);
     setLoading(true);
 
+    if (onSubmit) onSubmit({ leadName, companyName, title, phone, email, allInterests, intent, additionalNotes });
+
     try {
+      const payload = {
+        name:             leadName,
+        email:            email,
+        company:          companyName,
+        title:            title,
+        phone:            phone,
+        primary_interest: allInterests,
+        intent:           intent,
+        additional_notes: additionalNotes,
+      };
+
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -139,6 +143,7 @@ const LeadDetailsScreen = ({
           aiNotes:      result.aiNotes      || additionalNotes || 'Pending AI analysis.',
         },
       });
+
     } catch (error) {
       console.warn('Backend not reachable, using fallback routing:', error);
       router.push({
