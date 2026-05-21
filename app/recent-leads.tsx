@@ -18,7 +18,7 @@ import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 import { useAppTheme } from '../src/constants/useAppTheme';
 
-const API_URL = 'https://fyp-project-cwrn.onrender.com';
+const API_URL = 'https://backend-deployment-for-fyp-project.onrender.com';
 
 type Lead = {
   id: string;

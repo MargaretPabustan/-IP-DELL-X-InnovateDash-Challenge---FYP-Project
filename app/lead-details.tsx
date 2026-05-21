@@ -16,7 +16,7 @@ import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useAppTheme } from '../src/constants/useAppTheme';
 import { styles } from '../src/styles/leadDetailsStyles';
 
-const API_URL = 'https://fyp-project-cwrn.onrender.com';
+const API_URL = 'https://backend-deployment-for-fyp-project.onrender.com';
 
 const INTEREST_OPTIONS = ['AI PCs', 'Multi-cloud', 'Storage', 'Service'];
 
