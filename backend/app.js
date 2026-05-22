@@ -1,8 +1,9 @@
 // Import required modules for the FYP project //
 const express = require('express');
 const mysql = require('mysql2');
+const path = require('path');
 const app = express();
-require('dotenv').config();
+require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 const cors = require('cors');
 app.use(cors());
@@ -18,10 +19,11 @@ const pool = mysql.createPool({
 
 pool.getConnection((err, connection) => {
     if (err) {
-        console.error('Database connection failed:', err.message);
+        console.error('Database connection failed:', err);
         return;
     }
     console.log('Connected to MySQL database');
+    connection.release();
 });
 
 // Basic Routes//

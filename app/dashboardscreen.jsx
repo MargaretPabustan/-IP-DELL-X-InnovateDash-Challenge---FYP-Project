@@ -15,7 +15,7 @@ import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 import { useAppTheme, THEMES } from '../src/constants/useAppTheme';
 
-const API_URL = 'https://backend-deployment-for-fyp-project.onrender.com/leads';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || '';
 
 export default function DashboardScreen() {
   const router = useRouter();

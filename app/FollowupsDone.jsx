@@ -15,7 +15,7 @@ import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 import { useAppTheme } from '../src/constants/useAppTheme';
 
-const API_URL = 'https://backend-deployment-for-fyp-project.onrender.com';
+const API_URL = process.env.EXPO_PUBLIC_API_URL || '';
 
 function mapLead(item) {
   return {
