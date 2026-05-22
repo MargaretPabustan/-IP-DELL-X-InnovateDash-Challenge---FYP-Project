@@ -4,6 +4,8 @@ const mysql = require('mysql2');
 const app = express();
 require('dotenv').config();
 
+const cors = require('cors');
+app.use(cors());
 app.use(express.json());
 
 const pool = mysql.createPool({
@@ -47,9 +49,11 @@ function validateLead(name, email, company, title, phone, primary_interest) {
 app.get('/leads', (req, res) => {
     pool.query('SELECT * FROM leads', (err, results) => {
         if (err) {
+            console.log("GET /leads ERROR:", err);
+
             return res.status(500).json({
                 success: false,
-                message: 'Failed to fetch leads'
+                message: "Failed to fetch leads"
             });
         }
 
@@ -60,24 +64,26 @@ app.get('/leads', (req, res) => {
     });
 });
 
-
 // get lead by id
 app.get('/leads/:id', (req, res) => {
     pool.query(
         'SELECT * FROM leads WHERE lead_id = ?',
         [req.params.id],
         (err, results) => {
+
             if (err) {
+                console.log("GET /leads/:id ERROR:", err);
+
                 return res.status(500).json({
                     success: false,
-                    message: 'Database error'
+                    message: "Failed to fetch lead"
                 });
             }
 
             if (results.length === 0) {
                 return res.status(404).json({
                     success: false,
-                    message: 'Lead not found'
+                    message: "Lead not found"
                 });
             }
 
@@ -103,31 +109,31 @@ app.post('/leads', (req, res) => {
     }
 
     const sql = `
-        INSERT INTO leads 
-        (name, email, company, title, phone, primary_interest)
+        INSERT INTO leads (name, email, company, title, phone, primary_interest)
         VALUES (?, ?, ?, ?, ?, ?)
     `;
 
-    pool.query(
-        sql,
+    pool.query(sql,
         [name, email, company, title, phone, primary_interest],
         (err, result) => {
+
             if (err) {
+                console.log("POST /leads ERROR:", err);
+
                 return res.status(500).json({
                     success: false,
-                    message: 'Failed to create lead'
+                    message: "Failed to create lead"
                 });
             }
 
             res.status(201).json({
                 success: true,
-                message: 'Lead created successfully',
+                message: "Lead created successfully",
                 lead_id: result.insertId
             });
         }
     );
 });
-
 
 // update lead
 app.put('/leads/:id', (req, res) => {
@@ -147,23 +153,26 @@ app.put('/leads/:id', (req, res) => {
          WHERE lead_id=?`,
         [name, email, company, title, phone, primary_interest, req.params.id],
         (err, result) => {
+
             if (err) {
+                console.log("PUT /leads ERROR:", err);
+
                 return res.status(500).json({
                     success: false,
-                    message: 'Failed to update lead'
+                    message: "Failed to update lead"
                 });
             }
 
             if (result.affectedRows === 0) {
                 return res.status(404).json({
                     success: false,
-                    message: 'Lead not found'
+                    message: "Lead not found"
                 });
             }
 
             res.json({
                 success: true,
-                message: 'Lead updated successfully'
+                message: "Lead updated successfully"
             });
         }
     );
@@ -176,23 +185,26 @@ app.delete('/leads/:id', (req, res) => {
         'DELETE FROM leads WHERE lead_id = ?',
         [req.params.id],
         (err, result) => {
+
             if (err) {
+                console.log("DELETE /leads ERROR:", err);
+
                 return res.status(500).json({
                     success: false,
-                    message: 'Failed to delete lead'
+                    message: "Failed to delete lead"
                 });
             }
 
             if (result.affectedRows === 0) {
                 return res.status(404).json({
                     success: false,
-                    message: 'Lead not found'
+                    message: "Lead not found"
                 });
             }
 
             res.json({
                 success: true,
-                message: 'Lead deleted successfully'
+                message: "Lead deleted successfully"
             });
         }
     );
