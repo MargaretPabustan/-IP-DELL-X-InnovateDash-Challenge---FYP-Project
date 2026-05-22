@@ -18,7 +18,7 @@ import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 import { useAppTheme } from '../src/constants/useAppTheme';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL!;
+const API_URL = process.env.EXPO_PUBLIC_API_URL || '';
 
 type Lead = {
   id: string;
@@ -40,17 +40,16 @@ function mapLead(item: any): Lead {
   return {
     id:        String(item.lead_id),
     lead_id:   item.lead_id,
-    name:      item.name       || '—',
-    role:      item.title      || '—',
-    company:   item.company    || '—',
-    email:     item.email      || '—',
-    phone:     item.phone      || '—',
-    interests: item.primary_interest || '—',
-    intent:    item.intent     || 'Not specified',
+    name:      item.name             || '—',
+    role:      item.title            || '—',
+    company:   item.company          || '—',
+    email:     item.email            || '—',
+    phone:     item.phone_number     || '—',   // ✅ backend field
+    interests: item.customer_intent  || '—',   // ✅ backend field
+    intent:    item.customer_intent  || 'Not specified',
     notes:     item.additional_notes || 'No notes.',
     team:      item.assigned_team    || 'Pending Assignment',
-    // green for high intent, red otherwise
-    status: (item.intent || '').toLowerCase().includes('high') ? 'green' : 'red',
+    status:    (item.customer_intent || '').toLowerCase().includes('high') ? 'green' : 'red',
   };
 }
 
@@ -114,16 +113,17 @@ function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () =
     try {
       const response = await fetch(`${API_URL}/${lead.lead_id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'ngrok-skip-browser-warning': 'true',
+        },
         body: JSON.stringify({
           name,
-          title:            role,
+          email:           lead.email,
           company,
-          email:            lead.email,
-          phone:            lead.phone,
-          primary_interest: lead.interests,
-          intent:           lead.intent,
-          additional_notes: notes,
+          title:           role,
+          phone_number:    lead.phone,       // ✅ backend field
+          customer_intent: lead.intent,      // ✅ backend field
         }),
       });
 
@@ -186,12 +186,12 @@ export default function RecentLeadsScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
 
-  const [leads, setLeads]       = useState<Lead[]>([]);
-  const [loading, setLoading]   = useState(true);
+  const [leads, setLeads]           = useState<Lead[]>([]);
+  const [loading, setLoading]       = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [error, setError]       = useState<string | null>(null);
-  const [viewing, setViewing]   = useState<Lead | null>(null);
-  const [editing, setEditing]   = useState<Lead | null>(null);
+  const [error, setError]           = useState<string | null>(null);
+  const [viewing, setViewing]       = useState<Lead | null>(null);
+  const [editing, setEditing]       = useState<Lead | null>(null);
 
   // ─── Fetch all leads ────────────────────────────────────────────────────────
   const fetchLeads = useCallback(async (isRefresh = false) => {
@@ -200,7 +200,9 @@ export default function RecentLeadsScreen() {
     setError(null);
 
     try {
-      const response = await fetch(API_URL);
+      const response = await fetch(API_URL, {
+        headers: { 'ngrok-skip-browser-warning': 'true' },  // ✅ ngrok header
+      });
       const data = await response.json();
       if (!data.success) throw new Error(data.message);
       setLeads(data.data.map(mapLead));
@@ -232,7 +234,10 @@ export default function RecentLeadsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const response = await fetch(`${API_URL}/${lead.lead_id}`, { method: 'DELETE' });
+              const response = await fetch(`${API_URL}/${lead.lead_id}`, {
+                method: 'DELETE',
+                headers: { 'ngrok-skip-browser-warning': 'true' },
+              });
               const data = await response.json();
               if (!data.success) throw new Error(data.message);
               setLeads((prev) => prev.filter((l) => l.id !== lead.id));
@@ -245,7 +250,6 @@ export default function RecentLeadsScreen() {
     );
   };
 
-  // ─── Render ─────────────────────────────────────────────────────────────────
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
@@ -308,12 +312,10 @@ export default function RecentLeadsScreen() {
               <View style={[styles.avatar, { backgroundColor: lead.status === 'green' ? '#22c55e' : '#ef4444' }]}>
                 <Ionicons name="person" size={20} color="#fff" />
               </View>
-
               <View style={styles.info}>
                 <Text style={[styles.name, { color: theme.text }]}>{lead.name}</Text>
                 <Text style={[styles.sub, { color: theme.subText }]}>{lead.role} · {lead.company}</Text>
               </View>
-
               <View style={styles.actions}>
                 <TouchableOpacity style={[styles.editBtn, { borderColor: theme.navy }]} onPress={() => setEditing(lead)}>
                   <Text style={[styles.editBtnText, { color: theme.navy }]}>Edit</Text>
@@ -345,13 +347,11 @@ export default function RecentLeadsScreen() {
           <Ionicons name="person-outline" size={26} color={theme.accent} />
           <Text style={[styles.navLabel, { color: theme.accent }]}>Leads</Text>
         </TouchableOpacity>
-
         <TouchableOpacity style={styles.navItemCenter} onPress={() => router.push("/qr-scanner" as any)}>
           <View style={[styles.navCenterBtn, { backgroundColor: theme.navy }]}>
             <MaterialIcons name="qr-code-scanner" size={28} color="#fff" />
           </View>
         </TouchableOpacity>
-
         <TouchableOpacity style={styles.navItem} onPress={() => router.push("/dashboardscreen" as any)}>
           <FontAwesome5 name="home" size={22} color={theme.subText} />
           <Text style={[styles.navLabel, { color: theme.subText }]}>Home</Text>
@@ -365,16 +365,9 @@ export default function RecentLeadsScreen() {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  header: {
-    paddingHorizontal: 16,
-    paddingBottom: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
+  header: { paddingHorizontal: 16, paddingBottom: 14, flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   backBtn: { padding: 4 },
   headerTitle: { color: "#fff", fontSize: 17, fontWeight: "700", letterSpacing: 0.4 },
   list: { padding: 16, gap: 10 },
@@ -384,12 +377,7 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 14, textAlign: 'center', paddingHorizontal: 32 },
   retryBtn: { borderRadius: 8, paddingVertical: 10, paddingHorizontal: 24, marginTop: 4 },
   retryText: { color: '#fff', fontWeight: '700', fontSize: 14 },
-  card: {
-    borderRadius: 12, padding: 14,
-    flexDirection: "row", alignItems: "center",
-    shadowColor: "#000", shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06, shadowRadius: 3, elevation: 2,
-  },
+  card: { borderRadius: 12, padding: 14, flexDirection: "row", alignItems: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 3, elevation: 2 },
   avatar: { width: 42, height: 42, borderRadius: 21, alignItems: "center", justifyContent: "center", marginRight: 12 },
   info: { flex: 1 },
   name: { fontSize: 14, fontWeight: "700" },
