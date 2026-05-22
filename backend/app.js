@@ -100,9 +100,9 @@ app.get('/leads/:id', (req, res) => {
 
 // create lead
 app.post('/leads', (req, res) => {
-    const { name, email, company, title, phone, primary_interest } = req.body;
+    const { name, email, company, title, phone_number, customer_intent } = req.body;
 
-    const error = validateLead(name, email, company, title, phone, primary_interest);
+     const error = validateLead(name, email, company, title, phone_number, customer_intent);
     if (error) {
         return res.status(400).json({
             success: false,
@@ -110,13 +110,14 @@ app.post('/leads', (req, res) => {
         });
     }
 
+
     const sql = `
-        INSERT INTO leads (name, email, company, title, phone, primary_interest)
+        INSERT INTO leads (name, email, company, title, phone_number, customer_intent)
         VALUES (?, ?, ?, ?, ?, ?)
     `;
 
     pool.query(sql,
-        [name, email, company, title, phone, primary_interest],
+        [name, email, company, title, phone_number, customer_intent],
         (err, result) => {
 
             if (err) {
@@ -139,9 +140,9 @@ app.post('/leads', (req, res) => {
 
 // update lead
 app.put('/leads/:id', (req, res) => {
-    const { name, email, company, title, phone, primary_interest } = req.body;
+    const { name, email, company, title, phone_number, customer_intent } = req.body;
 
-    const error = validateLead(name, email, company, title, phone, primary_interest);
+    const error = validateLead(name, email, company, title, phone_number, customer_intent);
     if (error) {
         return res.status(400).json({
             success: false,
@@ -151,9 +152,9 @@ app.put('/leads/:id', (req, res) => {
 
     pool.query(
         `UPDATE leads 
-         SET name=?, email=?, company=?, title=?, phone=?, primary_interest=? 
+         SET name=?, email=?, company=?, title=?, phone_number=?, customer_intent=? 
          WHERE lead_id=?`,
-        [name, email, company, title, phone, primary_interest, req.params.id],
+        [name, email, company, title, phone_number, customer_intent, req.params.id],
         (err, result) => {
 
             if (err) {
