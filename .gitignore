@@ -42,5 +42,7 @@ app-example
 /ios
 /android
 
-# .gitignore
+# env files — never commit secrets
 .env
+.env.*
+backend/.env

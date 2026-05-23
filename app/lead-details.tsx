@@ -10,27 +10,43 @@ import {
   SafeAreaView,
   StatusBar,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useAppTheme } from '../src/constants/useAppTheme';
 import { styles } from '../src/styles/leadDetailsStyles';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL!;
+const API_URL  = process.env.EXPO_PUBLIC_API_URL || '';
+const ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const BASE_URL = API_URL.replace('/leads', '');
+
+const SUPABASE_HEADERS = {
+  'apikey':        ANON_KEY,
+  'Authorization': `Bearer ${ANON_KEY}`,
+  'Content-Type':  'application/json',
+};
+
+const CATEGORY_MAP: Record<string, number> = {
+  'AI PCs':      1,
+  'Multi-cloud': 2,
+  'Storage':     3,
+  'Service':     4,
+};
 
 const INTEREST_OPTIONS = ['AI PCs', 'Multi-cloud', 'Storage', 'Service'];
 
 const INTENT_OPTIONS = [
   { label: 'High – Ready for follow-up', level: 'high' },
-  { label: 'Medium – Pricing Inquiry', level: 'medium' },
-  { label: 'Medium – Interested in Demo', level: 'medium' },
-  { label: 'Low – Browsing', level: 'low' },
+  { label: 'Medium – Pricing Inquiry',   level: 'medium' },
+  { label: 'Medium – Interested in Demo',level: 'medium' },
+  { label: 'Low – Browsing',             level: 'low' },
 ];
 
 const INTENT_COLORS = {
-  high: '#1A7F37',
+  high:   '#1A7F37',
   medium: '#9A6700',
-  low: '#CF222E',
+  low:    '#CF222E',
 };
 
 const AutofillField = ({ label, value }: { label: string; value: string }) => (
@@ -101,51 +117,62 @@ const LeadDetailsScreen = ({
     );
   };
 
-  const handleSubmit = async () => {
-    const allInterests = [
-      ...selectedInterests,
-      ...(interestOthers.trim() ? [interestOthers.trim()] : []),
-    ].join(', ') || 'None';
-
-    const intent = selectedIntent || intentOthers.trim() || 'Not specified';
-
+  // ── Core submit logic ──────────────────────────────────────────────────
+  const proceedWithSubmit = async (intent: string, allInterests: string) => {
     setLoading(true);
-
     if (onSubmit) onSubmit({ leadName, companyName, title, phone, email, allInterests, intent, additionalNotes });
 
     try {
-      const payload = {
-        name:             leadName,
-        email:            email,
-        company:          companyName,
-        title:            title,
-        phone:            phone,
-        primary_interest: allInterests,
-        intent:           intent,
-        additional_notes: additionalNotes,
-      };
-
+      // Step 1: Create the lead
       const response = await fetch(API_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        headers: { ...SUPABASE_HEADERS, 'Prefer': 'return=representation' },
+        body: JSON.stringify({
+          name:            leadName,
+          email:           email,
+          company:         companyName,
+          title:           title,
+          phone_number:    phone,
+          customer_intent: intent,
+        }),
       });
 
-      if (!response.ok) throw new Error('Server error');
-      const result = await response.json();
+      if (!response.ok) {
+        const err = await response.text();
+        console.warn('POST /leads error:', err);
+        throw new Error('Server error');
+      }
 
+      const result = await response.json();
+      const leadId = result[0]?.lead_id;
+
+      // Step 2: Save interests
+      if (leadId) {
+        for (const chip of selectedInterests) {
+          const categoryId = CATEGORY_MAP[chip];
+          if (categoryId) {
+            await fetch(`${BASE_URL}/lead_interest_categories`, {
+              method: 'POST',
+              headers: { ...SUPABASE_HEADERS, 'Prefer': 'return=minimal' },
+              body: JSON.stringify({ lead_id: leadId, category_id: categoryId }),
+            });
+          }
+        }
+      }
+
+      // Step 3: Navigate to success
       router.push({
         pathname: '/successfullysubmitted',
         params: {
-          assignedTeam: result.assignedTeam || 'Pending Assignment',
-          intent:       result.intent       || intent,
-          interests:    result.interests    || allInterests,
-          aiNotes:      result.aiNotes      || additionalNotes || 'Pending AI analysis.',
+          assignedTeam: 'Pending Assignment',
+          intent,
+          interests:    allInterests,
+          aiNotes:      additionalNotes || 'Pending AI analysis.',
         },
       });
 
     } catch (error) {
-      console.warn('Backend not reachable, using fallback routing:', error);
+      console.warn('Submit error, using fallback:', error);
       router.push({
         pathname: '/successfullysubmitted',
         params: {
@@ -158,6 +185,53 @@ const LeadDetailsScreen = ({
     } finally {
       setLoading(false);
     }
+  };
+
+  // ── Handle submit with validation + duplicate check ───────────────────
+  const handleSubmit = async () => {
+    const allInterests = [
+      ...selectedInterests,
+      ...(interestOthers.trim() ? [interestOthers.trim()] : []),
+    ].join(', ') || 'None';
+
+    const intent = selectedIntent || intentOthers.trim() || '';
+
+    // ── Validation ────────────────────────────────────────────────────────
+    if (selectedInterests.length === 0 && !interestOthers.trim()) {
+      Alert.alert('Missing Interest', 'Please select at least one customer interest.');
+      return;
+    }
+    if (!intent) {
+      Alert.alert('Missing Intent', 'Please select a customer intent before submitting.');
+      return;
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
+    // ── Duplicate email check ─────────────────────────────────────────────
+    try {
+      const checkRes = await fetch(
+        `${API_URL}?email=eq.${encodeURIComponent(email)}&select=lead_id`,
+        { headers: SUPABASE_HEADERS }
+      );
+      const existing = await checkRes.json();
+
+      if (Array.isArray(existing) && existing.length > 0) {
+        Alert.alert(
+          'Duplicate Lead',
+          `A lead with email ${email} already exists. Do you want to submit anyway?`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Submit Anyway', onPress: () => proceedWithSubmit(intent, allInterests) },
+          ]
+        );
+        return;
+      }
+    } catch {
+      // if duplicate check fails, proceed anyway
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
+    proceedWithSubmit(intent, allInterests);
   };
 
   return (

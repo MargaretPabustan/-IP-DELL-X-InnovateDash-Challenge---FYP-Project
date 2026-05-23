@@ -15,33 +15,40 @@ import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 import { useAppTheme, THEMES } from '../src/constants/useAppTheme';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || '';
+const API_URL  = process.env.EXPO_PUBLIC_API_URL || '';
+const ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+
+const SUPABASE_HEADERS = {
+  'apikey':        ANON_KEY,
+  'Authorization': `Bearer ${ANON_KEY}`,
+  'Content-Type':  'application/json',
+};
 
 export default function DashboardScreen() {
   const router = useRouter();
   const { theme, themeIndex, setThemeIndex } = useAppTheme();
   const [showThemePicker, setShowThemePicker] = useState(false);
 
-  // ─── Stats state ────────────────────────────────────────────────────────────
-  const [totalLeads,    setTotalLeads]    = useState(0);
-  const [readyCount,    setReadyCount]    = useState(0);
-  const [pendingCount,  setPendingCount]  = useState(0);
-  const [lastUpdated,   setLastUpdated]   = useState('—');
-  const [loadingStats,  setLoadingStats]  = useState(true);
+  const [totalLeads,   setTotalLeads]   = useState(0);
+  const [readyCount,   setReadyCount]   = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [lastUpdated,  setLastUpdated]  = useState('—');
+  const [loadingStats, setLoadingStats] = useState(true);
 
-  // ─── Fetch stats ────────────────────────────────────────────────────────────
   const fetchStats = useCallback(async () => {
     setLoadingStats(true);
     try {
-      const response = await fetch(API_URL);
+      const response = await fetch(API_URL, {
+        headers: SUPABASE_HEADERS,  // ✅ Supabase headers
+      });
       const data = await response.json();
-      if (!data.success) throw new Error(data.message);
 
-      const leads = data.data;
-      const total   = leads.length;
-      const ready   = leads.filter((l) =>
-        (l.intent || '').toLowerCase().includes('high') ||
-        (l.followup_done === 1)
+      // ✅ Supabase returns array directly
+      if (!Array.isArray(data)) throw new Error('Unexpected response');
+
+      const total   = data.length;
+      const ready   = data.filter((l) =>
+        (l.customer_intent || '').toLowerCase().includes('high')  // ✅ correct field
       ).length;
       const pending = total - ready;
 
@@ -50,13 +57,12 @@ export default function DashboardScreen() {
       setPendingCount(pending);
       setLastUpdated(new Date().toLocaleTimeString());
     } catch {
-      // keep previous values on error, don't crash the screen
+      // keep previous values on error
     } finally {
       setLoadingStats(false);
     }
   }, []);
 
-  // fetch on mount + refresh every 60s
   useEffect(() => {
     fetchStats();
     const interval = setInterval(fetchStats, 60000);
@@ -77,18 +83,10 @@ export default function DashboardScreen() {
           <Text style={styles.logo}>Boothflow</Text>
         </View>
         <View style={styles.headerRight}>
-          {/* Refresh button */}
-          <TouchableOpacity
-            style={[styles.themeBtn, { borderColor: 'rgba(255,255,255,0.25)', marginRight: 8 }]}
-            onPress={fetchStats}
-          >
+          <TouchableOpacity style={[styles.themeBtn, { borderColor: 'rgba(255,255,255,0.25)', marginRight: 8 }]} onPress={fetchStats}>
             <Ionicons name="refresh-outline" size={20} color="#fff" />
           </TouchableOpacity>
-          {/* Theme button */}
-          <TouchableOpacity
-            style={[styles.themeBtn, { borderColor: 'rgba(255,255,255,0.25)' }]}
-            onPress={() => setShowThemePicker(true)}
-          >
+          <TouchableOpacity style={[styles.themeBtn, { borderColor: 'rgba(255,255,255,0.25)' }]} onPress={() => setShowThemePicker(true)}>
             <Ionicons name="color-palette-outline" size={20} color="#fff" />
           </TouchableOpacity>
         </View>
@@ -134,14 +132,10 @@ export default function DashboardScreen() {
         <Text style={[styles.sectionLabel, { color: theme.subText }]}>FOLLOW-UP STATUS</Text>
         <View style={styles.statsRow}>
 
-          {/* Ready for Follow-ups */}
           <TouchableOpacity
             style={[styles.statCard, { backgroundColor: theme.card }]}
             activeOpacity={0.85}
-            onPress={() => router.push({
-              pathname: "/FollowupsDone",
-              params: { title: "Ready for Follow-ups", count: readyCount, time: currentTime, status: "ready" }
-            })}
+            onPress={() => router.push({ pathname: "/FollowupsDone", params: { title: "Follow-ups done", count: readyCount, time: currentTime, status: "ready" } })}
           >
             <View style={[styles.statIconBox, { backgroundColor: '#dcfce7' }]}>
               <Ionicons name="checkmark-circle" size={24} color="#16a34a" />
@@ -149,20 +143,16 @@ export default function DashboardScreen() {
             <Text style={[styles.statNumber, { color: theme.text }]}>
               {loadingStats ? '—' : readyCount}
             </Text>
-            <Text style={[styles.statLabel, { color: theme.subText }]}>Ready for{'\n'}Follow-ups</Text>
+            <Text style={[styles.statLabel, { color: theme.subText }]}>Follow-ups done</Text>
             <View style={[styles.statChip, { backgroundColor: '#dcfce7' }]}>
               <Text style={[styles.statChipText, { color: '#16a34a' }]}>Active</Text>
             </View>
           </TouchableOpacity>
 
-          {/* No Follow-ups yet */}
           <TouchableOpacity
             style={[styles.statCard, { backgroundColor: theme.card }]}
             activeOpacity={0.85}
-            onPress={() => router.push({
-              pathname: "/Followups-not-done",
-              params: { title: "No Follow-ups yet", count: pendingCount, time: currentTime, status: "not_done" }
-            })}
+            onPress={() => router.push({ pathname: "/Followups-not-done", params: { title: "Follow-ups not done", count: pendingCount, time: currentTime, status: "not_done" } })}
           >
             <View style={[styles.statIconBox, { backgroundColor: '#fee2e2' }]}>
               <Ionicons name="time" size={24} color="#dc2626" />
@@ -170,7 +160,7 @@ export default function DashboardScreen() {
             <Text style={[styles.statNumber, { color: theme.text }]}>
               {loadingStats ? '—' : pendingCount}
             </Text>
-            <Text style={[styles.statLabel, { color: theme.subText }]}>No{'\n'}Follow-ups yet</Text>
+            <Text style={[styles.statLabel, { color: theme.subText }]}>Follow-ups not done</Text>
             <View style={[styles.statChip, { backgroundColor: '#fee2e2' }]}>
               <Text style={[styles.statChipText, { color: '#dc2626' }]}>Pending</Text>
             </View>

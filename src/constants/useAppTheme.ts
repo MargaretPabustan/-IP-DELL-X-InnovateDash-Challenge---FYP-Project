@@ -1,6 +1,4 @@
 // src/constants/useAppTheme.ts
-// Drop-in replacement — no context needed, just call useAppTheme() in any screen
-
 import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -16,34 +14,113 @@ export type Theme = {
   subText: string;
   navBg: string;
   scanColor: string;
+  scanIcon: string;
 };
 
 export const THEMES: Theme[] = [
-  { name: 'Navy',     navy: '#0f2557', accent: '#2563eb', bg: '#f0f4f8', card: '#ffffff', text: '#0d1b2a', subText: '#64748b', navBg: '#ffffff', scanColor: '#0f2557' },
-  { name: 'Midnight', navy: '#0d0d1a', accent: '#e94560', bg: '#111122', card: '#1a1a2e', text: '#e2e8f0', subText: '#8892b0', navBg: '#0d0d1a', scanColor: '#e2e8f0' },
-  { name: 'Forest',   navy: '#1b4332', accent: '#40916c', bg: '#f0faf4', card: '#ffffff', text: '#1b4332', subText: '#40916c', navBg: '#ffffff', scanColor: '#1b4332' },
-  { name: 'Sunset',   navy: '#7f1d1d', accent: '#ef4444', bg: '#fff7f7', card: '#ffffff', text: '#450a0a', subText: '#991b1b', navBg: '#ffffff', scanColor: '#7f1d1d' },
-  { name: 'Purple',   navy: '#2e1065', accent: '#7c3aed', bg: '#faf5ff', card: '#ffffff', text: '#1e0a3c', subText: '#7c3aed', navBg: '#ffffff', scanColor: '#2e1065' },
-  { name: 'Slate',    navy: '#1e293b', accent: '#0ea5e9', bg: '#f8fafc', card: '#ffffff', text: '#0f172a', subText: '#64748b', navBg: '#ffffff', scanColor: '#1e293b' },
+  // 1. Navy — original
+  {
+    name: 'Navy',
+    navy: '#0f2557',
+    accent: '#2563eb',
+    bg: '#f0f4f8',
+    card: '#ffffff',
+    text: '#0d1b2a',
+    subText: '#64748b',
+    navBg: '#ffffff',
+    scanColor: '#0f2557',
+    scanIcon: '#ffffff',
+  },
+  // 2. Matcha — earthy green + lime
+  {
+    name: 'Matcha',
+    navy: '#365314',
+    accent: '#84cc16',
+    bg: '#f7fee7',
+    card: '#ffffff',
+    text: '#1a2e05',
+    subText: '#4d7c0f',
+    navBg: '#ffffff',
+    scanColor: '#365314',
+    scanIcon: '#ffffff',
+  },
+  // 3. Midnight — deep dark + sky blue
+  {
+    name: 'Midnight',
+    navy: '#0f172a',
+    accent: '#38bdf8',
+    bg: '#020617',
+    card: '#0f172a',
+    text: '#f1f5f9',
+    subText: '#94a3b8',
+    navBg: '#0f172a',
+    scanColor: '#38bdf8',
+    scanIcon: '#38bdf8',
+  },
+  // 4. Aurora — dark purple + fuchsia
+  {
+    name: 'Aurora',
+    navy: '#1e1b4b',
+    accent: '#e879f9',
+    bg: '#0d0d1f',
+    card: '#1e1b4b',
+    text: '#ede9fe',
+    subText: '#a5b4fc',
+    navBg: '#1e1b4b',
+    scanColor: '#e879f9',
+    scanIcon: '#e879f9',
+  },
 ];
 
+// ── Simple global listener so all screens update instantly ────────────────────
+type Listener = (index: number) => void;
+const listeners = new Set<Listener>();
+
+function subscribe(fn: Listener) {
+  listeners.add(fn);
+  return () => {
+    listeners.delete(fn);
+  };
+}
+
+function broadcast(index: number) {
+  listeners.forEach((fn) => fn(index));
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+let cachedIndex = 0; // in-memory cache so new screens get correct value immediately
+
 export function useAppTheme() {
-  const [themeIndex, setThemeIndexState] = useState(0);
+  const [themeIndex, setThemeIndexState] = useState(cachedIndex);
   const [loaded, setLoaded] = useState(false);
 
+  // Load from AsyncStorage on first mount
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((val) => {
       if (val !== null) {
         const i = parseInt(val, 10);
-        if (!isNaN(i) && i >= 0 && i < THEMES.length) setThemeIndexState(i);
+        if (!isNaN(i) && i >= 0 && i < THEMES.length) {
+          cachedIndex = i;
+          setThemeIndexState(i);
+        }
       }
       setLoaded(true);
     });
   }, []);
 
+  // Subscribe to global broadcasts so theme updates instantly on all screens
+  useEffect(() => {
+    const unsub = subscribe((index) => {
+      setThemeIndexState(index);
+    });
+    return unsub;
+  }, []);
+
   const setThemeIndex = useCallback((index: number) => {
+    cachedIndex = index;
     setThemeIndexState(index);
-    AsyncStorage.setItem(STORAGE_KEY, String(index));
+    broadcast(index);                              // ← instant update everywhere
+    AsyncStorage.setItem(STORAGE_KEY, String(index)); // ← persist for next session
   }, []);
 
   return {

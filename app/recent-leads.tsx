@@ -18,7 +18,15 @@ import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 import { useAppTheme } from '../src/constants/useAppTheme';
 
-const API_URL = process.env.EXPO_PUBLIC_API_URL || '';
+const API_URL  = process.env.EXPO_PUBLIC_API_URL || '';
+const ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const BASE_URL = API_URL.replace('/leads', '');
+
+const SUPABASE_HEADERS = {
+  'apikey':        ANON_KEY,
+  'Authorization': `Bearer ${ANON_KEY}`,
+  'Content-Type':  'application/json',
+};
 
 type Lead = {
   id: string;
@@ -35,32 +43,57 @@ type Lead = {
   phone: string;
 };
 
-// ─── Helper: map server response to Lead type ─────────────────────────────────
 function mapLead(item: any): Lead {
   return {
     id:        String(item.lead_id),
     lead_id:   item.lead_id,
-    name:      item.name             || '—',
-    role:      item.title            || '—',
-    company:   item.company          || '—',
-    email:     item.email            || '—',
-    phone:     item.phone_number     || '—',   // ✅ backend field
-    interests: item.customer_intent  || '—',   // ✅ backend field
-    intent:    item.customer_intent  || 'Not specified',
-    notes:     item.additional_notes || 'No notes.',
-    team:      item.assigned_team    || 'Pending Assignment',
+    name:      item.name            || '—',
+    role:      item.title           || '—',
+    company:   item.company         || '—',
+    email:     item.email           || '—',
+    phone:     item.phone_number    || '—',
+    interests: '—',                          // ✅ fetched separately when viewing
+    intent:    item.customer_intent || 'Not specified',
+    notes:     item.AI_notes        || 'No notes.',
+    team:      item.assigned_team_id ? `Team ${item.assigned_team_id}` : 'Pending Assignment',
     status:    (item.customer_intent || '').toLowerCase().includes('high') ? 'green' : 'red',
   };
 }
 
 // ─── View Modal ───────────────────────────────────────────────────────────────
 function ViewModal({ lead, onClose, theme }: { lead: Lead; onClose: () => void; theme: any }) {
+  const [interests, setInterests] = useState<string>('Loading...');
+
+  // Fetch interests from lead_interest_categories on open
+  useEffect(() => {
+    const fetchInterests = async () => {
+      try {
+        const response = await fetch(
+          `${BASE_URL}/lead_interest_categories?lead_id=eq.${lead.lead_id}&select=category_id,interest_categories(category_name)`,
+          { headers: SUPABASE_HEADERS }
+        );
+        const data = await response.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const names = data
+            .map((item: any) => item.interest_categories?.category_name)
+            .filter(Boolean)
+            .join(', ');
+          setInterests(names || '—');
+        } else {
+          setInterests('—');
+        }
+      } catch {
+        setInterests('—');
+      }
+    };
+    fetchInterests();
+  }, [lead.lead_id]);
+
   return (
     <Modal visible animationType="slide" transparent>
       <View style={modal.backdrop}>
         <View style={[modal.sheet, { backgroundColor: theme.card }]}>
           <View style={modal.handle} />
-
           <View style={modal.leadHeader}>
             <View style={[modal.avatar, { backgroundColor: lead.status === 'green' ? '#22c55e' : '#ef4444' }]}>
               <Ionicons name="person" size={22} color="#fff" />
@@ -70,27 +103,19 @@ function ViewModal({ lead, onClose, theme }: { lead: Lead; onClose: () => void; 
               <Text style={[modal.leadSub, { color: theme.subText }]}>{lead.role} · {lead.company}</Text>
             </View>
           </View>
-
           <View style={[modal.divider, { backgroundColor: theme.bg }]} />
-
           <Text style={modal.fieldLabel}>Email</Text>
           <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.email}</Text>
-
           <Text style={modal.fieldLabel}>Phone</Text>
           <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.phone}</Text>
-
           <Text style={modal.fieldLabel}>Assigned Team</Text>
           <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.team}</Text>
-
           <Text style={modal.fieldLabel}>Priority / Intent</Text>
           <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.intent}</Text>
-
           <Text style={modal.fieldLabel}>Interests</Text>
-          <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.interests}</Text>
-
-          <Text style={modal.fieldLabel}>Suggested Follow-Up / Notes</Text>
+          <Text style={[modal.fieldValue, { color: theme.text }]}>{interests}</Text>
+          <Text style={modal.fieldLabel}>Notes</Text>
           <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.notes}</Text>
-
           <TouchableOpacity style={[modal.closeBtn, { backgroundColor: theme.navy }]} onPress={onClose}>
             <Text style={modal.closeBtnText}>Close</Text>
           </TouchableOpacity>
@@ -111,22 +136,17 @@ function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () =
   const handleSave = async () => {
     setSaving(true);
     try {
-      const response = await fetch(`${API_URL}/${lead.lead_id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'ngrok-skip-browser-warning': 'true',
-        },
+      const response = await fetch(`${API_URL}?lead_id=eq.${lead.lead_id}`, {
+        method: 'PATCH',
+        headers: { ...SUPABASE_HEADERS, 'Prefer': 'return=minimal' },
         body: JSON.stringify({
           name,
-          email:           lead.email,
           company,
           title:           role,
-          phone_number:    lead.phone,       // ✅ backend field
-          customer_intent: lead.intent,      // ✅ backend field
+          phone_number:    lead.phone,
+          customer_intent: lead.intent,
         }),
       });
-
       if (!response.ok) throw new Error('Failed to update');
       onSave({ ...lead, name, role, company, notes });
     } catch (error) {
@@ -142,16 +162,12 @@ function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () =
         <View style={[modal.sheet, { backgroundColor: theme.card }]}>
           <View style={modal.handle} />
           <Text style={[modal.editTitle, { color: theme.text }]}>Edit Lead</Text>
-
           <Text style={modal.fieldLabel}>Name</Text>
           <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={name} onChangeText={setName} />
-
           <Text style={modal.fieldLabel}>Role</Text>
           <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={role} onChangeText={setRole} />
-
           <Text style={modal.fieldLabel}>Company</Text>
           <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={company} onChangeText={setCompany} />
-
           <Text style={modal.fieldLabel}>Notes</Text>
           <TextInput
             style={[modal.input, { color: theme.text, borderColor: theme.subText + '44', minHeight: 72, textAlignVertical: 'top' }]}
@@ -159,7 +175,6 @@ function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () =
             onChangeText={setNotes}
             multiline
           />
-
           <View style={modal.editBtns}>
             <TouchableOpacity style={[modal.cancelBtn, { borderColor: theme.navy }]} onPress={onClose} disabled={saving}>
               <Text style={[modal.cancelText, { color: theme.navy }]}>Cancel</Text>
@@ -169,10 +184,7 @@ function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () =
               onPress={handleSave}
               disabled={saving}
             >
-              {saving
-                ? <ActivityIndicator color="#fff" size="small" />
-                : <Text style={modal.saveBtnText}>Save</Text>
-              }
+              {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={modal.saveBtnText}>Save</Text>}
             </TouchableOpacity>
           </View>
         </View>
@@ -193,19 +205,15 @@ export default function RecentLeadsScreen() {
   const [viewing, setViewing]       = useState<Lead | null>(null);
   const [editing, setEditing]       = useState<Lead | null>(null);
 
-  // ─── Fetch all leads ────────────────────────────────────────────────────────
   const fetchLeads = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
     setError(null);
-
     try {
-      const response = await fetch(API_URL, {
-        headers: { 'ngrok-skip-browser-warning': 'true' },  // ✅ ngrok header
-      });
+      const response = await fetch(API_URL, { headers: SUPABASE_HEADERS });
       const data = await response.json();
-      if (!data.success) throw new Error(data.message);
-      setLeads(data.data.map(mapLead));
+      if (!Array.isArray(data)) throw new Error('Unexpected response');
+      setLeads(data.map(mapLead));
     } catch (err: any) {
       setError('Could not load leads. Pull down to retry.');
     } finally {
@@ -216,13 +224,11 @@ export default function RecentLeadsScreen() {
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
 
-  // ─── Save edited lead ───────────────────────────────────────────────────────
   const handleSave = (updated: Lead) => {
     setLeads((prev) => prev.map((l) => (l.id === updated.id ? updated : l)));
     setEditing(null);
   };
 
-  // ─── Delete lead ────────────────────────────────────────────────────────────
   const handleDelete = (lead: Lead) => {
     Alert.alert(
       'Delete Lead',
@@ -234,12 +240,11 @@ export default function RecentLeadsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const response = await fetch(`${API_URL}/${lead.lead_id}`, {
+              const response = await fetch(`${API_URL}?lead_id=eq.${lead.lead_id}`, {
                 method: 'DELETE',
-                headers: { 'ngrok-skip-browser-warning': 'true' },
+                headers: SUPABASE_HEADERS,
               });
-              const data = await response.json();
-              if (!data.success) throw new Error(data.message);
+              if (!response.ok) throw new Error('Failed to delete');
               setLeads((prev) => prev.filter((l) => l.id !== lead.id));
             } catch {
               Alert.alert('Error', 'Failed to delete lead. Please try again.');
@@ -254,16 +259,7 @@ export default function RecentLeadsScreen() {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* Header */}
-      <View
-        style={[
-          styles.header,
-          {
-            backgroundColor: theme.navy,
-            paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight ?? 24) + 8 : 12,
-          },
-        ]}
-      >
+      <View style={[styles.header, { backgroundColor: theme.navy, paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight ?? 24) + 8 : 12 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
@@ -271,7 +267,6 @@ export default function RecentLeadsScreen() {
         <View style={{ width: 22 }} />
       </View>
 
-      {/* Loading */}
       {loading && (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={theme.navy} />
@@ -279,7 +274,6 @@ export default function RecentLeadsScreen() {
         </View>
       )}
 
-      {/* Error */}
       {!loading && error && (
         <View style={styles.centered}>
           <Ionicons name="cloud-offline-outline" size={48} color={theme.subText} />
@@ -290,23 +284,15 @@ export default function RecentLeadsScreen() {
         </View>
       )}
 
-      {/* List */}
       {!loading && !error && (
         <ScrollView
           contentContainerStyle={[styles.list, { paddingBottom: Platform.OS === "ios" ? 40 : 24 }]}
           showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={() => fetchLeads(true)}
-              tintColor={theme.navy}
-            />
-          }
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchLeads(true)} tintColor={theme.navy} />}
         >
           {leads.length === 0 && (
             <Text style={[styles.emptyText, { color: theme.subText }]}>No leads yet.</Text>
           )}
-
           {leads.map((lead) => (
             <View key={lead.id} style={[styles.card, { backgroundColor: theme.card }]}>
               <View style={[styles.avatar, { backgroundColor: lead.status === 'green' ? '#22c55e' : '#ef4444' }]}>
@@ -332,17 +318,7 @@ export default function RecentLeadsScreen() {
         </ScrollView>
       )}
 
-      {/* Bottom Nav */}
-      <View
-        style={[
-          styles.bottomNav,
-          {
-            backgroundColor: theme.navBg,
-            borderTopColor: theme.subText + '22',
-            paddingBottom: Platform.OS === "ios" ? 28 : 12,
-          },
-        ]}
-      >
+      <View style={[styles.bottomNav, { backgroundColor: theme.navBg, borderTopColor: theme.subText + '22', paddingBottom: Platform.OS === "ios" ? 28 : 12 }]}>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push("/recent-leads" as any)}>
           <Ionicons name="person-outline" size={26} color={theme.accent} />
           <Text style={[styles.navLabel, { color: theme.accent }]}>Leads</Text>
@@ -358,7 +334,6 @@ export default function RecentLeadsScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Modals */}
       {viewing && <ViewModal lead={viewing} onClose={() => setViewing(null)} theme={theme} />}
       {editing && <EditModal lead={editing} onClose={() => setEditing(null)} onSave={handleSave} theme={theme} />}
     </SafeAreaView>
