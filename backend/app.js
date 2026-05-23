@@ -1,15 +1,22 @@
 // ── IMPORTS ─────────────────────────────────────────────
 const express = require('express');
 const { Pool } = require('pg');
-const path = require('path');
 const cors = require('cors');
+const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 const app = express();
-app.use(cors());
+
 app.use(express.json());
 
-// ── SUPABASE CONNECTION ────────────────────────────────
+// ── CORS ────────────────────────────────────────────────
+app.use(cors({
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'apikey']
+}));
+
+// ── SUPABASE POSTGRES CONNECTION ───────────────────────
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
@@ -17,13 +24,13 @@ const pool = new Pool({
 
 // test connection
 pool.connect()
-    .then(() => console.log('Connected to Supabase PostgreSQL'))
-    .catch(err => console.error('DB connection error:', err));
+    .then(() => console.log('✅ Connected to Supabase PostgreSQL'))
+    .catch(err => console.error('❌ DB connection error:', err));
 
 // ── VALIDATION ─────────────────────────────────────────
 function validateLead(name, email, company, title, phone) {
     if (!name || !email || !company || !title || !phone) {
-        return "All fields (name, email, company, title, phone) are required";
+        return "All fields are required";
     }
 
     const emailRegex = /\S+@\S+\.\S+/;
@@ -32,21 +39,32 @@ function validateLead(name, email, company, title, phone) {
     }
 
     if (phone.length < 8) {
-        return "Phone number is too short";
+        return "Phone number too short";
     }
 
     return null;
 }
 
-// ── LEADS ──────────────────────────────────────────────
+// ── LEADS ROUTES ───────────────────────────────────────
 
 // GET all leads
 app.get('/leads', async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM leads ORDER BY lead_id');
-        res.json({ success: true, data: result.rows });
+        const result = await pool.query(
+            'SELECT * FROM leads ORDER BY lead_id DESC'
+        );
+
+        res.json({
+            success: true,
+            data: result.rows
+        });
+
     } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+        res.status(500).json({
+            success: false,
+            code: 'SERVER_ERROR',
+            message: 'Internal server error'
+        });
     }
 });
 
@@ -59,12 +77,23 @@ app.get('/leads/:id', async (req, res) => {
         );
 
         if (result.rows.length === 0) {
-            return res.status(404).json({ success: false, message: "Lead not found" });
+            return res.status(404).json({
+                success: false,
+                message: "Lead not found"
+            });
         }
 
-        res.json({ success: true, data: result.rows[0] });
+        res.json({
+            success: true,
+            data: result.rows[0]
+        });
+
     } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+        res.status(500).json({
+            success: false,
+            code: 'SERVER_ERROR',
+            message: 'Internal server error'
+        });
     }
 });
 
@@ -73,13 +102,35 @@ app.post('/leads', async (req, res) => {
     const { name, email, company, title, phone_number, customer_intent } = req.body;
 
     const error = validateLead(name, email, company, title, phone_number);
-    if (error) return res.status(400).json({ success: false, message: error });
+
+    if (error) {
+        return res.status(400).json({
+            success: false,
+            code: 'VALIDATION_ERROR',
+            message: error
+        });
+    }
 
     try {
+        // duplicate check
+        const existing = await pool.query(
+            'SELECT lead_id FROM leads WHERE email = $1',
+            [email]
+        );
+
+        if (existing.rows.length > 0) {
+            return res.status(409).json({
+                success: false,
+                code: 'DUPLICATE_EMAIL',
+                message: 'A lead with this email already exists'
+            });
+        }
+
         const result = await pool.query(
-            `INSERT INTO leads (name, email, company, title, phone_number, customer_intent)
-             VALUES ($1, $2, $3, $4, $5, $6)
-             RETURNING lead_id`,
+            `INSERT INTO leads
+            (name, email, company, title, phone_number, customer_intent)
+            VALUES ($1,$2,$3,$4,$5,$6)
+            RETURNING lead_id`,
             [name, email, company, title, phone_number, customer_intent || null]
         );
 
@@ -90,7 +141,11 @@ app.post('/leads', async (req, res) => {
         });
 
     } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+        res.status(500).json({
+            success: false,
+            code: 'SERVER_ERROR',
+            message: 'Internal server error'
+        });
     }
 });
 
@@ -99,24 +154,41 @@ app.put('/leads/:id', async (req, res) => {
     const { name, email, company, title, phone_number, customer_intent } = req.body;
 
     const error = validateLead(name, email, company, title, phone_number);
-    if (error) return res.status(400).json({ success: false, message: error });
+
+    if (error) {
+        return res.status(400).json({
+            success: false,
+            code: 'VALIDATION_ERROR',
+            message: error
+        });
+    }
 
     try {
         const result = await pool.query(
-            `UPDATE leads 
+            `UPDATE leads
              SET name=$1, email=$2, company=$3, title=$4, phone_number=$5, customer_intent=$6
              WHERE lead_id=$7`,
             [name, email, company, title, phone_number, customer_intent || null, req.params.id]
         );
 
         if (result.rowCount === 0) {
-            return res.status(404).json({ success: false, message: "Lead not found" });
+            return res.status(404).json({
+                success: false,
+                message: "Lead not found"
+            });
         }
 
-        res.json({ success: true, message: "Lead updated" });
+        res.json({
+            success: true,
+            message: "Lead updated"
+        });
 
     } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+        res.status(500).json({
+            success: false,
+            code: 'SERVER_ERROR',
+            message: 'Internal server error'
+        });
     }
 });
 
@@ -124,18 +196,28 @@ app.put('/leads/:id', async (req, res) => {
 app.delete('/leads/:id', async (req, res) => {
     try {
         const result = await pool.query(
-            'DELETE FROM leads WHERE lead_id = $1',
+            'DELETE FROM leads WHERE lead_id=$1',
             [req.params.id]
         );
 
         if (result.rowCount === 0) {
-            return res.status(404).json({ success: false, message: "Lead not found" });
+            return res.status(404).json({
+                success: false,
+                message: "Lead not found"
+            });
         }
 
-        res.json({ success: true, message: "Lead deleted" });
+        res.json({
+            success: true,
+            message: "Lead deleted"
+        });
 
     } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+        res.status(500).json({
+            success: false,
+            code: 'SERVER_ERROR',
+            message: 'Internal server error'
+        });
     }
 });
 
@@ -145,27 +227,42 @@ app.delete('/leads/:id', async (req, res) => {
 app.get('/interest_categories', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM interest_categories');
-        res.json({ success: true, data: result.rows });
+
+        res.json({
+            success: true,
+            data: result.rows
+        });
+
     } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+        res.status(500).json({
+            success: false,
+            code: 'SERVER_ERROR'
+        });
     }
 });
 
-// GET interests for lead
+// GET lead interests
 app.get('/lead_interest_categories/:lead_id', async (req, res) => {
     try {
         const result = await pool.query(
             `SELECT ic.category_id, ic.category_name
              FROM lead_interest_categories lic
-             JOIN interest_categories ic ON lic.category_id = ic.category_id
-             WHERE lic.lead_id = $1`,
+             JOIN interest_categories ic
+             ON lic.category_id = ic.category_id
+             WHERE lic.lead_id=$1`,
             [req.params.lead_id]
         );
 
-        res.json({ success: true, data: result.rows });
+        res.json({
+            success: true,
+            data: result.rows
+        });
 
     } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+        res.status(500).json({
+            success: false,
+            code: 'SERVER_ERROR'
+        });
     }
 });
 
@@ -174,20 +271,30 @@ app.post('/lead_interest_categories', async (req, res) => {
     const { lead_id, category_id } = req.body;
 
     if (!lead_id || !category_id) {
-        return res.status(400).json({ message: "lead_id and category_id required" });
+        return res.status(400).json({
+            success: false,
+            code: 'VALIDATION_ERROR',
+            message: 'lead_id and category_id required'
+        });
     }
 
     try {
         await pool.query(
             `INSERT INTO lead_interest_categories (lead_id, category_id)
-             VALUES ($1, $2)`,
+             VALUES ($1,$2)`,
             [lead_id, category_id]
         );
 
-        res.status(201).json({ success: true, message: "Interest added" });
+        res.status(201).json({
+            success: true,
+            message: "Interest added"
+        });
 
     } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+        res.status(500).json({
+            success: false,
+            code: 'SERVER_ERROR'
+        });
     }
 });
 
@@ -195,15 +302,21 @@ app.post('/lead_interest_categories', async (req, res) => {
 app.delete('/lead_interest_categories/:lead_id/:category_id', async (req, res) => {
     try {
         await pool.query(
-            `DELETE FROM lead_interest_categories 
+            `DELETE FROM lead_interest_categories
              WHERE lead_id=$1 AND category_id=$2`,
             [req.params.lead_id, req.params.category_id]
         );
 
-        res.json({ success: true, message: "Interest removed" });
+        res.json({
+            success: true,
+            message: "Interest removed"
+        });
 
     } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+        res.status(500).json({
+            success: false,
+            code: 'SERVER_ERROR'
+        });
     }
 });
 
@@ -213,9 +326,17 @@ app.delete('/lead_interest_categories/:lead_id/:category_id', async (req, res) =
 app.get("/teams", async (req, res) => {
     try {
         const result = await pool.query("SELECT * FROM teams");
-        res.json(result.rows);
+
+        res.json({
+            success: true,
+            data: result.rows
+        });
+
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        res.status(500).json({
+            success: false,
+            code: 'SERVER_ERROR'
+        });
     }
 });
 
@@ -228,13 +349,22 @@ app.get("/teams/:id", async (req, res) => {
         );
 
         if (result.rows.length === 0) {
-            return res.status(404).json({ message: "Team not found" });
+            return res.status(404).json({
+                success: false,
+                message: "Team not found"
+            });
         }
 
-        res.json(result.rows[0]);
+        res.json({
+            success: true,
+            data: result.rows[0]
+        });
 
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        res.status(500).json({
+            success: false,
+            code: 'SERVER_ERROR'
+        });
     }
 });
 
@@ -245,18 +375,22 @@ app.post("/teams", async (req, res) => {
     try {
         const result = await pool.query(
             `INSERT INTO teams (team_name, territory, description)
-             VALUES ($1, $2, $3)
+             VALUES ($1,$2,$3)
              RETURNING team_id`,
             [team_name, territory, description]
         );
 
         res.status(201).json({
+            success: true,
             message: "Team created",
             team_id: result.rows[0].team_id
         });
 
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        res.status(500).json({
+            success: false,
+            code: 'SERVER_ERROR'
+        });
     }
 });
 
@@ -272,10 +406,16 @@ app.put("/teams/:id", async (req, res) => {
             [team_name, territory, description, req.params.id]
         );
 
-        res.json({ message: "Team updated" });
+        res.json({
+            success: true,
+            message: "Team updated"
+        });
 
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        res.status(500).json({
+            success: false,
+            code: 'SERVER_ERROR'
+        });
     }
 });
 
@@ -287,10 +427,16 @@ app.delete("/teams/:id", async (req, res) => {
             [req.params.id]
         );
 
-        res.json({ message: "Team deleted" });
+        res.json({
+            success: true,
+            message: "Team deleted"
+        });
 
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        res.status(500).json({
+            success: false,
+            code: 'SERVER_ERROR'
+        });
     }
 });
 
