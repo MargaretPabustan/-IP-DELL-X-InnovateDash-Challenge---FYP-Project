@@ -35,6 +35,7 @@
     "expo-web-browser": "~55.0.16",
     "express": "^5.2.1",
     "mysql2": "^3.22.3",
+    "pg": "^8.21.0",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-native": "0.83.6",
