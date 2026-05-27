@@ -1,455 +1,549 @@
-// ── IMPORTS ─────────────────────────────────────────────
+require('dotenv').config();
+
 const express = require('express');
-const { Pool } = require('pg');
+const mysql = require('mysql2');
 const cors = require('cors');
-const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '.env') });
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 
 app.use(express.json());
+app.use(cors());
 
-// ── CORS ────────────────────────────────────────────────
-app.use(cors({
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'apikey']
-}));
+/* =========================
+   GEMINI SETUP
+========================= */
 
-// ── SUPABASE POSTGRES CONNECTION ───────────────────────
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+const model = genAI.getGenerativeModel({
+    model: "gemini-1.5-flash"
 });
 
-// test connection
-pool.connect()
-    .then(() => console.log('✅ Connected to Supabase PostgreSQL'))
-    .catch(err => console.error('❌ DB connection error:', err));
+/* =========================
+   DATABASE CONNECTION
+========================= */
 
-// ── VALIDATION ─────────────────────────────────────────
-function validateLead(name, email, company, title, phone) {
-    if (!name || !email || !company || !title || !phone) {
+const connection = mysql.createConnection({
+    host: process.env.DB_HOST,
+    user: process.env.DB_USER,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_NAME,
+    port: process.env.DB_PORT
+});
+
+connection.connect((err) => {
+    if (err) {
+        console.error('Database connection failed:', err.message);
+        return;
+    }
+
+    console.log('Connected to MySQL database');
+});
+
+/* =========================
+   VALIDATION FUNCTION
+========================= */
+
+function validateLead(name, email, company, title, phone, primary_interest) {
+
+    if (!name || !email || !company || !title || !phone || !primary_interest) {
         return "All fields are required";
     }
 
     const emailRegex = /\S+@\S+\.\S+/;
+
     if (!emailRegex.test(email)) {
         return "Invalid email format";
     }
 
     if (phone.length < 8) {
-        return "Phone number too short";
+        return "Phone number is too short";
     }
 
     return null;
 }
 
-// ── LEADS ROUTES ───────────────────────────────────────
+/* =========================
+   GET ALL LEADS
+========================= */
 
-// GET all leads
-app.get('/leads', async (req, res) => {
-    try {
-        const result = await pool.query(
-            'SELECT * FROM leads ORDER BY lead_id DESC'
-        );
+app.get('/leads', (req, res) => {
 
-        res.json({
-            success: true,
-            data: result.rows
-        });
+    connection.query(
+        'SELECT * FROM leads',
+        (err, results) => {
 
-    } catch (err) {
-        res.status(500).json({
-            success: false,
-            code: 'SERVER_ERROR',
-            message: 'Internal server error'
-        });
-    }
-});
+            if (err) {
+                return res.status(500).json({
+                    success: false,
+                    message: 'Failed to fetch leads'
+                });
+            }
 
-// GET lead by id
-app.get('/leads/:id', async (req, res) => {
-    try {
-        const result = await pool.query(
-            'SELECT * FROM leads WHERE lead_id = $1',
-            [req.params.id]
-        );
-
-        if (result.rows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: "Lead not found"
+            res.json({
+                success: true,
+                data: results
             });
         }
-
-        res.json({
-            success: true,
-            data: result.rows[0]
-        });
-
-    } catch (err) {
-        res.status(500).json({
-            success: false,
-            code: 'SERVER_ERROR',
-            message: 'Internal server error'
-        });
-    }
+    );
 });
 
-// CREATE lead
-app.post('/leads', async (req, res) => {
-    const { name, email, company, title, phone_number, customer_intent } = req.body;
+/* =========================
+   GET LEAD BY ID
+========================= */
 
-    const error = validateLead(name, email, company, title, phone_number);
+app.get('/leads/:id', (req, res) => {
+
+    connection.query(
+        'SELECT * FROM leads WHERE lead_id = ?',
+        [req.params.id],
+        (err, results) => {
+
+            if (err) {
+                return res.status(500).json({
+                    success: false,
+                    message: 'Database error'
+                });
+            }
+
+            if (results.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Lead not found'
+                });
+            }
+
+            res.json({
+                success: true,
+                data: results[0]
+            });
+        }
+    );
+});
+
+/* =========================
+   CREATE LEAD
+========================= */
+
+app.post('/leads', (req, res) => {
+
+    const {
+        name,
+        email,
+        company,
+        title,
+        phone,
+        primary_interest
+    } = req.body;
+
+    const error = validateLead(
+        name,
+        email,
+        company,
+        title,
+        phone,
+        primary_interest
+    );
 
     if (error) {
         return res.status(400).json({
             success: false,
-            code: 'VALIDATION_ERROR',
             message: error
         });
     }
 
-    try {
-        // duplicate check
-        const existing = await pool.query(
-            'SELECT lead_id FROM leads WHERE email = $1',
-            [email]
-        );
+    const sql = `
+        INSERT INTO leads
+        (
+            name,
+            email,
+            company,
+            title,
+            phone,
+            primary_interest
+        )
+        VALUES (?, ?, ?, ?, ?, ?)
+    `;
 
-        if (existing.rows.length > 0) {
-            return res.status(409).json({
-                success: false,
-                code: 'DUPLICATE_EMAIL',
-                message: 'A lead with this email already exists'
+    connection.query(
+        sql,
+        [
+            name,
+            email,
+            company,
+            title,
+            phone,
+            primary_interest
+        ],
+        (err, result) => {
+
+            if (err) {
+                return res.status(500).json({
+                    success: false,
+                    message: 'Failed to create lead'
+                });
+            }
+
+            res.status(201).json({
+                success: true,
+                message: 'Lead created successfully',
+                lead_id: result.insertId
             });
         }
-
-        const result = await pool.query(
-            `INSERT INTO leads
-            (name, email, company, title, phone_number, customer_intent)
-            VALUES ($1,$2,$3,$4,$5,$6)
-            RETURNING lead_id`,
-            [name, email, company, title, phone_number, customer_intent || null]
-        );
-
-        res.status(201).json({
-            success: true,
-            message: "Lead created",
-            lead_id: result.rows[0].lead_id
-        });
-
-    } catch (err) {
-        res.status(500).json({
-            success: false,
-            code: 'SERVER_ERROR',
-            message: 'Internal server error'
-        });
-    }
+    );
 });
 
-// UPDATE lead
-app.put('/leads/:id', async (req, res) => {
-    const { name, email, company, title, phone_number, customer_intent } = req.body;
+/* =========================
+   UPDATE LEAD
+========================= */
 
-    const error = validateLead(name, email, company, title, phone_number);
+app.put('/leads/:id', (req, res) => {
+
+    const {
+        name,
+        email,
+        company,
+        title,
+        phone,
+        primary_interest
+    } = req.body;
+
+    const error = validateLead(
+        name,
+        email,
+        company,
+        title,
+        phone,
+        primary_interest
+    );
 
     if (error) {
         return res.status(400).json({
             success: false,
-            code: 'VALIDATION_ERROR',
             message: error
         });
     }
 
-    try {
-        const result = await pool.query(
-            `UPDATE leads
-             SET name=$1, email=$2, company=$3, title=$4, phone_number=$5, customer_intent=$6
-             WHERE lead_id=$7`,
-            [name, email, company, title, phone_number, customer_intent || null, req.params.id]
-        );
+    connection.query(
+        `
+        UPDATE leads
+        SET
+            name=?,
+            email=?,
+            company=?,
+            title=?,
+            phone=?,
+            primary_interest=?
+        WHERE lead_id=?
+        `,
+        [
+            name,
+            email,
+            company,
+            title,
+            phone,
+            primary_interest,
+            req.params.id
+        ],
+        (err, result) => {
 
-        if (result.rowCount === 0) {
-            return res.status(404).json({
-                success: false,
-                message: "Lead not found"
+            if (err) {
+                return res.status(500).json({
+                    success: false,
+                    message: 'Failed to update lead'
+                });
+            }
+
+            if (result.affectedRows === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Lead not found'
+                });
+            }
+
+            res.json({
+                success: true,
+                message: 'Lead updated successfully'
             });
         }
-
-        res.json({
-            success: true,
-            message: "Lead updated"
-        });
-
-    } catch (err) {
-        res.status(500).json({
-            success: false,
-            code: 'SERVER_ERROR',
-            message: 'Internal server error'
-        });
-    }
+    );
 });
 
-// DELETE lead
-app.delete('/leads/:id', async (req, res) => {
-    try {
-        const result = await pool.query(
-            'DELETE FROM leads WHERE lead_id=$1',
-            [req.params.id]
-        );
+/* =========================
+   DELETE LEAD
+========================= */
 
-        if (result.rowCount === 0) {
-            return res.status(404).json({
-                success: false,
-                message: "Lead not found"
+app.delete('/leads/:id', (req, res) => {
+
+    connection.query(
+        'DELETE FROM leads WHERE lead_id = ?',
+        [req.params.id],
+        (err, result) => {
+
+            if (err) {
+                return res.status(500).json({
+                    success: false,
+                    message: 'Failed to delete lead'
+                });
+            }
+
+            if (result.affectedRows === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Lead not found'
+                });
+            }
+
+            res.json({
+                success: true,
+                message: 'Lead deleted successfully'
             });
         }
-
-        res.json({
-            success: true,
-            message: "Lead deleted"
-        });
-
-    } catch (err) {
-        res.status(500).json({
-            success: false,
-            code: 'SERVER_ERROR',
-            message: 'Internal server error'
-        });
-    }
+    );
 });
 
-// ── INTEREST CATEGORIES ───────────────────────────────
+/* =========================
+   AI LEAD ANALYSIS
+========================= */
 
-// GET all categories
-app.get('/interest_categories', async (req, res) => {
+app.post('/analyze-lead/:id', async (req, res) => {
+
     try {
-        const result = await pool.query('SELECT * FROM interest_categories');
 
-        res.json({
-            success: true,
-            data: result.rows
-        });
+        connection.query(
+            'SELECT * FROM leads WHERE lead_id = ?',
+            [req.params.id],
+            async (err, results) => {
 
-    } catch (err) {
-        res.status(500).json({
-            success: false,
-            code: 'SERVER_ERROR'
-        });
-    }
-});
+                if (err) {
+                    return res.status(500).json({
+                        success: false,
+                        message: 'Database error'
+                    });
+                }
 
-// GET lead interests
-app.get('/lead_interest_categories/:lead_id', async (req, res) => {
-    try {
-        const result = await pool.query(
-            `SELECT ic.category_id, ic.category_name
-             FROM lead_interest_categories lic
-             JOIN interest_categories ic
-             ON lic.category_id = ic.category_id
-             WHERE lic.lead_id=$1`,
-            [req.params.lead_id]
+                if (results.length === 0) {
+                    return res.status(404).json({
+                        success: false,
+                        message: 'Lead not found'
+                    });
+                }
+
+                const lead = results[0];
+
+                /* =========================
+                   GEMINI PROMPT
+                ========================= */
+
+                const prompt = `
+Analyze this sales lead.
+
+Name: ${lead.name}
+Company: ${lead.company}
+Title: ${lead.title}
+Primary Interest: ${lead.primary_interest}
+
+Return ONLY valid JSON in this exact format:
+
+{
+  "intent": "Low | Medium | High",
+  "confidence": number,
+  "follow_up_required": boolean
+}
+`;
+
+                /* =========================
+                   CALL GEMINI
+                ========================= */
+
+                const result = await model.generateContent(prompt);
+
+                const response = result.response.text();
+
+                /* =========================
+                   CLEAN RESPONSE
+                ========================= */
+
+                const cleanResponse = response
+                    .replace(/```json/g, '')
+                    .replace(/```/g, '')
+                    .trim();
+
+                /* =========================
+                   PARSE JSON
+                ========================= */
+
+                const aiData = JSON.parse(cleanResponse);
+
+                /* =========================
+                   VALIDATE AI RESPONSE
+                ========================= */
+
+                if (
+                    !aiData.intent ||
+                    aiData.confidence === undefined ||
+                    aiData.follow_up_required === undefined
+                ) {
+                    return res.status(500).json({
+                        success: false,
+                        message: 'Invalid AI response format'
+                    });
+                }
+
+                /* =========================
+                   FOLLOW-UP LOGIC
+                ========================= */
+
+                let followUpStatus = "No Follow-up Needed";
+
+                if (
+                    aiData.intent === "High" &&
+                    aiData.confidence >= 0.8 &&
+                    aiData.follow_up_required === true
+                ) {
+                    followUpStatus = "Ready for Follow-up";
+                }
+
+                /* =========================
+                   SAVE AI RESULTS
+                ========================= */
+
+                connection.query(
+                    `
+                    UPDATE leads
+                    SET
+                        intent=?,
+                        confidence_score=?,
+                        follow_up_required=?,
+                        follow_up_status=?
+                    WHERE lead_id=?
+                    `,
+                    [
+                        aiData.intent,
+                        aiData.confidence,
+                        aiData.follow_up_required,
+                        followUpStatus,
+                        req.params.id
+                    ],
+                    (updateErr) => {
+
+                        if (updateErr) {
+                            return res.status(500).json({
+                                success: false,
+                                message: 'Failed to save AI analysis'
+                            });
+                        }
+
+                        res.json({
+                            success: true,
+                            lead: lead,
+                            ai_analysis: aiData,
+                            follow_up_status: followUpStatus
+                        });
+                    }
+                );
+
+            }
         );
 
-        res.json({
-            success: true,
-            data: result.rows
-        });
+    } catch (error) {
 
-    } catch (err) {
+        console.error(error);
+
         res.status(500).json({
             success: false,
-            code: 'SERVER_ERROR'
+            message: 'AI analysis failed'
         });
     }
 });
 
-// ADD interest
-app.post('/lead_interest_categories', async (req, res) => {
-    const { lead_id, category_id } = req.body;
+/* =========================
+   SERVER
+========================= */
 
-    if (!lead_id || !category_id) {
-        return res.status(400).json({
-            success: false,
-            code: 'VALIDATION_ERROR',
-            message: 'lead_id and category_id required'
-        });
-    }
-
-    try {
-        await pool.query(
-            `INSERT INTO lead_interest_categories (lead_id, category_id)
-             VALUES ($1,$2)`,
-            [lead_id, category_id]
-        );
-
-        res.status(201).json({
-            success: true,
-            message: "Interest added"
-        });
-
-    } catch (err) {
-        res.status(500).json({
-            success: false,
-            code: 'SERVER_ERROR'
-        });
-    }
+app.listen(3000, () => {
+    console.log('Server running on port 3000');
 });
+/* =========================
+   AI LEAD ANALYSIS (Improved)
+========================= */
 
-// DELETE interest
-app.delete('/lead_interest_categories/:lead_id/:category_id', async (req, res) => {
-    try {
-        await pool.query(
-            `DELETE FROM lead_interest_categories
-             WHERE lead_id=$1 AND category_id=$2`,
-            [req.params.lead_id, req.params.category_id]
-        );
+app.post('/analyze-lead/:id', async (req, res) => {
+  try {
+    connection.query('SELECT * FROM leads WHERE lead_id = ?', [req.params.id], async (err, results) => {
+      if (err) return res.status(500).json({ success: false, message: 'Database error' });
+      if (results.length === 0) return res.status(404).json({ success: false, message: 'Lead not found' });
 
-        res.json({
-            success: true,
-            message: "Interest removed"
-        });
+      const lead = results[0];
 
-    } catch (err) {
-        res.status(500).json({
-            success: false,
-            code: 'SERVER_ERROR'
-        });
-    }
-});
+      const prompt = `
+Analyze this sales lead.
 
-// ── TEAMS ──────────────────────────────────────────────
+Name: ${lead.name}
+Company: ${lead.company}
+Title: ${lead.title}
+Primary Interest: ${lead.primary_interest}
 
-// GET all teams
-app.get("/teams", async (req, res) => {
-    try {
-        const result = await pool.query("SELECT * FROM teams");
+Return ONLY valid JSON in this exact format:
+{
+  "intent": "Low | Medium | High",
+  "confidence": number,
+  "follow_up_required": boolean
+}
+`;
 
-        res.json({
-            success: true,
-            data: result.rows
-        });
+      const result = await model.generateContent(prompt);
+      const response = result.response.text().replace(/```json|```/g, '').trim();
 
-    } catch (err) {
-        res.status(500).json({
-            success: false,
-            code: 'SERVER_ERROR'
-        });
-    }
-});
+      let aiData;
+      try {
+        aiData = JSON.parse(response);
+      } catch {
+        return res.status(500).json({ success: false, message: 'AI response not valid JSON' });
+      }
 
-// GET team by id
-app.get("/teams/:id", async (req, res) => {
-    try {
-        const result = await pool.query(
-            "SELECT * FROM teams WHERE team_id=$1",
-            [req.params.id]
-        );
+      // ✅ Gemini response validator
+      const validIntents = ['Low', 'Medium', 'High'];
+      if (
+        !validIntents.includes(aiData.intent) ||
+        typeof aiData.confidence !== 'number' ||
+        typeof aiData.follow_up_required !== 'boolean'
+      ) {
+        return res.status(500).json({ success: false, message: 'Invalid AI response format' });
+      }
 
-        if (result.rows.length === 0) {
-            return res.status(404).json({
-                success: false,
-                message: "Team not found"
-            });
+      // ✅ Improved follow-up detection logic
+      let followUpStatus = 'No Follow-up Needed';
+      if (aiData.intent === 'High') {
+        if (aiData.confidence >= 0.8 && aiData.follow_up_required) {
+          followUpStatus = 'Ready for Follow-up';
+        } else if (aiData.confidence >= 0.6) {
+          followUpStatus = 'Review for Follow-up';
         }
+      }
 
-        res.json({
+      connection.query(
+        `
+        UPDATE leads
+        SET intent=?, confidence_score=?, follow_up_required=?, follow_up_status=?
+        WHERE lead_id=?
+        `,
+        [aiData.intent, aiData.confidence, aiData.follow_up_required, followUpStatus, req.params.id],
+        (updateErr) => {
+          if (updateErr) return res.status(500).json({ success: false, message: 'Failed to save AI analysis' });
+
+          res.json({
             success: true,
-            data: result.rows[0]
-        });
-
-    } catch (err) {
-        res.status(500).json({
-            success: false,
-            code: 'SERVER_ERROR'
-        });
-    }
-});
-
-// CREATE team
-app.post("/teams", async (req, res) => {
-    const { team_name, territory, description } = req.body;
-
-    try {
-        const result = await pool.query(
-            `INSERT INTO teams (team_name, territory, description)
-             VALUES ($1,$2,$3)
-             RETURNING team_id`,
-            [team_name, territory, description]
-        );
-
-        res.status(201).json({
-            success: true,
-            message: "Team created",
-            team_id: result.rows[0].team_id
-        });
-
-    } catch (err) {
-        res.status(500).json({
-            success: false,
-            code: 'SERVER_ERROR'
-        });
-    }
-});
-
-// UPDATE team
-app.put("/teams/:id", async (req, res) => {
-    const { team_name, territory, description } = req.body;
-
-    try {
-        await pool.query(
-            `UPDATE teams
-             SET team_name=$1, territory=$2, description=$3
-             WHERE team_id=$4`,
-            [team_name, territory, description, req.params.id]
-        );
-
-        res.json({
-            success: true,
-            message: "Team updated"
-        });
-
-    } catch (err) {
-        res.status(500).json({
-            success: false,
-            code: 'SERVER_ERROR'
-        });
-    }
-});
-
-// DELETE team
-app.delete("/teams/:id", async (req, res) => {
-    try {
-        await pool.query(
-            "DELETE FROM teams WHERE team_id=$1",
-            [req.params.id]
-        );
-
-        res.json({
-            success: true,
-            message: "Team deleted"
-        });
-
-    } catch (err) {
-        res.status(500).json({
-            success: false,
-            code: 'SERVER_ERROR'
-        });
-    }
-});
-
-// ── START SERVER ───────────────────────────────────────
-const PORT = process.env.PORT || 3000;
-
-app.listen(PORT, async () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-
-    try {
-        const result = await pool.query('SELECT NOW()');
-        console.log('✅ Supabase connected:', result.rows[0]);
-    } catch (err) {
-        console.log('❌ DB connection failed:', err.message);
-    }
+            lead,
+            ai_analysis: aiData,
+            follow_up_status: followUpStatus,
+          });
+        }
+      );
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: 'AI analysis failed' });
+  }
 });
