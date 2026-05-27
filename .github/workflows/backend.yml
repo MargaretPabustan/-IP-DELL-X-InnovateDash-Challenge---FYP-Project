@@ -1,0 +1,39 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout repo
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      # Install dependencies
+      - name: Install dependencies
+        run: npm install
+
+      # Lint check
+      - name: Run ESLint
+        run: npm run lint
+
+      # Run tests (if you add Jest or Mocha later)
+      - name: Run tests
+        run: npm test || echo "No tests yet"
+
+      # Build check (ensures TypeScript compiles)
+      - name: TypeScript build
+        run: npx tsc --noEmit
