@@ -31,3 +31,4 @@ jobs:
 
       - name: TypeScript build
         run: npx tsc --noEmit || echo "No TypeScript config"
+        
