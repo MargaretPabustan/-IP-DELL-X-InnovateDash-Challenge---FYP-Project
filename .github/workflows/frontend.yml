@@ -1,0 +1,39 @@
+name: Expo Frontend CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build-and-lint:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Checkout repo
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Setup Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      # Install dependencies
+      - name: Install dependencies
+        run: npm install
+
+      # Lint check
+      - name: Run ESLint
+        run: npm run lint
+
+      # Expo build validation (no deploy)
+      - name: Validate Expo project
+        run: npx expo prebuild --non-interactive
+
+      # Start Expo app (CI mode)
+      - name: Start Expo app
+        run: npx expo start --non-interactive --ci
