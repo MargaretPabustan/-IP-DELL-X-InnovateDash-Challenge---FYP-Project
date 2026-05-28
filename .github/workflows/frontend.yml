@@ -33,7 +33,3 @@ jobs:
       # Expo build validation (no deploy)
       - name: Validate Expo project
         run: npx expo prebuild --non-interactive
-
-      # Start Expo app (CI mode)
-      - name: Start Expo app
-        run: npx expo start --non-interactive --ci
