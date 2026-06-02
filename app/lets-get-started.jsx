@@ -23,9 +23,7 @@ export default function LetsGetStarted() {
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
       <ImageBackground
-        source={{
-          uri: "https://images.unsplash.com/photo-1511578314322-379afb476865?q=80&w=1200&auto=format&fit=crop",
-        }}
+        source={require('../assets/images/booth-bg.png')}
         style={styles.background}
         resizeMode="cover"
       >
