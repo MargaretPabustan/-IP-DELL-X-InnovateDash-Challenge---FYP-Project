@@ -6,7 +6,7 @@ const styles = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
   :root {
-    --navy: #1a1f6e;
+    --navy: #242da1;
     --blue: #0e136c;
     --light-blue: #e8eaff;
     --bg: #ededf0;
