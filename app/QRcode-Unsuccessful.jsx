@@ -7,7 +7,7 @@ const styles = `
 
   :root {
     --navy: #1a1f6e;
-    --blue: #2d35c9;
+    --blue: #0e136c;
     --light-blue: #e8eaff;
     --bg: #ededf0;
     --white: #ffffff;
