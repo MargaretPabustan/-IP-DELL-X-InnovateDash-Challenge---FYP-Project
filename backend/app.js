@@ -294,7 +294,7 @@ Return ONLY valid JSON in this exact format, no extra text:
   "notes": "a short 1-2 sentence follow-up suggestion for the sales team"
 }
 `;
-
+//AI analysis
         const result = await model.generateContent(prompt);
         const response = result.response.text().replace(/```json|```/g, '').trim();
 
