@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
-import { useAppTheme } from '../src/constants/useAppTheme';
+import { useAppTheme } from '../../src/constants/useAppTheme';
 
 const API_URL  = process.env.EXPO_PUBLIC_API_URL || '';
 const ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -145,11 +145,11 @@ export default function FollowupsNotDone() {
 
       {/* BOTTOM NAV */}
       <View style={[styles.bottomNav, { backgroundColor: theme.navBg, borderTopColor: theme.subText + '22', paddingBottom: Platform.OS === "ios" ? 28 : 12 }]}>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push("/recent-leads")}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push("/booth/recent-leads")}>
           <Ionicons name="person-outline" size={26} color={theme.subText} />
           <Text style={[styles.navLabel, { color: theme.subText }]}>Leads</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItemCenter} onPress={() => router.push("/qr-scanner")}>
+        <TouchableOpacity style={styles.navItemCenter} onPress={() => router.push("/booth/qr-scanner")}>
           <View style={[styles.navCenterBtn, { backgroundColor: theme.navy }]}>
             <MaterialIcons name="qr-code-scanner" size={28} color="#fff" />
           </View>

@@ -1,0 +1,25 @@
+$kind: http-request
+name: Update Team
+method: PUT
+url: '{{baseUrl}}/teams/{{createdTeamId}}'
+order: 2000
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "team_name": "Alpha Team Updated",
+      "territory": "Singapore & Malaysia",
+      "description": "Updated description"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 200", () => pm.response.to.have.status(200));
+      pm.test("Team updated", () => {
+          const json = pm.response.json();
+          pm.expect(json.message).to.equal('Team updated');
+      });

@@ -1,0 +1,15 @@
+$kind: http-request
+name: Delete Lead
+method: DELETE
+url: '{{baseUrl}}/leads/{{createdLeadId}}'
+order: 1500
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 200", () => pm.response.to.have.status(200));
+      pm.test("Lead deleted successfully", () => {
+          const json = pm.response.json();
+          pm.expect(json.success).to.be.true;
+          pm.expect(json.message).to.equal('Lead deleted successfully');
+      });

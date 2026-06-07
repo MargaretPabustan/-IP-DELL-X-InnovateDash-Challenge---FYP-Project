@@ -1,0 +1,15 @@
+$kind: http-request
+name: Get Team by ID
+method: GET
+url: '{{baseUrl}}/teams/{{createdTeamId}}'
+order: 1900
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 200", () => pm.response.to.have.status(200));
+      pm.test("Team has required fields", () => {
+          const team = pm.response.json();
+          pm.expect(team).to.have.property('team_id');
+          pm.expect(team).to.have.property('team_name');
+      });

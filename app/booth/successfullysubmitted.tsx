@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
-import { useAppTheme } from '../src/constants/useAppTheme';
+import { useAppTheme } from '../../src/constants/useAppTheme';
 
 
 const GREEN = '#27AE60';
@@ -101,7 +101,7 @@ export default function SuccessfullySubmittedScreen() {
 
         <TouchableOpacity
           style={[styles.secondaryButton, { borderColor: theme.navy }]}
-          onPress={() => router.push('/recent-leads' as any)}
+          onPress={() => router.push('/booth/recent-leads' as any)}
           activeOpacity={0.85}
         >
           <Text style={[styles.secondaryButtonText, { color: theme.navy }]}>View All Leads</Text>
@@ -119,7 +119,7 @@ export default function SuccessfullySubmittedScreen() {
           },
         ]}
       >
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/recent-leads' as any)}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/booth/recent-leads' as any)}>
           <Ionicons name="person-outline" size={26} color={theme.subText} />
           <Text style={[styles.navLabel, { color: theme.subText }]}>Leads</Text>
         </TouchableOpacity>

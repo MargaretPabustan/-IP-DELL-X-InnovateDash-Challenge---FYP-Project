@@ -12,7 +12,7 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { useAppTheme } from '../src/constants/useAppTheme';
+import { useAppTheme } from '../../src/constants/useAppTheme';
 
 
 export default function QRScannerScreen() {
@@ -75,7 +75,7 @@ export default function QRScannerScreen() {
       }
 
       router.replace({
-        pathname: '/lead-details',
+        pathname: '/booth/lead-details',
         params: { leadName, companyName, title, phone, email, interest },
       });
 

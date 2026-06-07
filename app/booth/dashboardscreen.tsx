@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
-import { useAppTheme, THEMES } from '../src/constants/useAppTheme';
+import { useAppTheme, THEMES } from '../../src/constants/useAppTheme';
 
 const API_URL  = process.env.EXPO_PUBLIC_API_URL || '';
 const ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -30,31 +30,31 @@ export default function DashboardScreen() {
   const [showThemePicker, setShowThemePicker] = useState(false);
 
   const [totalLeads,   setTotalLeads]   = useState(0);
-  const [readyCount,   setReadyCount]   = useState(0);
-  const [pendingCount, setPendingCount] = useState(0);
+  const [myLeadsToday, setMyLeadsToday] = useState(0);
+  const [recentScans,  setRecentScans]  = useState<any[]>([]);
   const [lastUpdated,  setLastUpdated]  = useState('—');
   const [loadingStats, setLoadingStats] = useState(true);
 
   const fetchStats = useCallback(async () => {
     setLoadingStats(true);
     try {
-      const response = await fetch(API_URL, {
-        headers: SUPABASE_HEADERS,  // ✅ Supabase headers
-      });
+      const response = await fetch(API_URL, { headers: SUPABASE_HEADERS });
       const data = await response.json();
 
-      // ✅ Supabase returns array directly
       if (!Array.isArray(data)) throw new Error('Unexpected response');
 
-      const total   = data.length;
-      const ready   = data.filter((l) =>
-        (l.customer_intent || '').toLowerCase().includes('high')  // ✅ correct field
-      ).length;
-      const pending = total - ready;
+      const total = data.length;
+      const today = new Date().toDateString();
+      const todayLeads = data.filter((l) =>
+        new Date(l.created_at).toDateString() === today
+      );
+      const recent = todayLeads
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 3);
 
       setTotalLeads(total);
-      setReadyCount(ready);
-      setPendingCount(pending);
+      setMyLeadsToday(todayLeads.length);
+      setRecentScans(recent);
       setLastUpdated(new Date().toLocaleTimeString());
     } catch {
       // keep previous values on error
@@ -69,8 +69,7 @@ export default function DashboardScreen() {
     return () => clearInterval(interval);
   }, [fetchStats]);
 
-  const currentTime = new Date().toLocaleTimeString();
-  const handleScan  = () => router.push("/qr-scanner");
+  const handleScan = () => router.push("/booth/qr-scanner" as any);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
@@ -128,50 +127,90 @@ export default function DashboardScreen() {
           </Text>
         </View>
 
-        {/* FOLLOW-UP STATUS */}
-        <Text style={[styles.sectionLabel, { color: theme.subText }]}>FOLLOW-UP STATUS</Text>
+        {/* STATS ROW */}
+        <Text style={[styles.sectionLabel, { color: theme.subText }]}>TODAY</Text>
         <View style={styles.statsRow}>
 
           <TouchableOpacity
             style={[styles.statCard, { backgroundColor: theme.card }]}
             activeOpacity={0.85}
-            onPress={() => router.push({ pathname: "/FollowupsDone", params: { title: "Follow-ups done", count: readyCount, time: currentTime, status: "ready" } })}
+            onPress={() => router.push('/booth/recent-leads' as any)}
           >
-            <View style={[styles.statIconBox, { backgroundColor: '#dcfce7' }]}>
-              <Ionicons name="checkmark-circle" size={24} color="#16a34a" />
+            <View style={[styles.statIconBox, { backgroundColor: '#dbeafe' }]}>
+              <Ionicons name="person-add" size={24} color="#2563eb" />
             </View>
             <Text style={[styles.statNumber, { color: theme.text }]}>
-              {loadingStats ? '—' : readyCount}
+              {loadingStats ? '—' : myLeadsToday}
             </Text>
-            <Text style={[styles.statLabel, { color: theme.subText }]}>Follow-ups done</Text>
-            <View style={[styles.statChip, { backgroundColor: '#dcfce7' }]}>
-              <Text style={[styles.statChipText, { color: '#16a34a' }]}>Active</Text>
+            <Text style={[styles.statLabel, { color: theme.subText }]}>My leads today</Text>
+            <View style={[styles.statChip, { backgroundColor: '#dbeafe' }]}>
+              <Text style={[styles.statChipText, { color: '#2563eb' }]}>Today</Text>
             </View>
           </TouchableOpacity>
 
           <TouchableOpacity
             style={[styles.statCard, { backgroundColor: theme.card }]}
             activeOpacity={0.85}
-            onPress={() => router.push({ pathname: "/Followups-not-done", params: { title: "Follow-ups not done", count: pendingCount, time: currentTime, status: "not_done" } })}
+            onPress={() => router.push('/booth/recent-leads' as any)}
           >
-            <View style={[styles.statIconBox, { backgroundColor: '#fee2e2' }]}>
-              <Ionicons name="time" size={24} color="#dc2626" />
+            <View style={[styles.statIconBox, { backgroundColor: '#fef9c3' }]}>
+              <MaterialIcons name="qr-code-scanner" size={24} color="#ca8a04" />
             </View>
             <Text style={[styles.statNumber, { color: theme.text }]}>
-              {loadingStats ? '—' : pendingCount}
+              {loadingStats ? '—' : recentScans.length}
             </Text>
-            <Text style={[styles.statLabel, { color: theme.subText }]}>Follow-ups not done</Text>
-            <View style={[styles.statChip, { backgroundColor: '#fee2e2' }]}>
-              <Text style={[styles.statChipText, { color: '#dc2626' }]}>Pending</Text>
+            <Text style={[styles.statLabel, { color: theme.subText }]}>Recent scans</Text>
+            <View style={[styles.statChip, { backgroundColor: '#fef9c3' }]}>
+              <Text style={[styles.statChipText, { color: '#ca8a04' }]}>Latest</Text>
             </View>
           </TouchableOpacity>
 
         </View>
+
+        {/* RECENT SCAN ACTIVITY LIST */}
+        {recentScans.length > 0 && (
+          <>
+            <Text style={[styles.sectionLabel, { color: theme.subText }]}>RECENT SCAN ACTIVITY</Text>
+            <View style={[styles.recentCard, { backgroundColor: theme.card }]}>
+              {recentScans.map((lead, index) => (
+                <View key={lead.lead_id}>
+                  <View style={styles.recentRow}>
+                    <View style={[styles.recentAvatar, { backgroundColor: theme.navy + '15' }]}>
+                      <Text style={[styles.recentAvatarText, { color: theme.navy }]}>
+                        {lead.name?.charAt(0).toUpperCase() || '?'}
+                      </Text>
+                    </View>
+                    <View style={styles.recentInfo}>
+                      <Text style={[styles.recentName, { color: theme.text }]}>{lead.name}</Text>
+                      <Text style={[styles.recentCompany, { color: theme.subText }]}>{lead.company}</Text>
+                    </View>
+                    <Text style={[styles.recentTime, { color: theme.subText }]}>
+                      {new Date(lead.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                  </View>
+                  {index < recentScans.length - 1 && (
+                    <View style={[styles.recentDivider, { backgroundColor: theme.bg }]} />
+                  )}
+                </View>
+              ))}
+            </View>
+          </>
+        )}
+
+        {/* EMPTY STATE */}
+        {!loadingStats && recentScans.length === 0 && (
+          <View style={[styles.emptyCard, { backgroundColor: theme.card }]}>
+            <Ionicons name="scan-outline" size={36} color={theme.subText} />
+            <Text style={[styles.emptyText, { color: theme.subText }]}>No scans yet today</Text>
+            <Text style={[styles.emptySubText, { color: theme.subText }]}>Start scanning to capture leads</Text>
+          </View>
+        )}
+
       </ScrollView>
 
       {/* BOTTOM NAV */}
       <View style={[styles.bottomNav, { backgroundColor: theme.navBg, borderTopColor: theme.subText + '22', paddingBottom: Platform.OS === "ios" ? 28 : 12 }]}>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push("/recent-leads")}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push("/booth/recent-leads" as any)}>
           <Ionicons name="person-outline" size={26} color={theme.subText} />
           <Text style={[styles.navLabel, { color: theme.subText }]}>Leads</Text>
         </TouchableOpacity>
@@ -180,7 +219,7 @@ export default function DashboardScreen() {
             <MaterialIcons name="qr-code-scanner" size={28} color="#fff" />
           </View>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push("/dashboardscreen")}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push("/booth/dashboardscreen" as any)}>
           <FontAwesome5 name="home" size={22} color={theme.accent} />
           <Text style={[styles.navLabel, { color: theme.accent }]}>Home</Text>
         </TouchableOpacity>
@@ -247,6 +286,18 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 12, marginTop: 4, lineHeight: 17 },
   statChip: { alignSelf: 'flex-start', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, marginTop: 10 },
   statChipText: { fontSize: 11, fontWeight: '700' },
+  recentCard: { borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3 },
+  recentRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
+  recentAvatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+  recentAvatarText: { fontSize: 16, fontWeight: '700' },
+  recentInfo: { flex: 1 },
+  recentName: { fontSize: 14, fontWeight: '600' },
+  recentCompany: { fontSize: 12, marginTop: 2 },
+  recentTime: { fontSize: 11, fontWeight: '500' },
+  recentDivider: { height: 1, marginHorizontal: 4 },
+  emptyCard: { borderRadius: 16, padding: 32, alignItems: 'center', gap: 8 },
+  emptyText: { fontSize: 15, fontWeight: '600' },
+  emptySubText: { fontSize: 13 },
   bottomNav: { flexDirection: "row", borderTopWidth: 1, paddingTop: 10, paddingHorizontal: 32, justifyContent: "space-between", alignItems: "center" },
   navItem: { alignItems: 'center', gap: 3, paddingHorizontal: 12 },
   navLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 0.3 },
