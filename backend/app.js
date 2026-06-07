@@ -3,7 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
-const Groq = require('groq-sdk');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
 app.use(express.json());
@@ -19,9 +19,10 @@ pool.connect()
     .then(() => console.log('✅ Connected to Supabase PostgreSQL'))
     .catch(err => console.error('❌ DB connection error:', err));
 
-// ── GROQ SETUP ────────────────────────────────────────────────────────────────
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
-console.log('GROQ_API_KEY loaded:', process.env.GROQ_API_KEY ? '✅ ' + process.env.GROQ_API_KEY.substring(0, 8) + '...' : '❌ MISSING');
+// ── GEMINI SETUP ──────────────────────────────────────────────────────────────
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+console.log('GEMINI_API_KEY loaded:', process.env.GEMINI_API_KEY ? '✅ ' + process.env.GEMINI_API_KEY.substring(0, 8) + '...' : '❌ MISSING');
 
 // ── VALIDATION ────────────────────────────────────────────────────────────────
 function validateLead(name, email, company, title, phone) {
@@ -241,11 +242,11 @@ app.delete('/teams/:id', async (req, res) => {
         await pool.query('DELETE FROM teams WHERE team_id=$1', [req.params.id]);
         res.json({ message: 'Team deleted' });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        res.status(500).json({ success: false, message: err.message });
     }
 });
 
-// ── GROQ AI ANALYSIS ──────────────────────────────────────────────────────────
+// ── GEMINI AI ANALYSIS ────────────────────────────────────────────────────────
 
 app.post('/analyze-lead/:id', async (req, res) => {
     try {
@@ -287,12 +288,9 @@ Return ONLY valid JSON in this exact format, no extra text:
   "notes": "a short 1-2 sentence follow-up suggestion for the sales team"
 }
 `;
-        const result = await groq.chat.completions.create({
-            messages: [{ role: 'user', content: prompt }],
-            model: 'llama-3.3-70b-versatile',
-            temperature: 0.3,
-        });
-        const response = result.choices[0].message.content.replace(/```json|```/g, '').trim();
+        // ── AI analysis ───────────────────────────────────────────────────────
+        const result = await model.generateContent(prompt);
+        const response = result.response.text().replace(/```json|```/g, '').trim();
 
         let aiData;
         try {
