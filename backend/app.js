@@ -21,6 +21,7 @@ pool.connect()
 
 // ── GROQ SETUP ────────────────────────────────────────────────────────────────
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+console.log('GROQ_API_KEY loaded:', process.env.GROQ_API_KEY ? '✅ ' + process.env.GROQ_API_KEY.substring(0, 8) + '...' : '❌ MISSING');
 
 // ── VALIDATION ────────────────────────────────────────────────────────────────
 function validateLead(name, email, company, title, phone) {
