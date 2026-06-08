@@ -80,6 +80,31 @@ function validateLead(name, email, company, title, phone) {
     return null;
 }
 
+// ── HEALTH CHECK ──────────────────────────────────────────────────────────────
+app.get('/', (req, res) => {
+    res.json({
+        status: '✅ Boothflow API is running',
+        version: '1.0.0',
+        endpoints: [
+            'GET /leads',
+            'POST /leads',
+            'GET /leads/:id',
+            'PUT /leads/:id',
+            'DELETE /leads/:id',
+            'GET /interest_categories',
+            'POST /lead_interest_categories',
+            'GET /lead_interest_categories/:lead_id',
+            'DELETE /lead_interest_categories/:lead_id/:category_id',
+            'GET /teams',
+            'POST /teams',
+            'GET /teams/:id',
+            'PUT /teams/:id',
+            'DELETE /teams/:id',
+            'POST /analyze-lead/:id',
+        ]
+    });
+});
+
 // ── LEADS ─────────────────────────────────────────────────────────────────────
 
 app.get('/leads', async (req, res) => {
