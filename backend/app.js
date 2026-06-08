@@ -24,6 +24,51 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 console.log('GEMINI_API_KEY loaded:', process.env.GEMINI_API_KEY ? '✅ ' + process.env.GEMINI_API_KEY.substring(0, 8) + '...' : '❌ MISSING');
 
+// ── RULE-BASED FALLBACK ───────────────────────────────────────────────────────
+function generateRuleBasedAnalysis(customerIntent, interests) {
+    let intent = 'Low';
+    let confidence = 0.5;
+    let follow_up_required = false;
+    let notes = '';
+    let status = 'NEW';
+
+    const intentLower = (customerIntent || '').toLowerCase();
+
+    if (intentLower.includes('high') || intentLower.includes('ready for follow-up')) {
+        intent = 'High';
+        confidence = 0.85;
+        follow_up_required = true;
+        status = 'QUALIFIED';
+        notes = `High intent lead interested in ${interests}. Recommend immediate follow-up to discuss ${interests} solutions and schedule a product demonstration.`;
+    } else if (intentLower.includes('medium') || intentLower.includes('pricing') || intentLower.includes('demo')) {
+        intent = 'Medium';
+        confidence = 0.65;
+        follow_up_required = true;
+        status = 'CONTACTED';
+        if (intentLower.includes('pricing')) {
+            notes = `Lead is exploring pricing options for ${interests}. Follow up within 3 days with a tailored quote or pricing overview.`;
+        } else if (intentLower.includes('demo')) {
+            notes = `Lead expressed interest in a product demo for ${interests}. Schedule a demonstration within the week to showcase relevant Dell solutions.`;
+        } else {
+            notes = `Medium intent lead interested in ${interests}. Follow up within 3 days to explore their requirements further.`;
+        }
+    } else {
+        intent = 'Low';
+        confidence = 0.4;
+        follow_up_required = false;
+        status = 'NEW';
+        notes = `Lead is currently browsing and interested in ${interests}. Add to the mailing list and follow up with relevant product information in 1-2 weeks.`;
+    }
+
+    const statusDisplay = {
+        'QUALIFIED': 'Ready for Follow-up',
+        'CONTACTED': 'Review for Follow-up',
+        'NEW':       'No Follow-up Needed',
+    };
+
+    return { intent, confidence, follow_up_required, notes, status, follow_up_status: statusDisplay[status] };
+}
+
 // ── VALIDATION ────────────────────────────────────────────────────────────────
 function validateLead(name, email, company, title, phone) {
     if (!name || !email || !company || !title || !phone) {
@@ -288,24 +333,38 @@ Return ONLY valid JSON in this exact format, no extra text:
   "notes": "a short 1-2 sentence follow-up suggestion for the sales team"
 }
 `;
-        // ── AI analysis ───────────────────────────────────────────────────────
-        const result = await model.generateContent(prompt);
-        const response = result.response.text().replace(/```json|```/g, '').trim();
 
         let aiData;
-        try {
-            aiData = JSON.parse(response);
-        } catch {
-            return res.status(500).json({ success: false, message: 'AI response not valid JSON' });
-        }
+        let usedFallback = false;
 
-        const validIntents = ['Low', 'Medium', 'High'];
-        if (
-            !validIntents.includes(aiData.intent) ||
-            typeof aiData.confidence !== 'number' ||
-            typeof aiData.follow_up_required !== 'boolean'
-        ) {
-            return res.status(500).json({ success: false, message: 'Invalid AI response format' });
+        try {
+            // ── Try Gemini AI first ───────────────────────────────────────────
+            const result = await model.generateContent(prompt);
+            const response = result.response.text().replace(/```json|```/g, '').trim();
+            aiData = JSON.parse(response);
+
+            const validIntents = ['Low', 'Medium', 'High'];
+            if (
+                !validIntents.includes(aiData.intent) ||
+                typeof aiData.confidence !== 'number' ||
+                typeof aiData.follow_up_required !== 'boolean'
+            ) {
+                throw new Error('Invalid AI response format');
+            }
+
+            console.log('✅ Gemini AI analysis successful');
+
+        } catch (aiError) {
+            // ── Fallback to rule-based analysis ──────────────────────────────
+            console.warn('⚠️ Gemini failed, using rule-based fallback:', aiError.message);
+            const fallback = generateRuleBasedAnalysis(lead.customer_intent, interests);
+            aiData = {
+                intent:             fallback.intent,
+                confidence:         fallback.confidence,
+                follow_up_required: fallback.follow_up_required,
+                notes:              fallback.notes,
+            };
+            usedFallback = true;
         }
 
         // ── Map AI intent to DB status ENUM ──────────────────────────────────
@@ -338,6 +397,7 @@ Return ONLY valid JSON in this exact format, no extra text:
         res.json({
             success: true,
             lead,
+            used_fallback: usedFallback,
             ai_analysis: {
                 intent:             aiData.intent,
                 confidence:         aiData.confidence,
