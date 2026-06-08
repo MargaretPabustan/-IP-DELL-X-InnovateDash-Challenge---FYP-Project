@@ -414,9 +414,15 @@ Return ONLY valid JSON in this exact format, no extra text:
         // ── Save to DB ────────────────────────────────────────────────────────
         await pool.query(
             `UPDATE leads
-             SET ai_notes=$1, status=$2
-             WHERE lead_id=$3`,
-            [aiData.notes || null, status, lead.lead_id]
+             SET ai_notes=$1, status=$2, confidence_score=$3, follow_up_required=$4
+             WHERE lead_id=$5`,
+            [
+                aiData.notes || null,
+                status,
+                aiData.confidence,
+                aiData.follow_up_required,
+                parseInt(lead.lead_id)
+            ]
         );
 
         res.json({
