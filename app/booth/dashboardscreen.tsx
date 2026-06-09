@@ -19,36 +19,13 @@ const API_URL  = process.env.EXPO_PUBLIC_API_URL || '';
 const ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
 const SUPABASE_HEADERS = {
-  apikey:        ANON_KEY,
-  Authorization: `Bearer ${ANON_KEY}`,
-  "Content-Type":  'application/json',
+  'apikey':        ANON_KEY,
+  'Authorization': `Bearer ${ANON_KEY}`,
+  'Content-Type':  'application/json',
 };
 
-export default function DashboardScreen({ data }) {
+export default function DashboardScreen() {
   const router = useRouter();
-  
-  const { theme, themeIndex, setThemeIndex } = useAppTheme();
-  const [showThemePicker, setShowThemePicker] = useState(false);
-
-  const [totalLeads, setTotalLeads] = useState(0);
-  const [readyCount, setReadyCount] = useState(0);
-  const [pendingCount, setPendingCount] = useState(0);
-  const [lastUpdated, setLastUpdated] = useState('—');
-  const [loadingStats, setLoadingStats] = useState(true);
-
-  // fetchStats here
-
-  // useEffect here
-
-  // handleScan here
-
-  return (
-    <SafeAreaView>
-      ...
-    </SafeAreaView>
-  );
-}
-
   const { theme, themeIndex, setThemeIndex } = useAppTheme();
   const [showThemePicker, setShowThemePicker] = useState(false);
 
@@ -58,27 +35,11 @@ export default function DashboardScreen({ data }) {
   const [lastUpdated,  setLastUpdated]  = useState('—');
   const [loadingStats, setLoadingStats] = useState(true);
 
-<<<<<<< HEAD:app/dashboardscreen.jsx
- const fetchStats = useCallback(async () => {
-  setLoadingStats(true);
-  try {
-    const response = await fetch(API_URL, {
-      headers: SUPABASE_HEADERS,
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-=======
   const fetchStats = useCallback(async () => {
     setLoadingStats(true);
     try {
       const response = await fetch(API_URL, { headers: SUPABASE_HEADERS });
       const data = await response.json();
->>>>>>> 9d4d416fab64357e835098d03e591e120a9a555c:app/booth/dashboardscreen.tsx
 
       if (!Array.isArray(data)) throw new Error('Unexpected response');
 
@@ -92,17 +53,6 @@ export default function DashboardScreen({ data }) {
         .slice(0, 3);
 
       setTotalLeads(total);
-<<<<<<< HEAD:app/dashboardscreen.jsx
-      setReadyCount(ready);
-      setPendingCount(pending);
-      setLastUpdated(new Date().toLocaleTimeString()) ;
-      } catch (error) {
-  console.error('Failed to fetch stats:', error);
-} finally {
-  setLoadingStats(false);
-}
-}, []);
-=======
       setMyLeadsToday(todayLeads.length);
       setRecentScans(recent);
       setLastUpdated(new Date().toLocaleTimeString());
@@ -112,15 +62,9 @@ export default function DashboardScreen({ data }) {
       setLoadingStats(false);
     }
   }, []);
->>>>>>> 9d4d416fab64357e835098d03e591e120a9a555c:app/booth/dashboardscreen.tsx
 
-useEffect(() => {
-  fetchStats();
-  const interval = setInterval(fetchStats, 60000);
-  return () => clearInterval(interval);
-}, [fetchStats]);
-
-        fetchStats();
+  useEffect(() => {
+    fetchStats();
     const interval = setInterval(fetchStats, 60000);
     return () => clearInterval(interval);
   }, [fetchStats]);
@@ -130,6 +74,7 @@ useEffect(() => {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+
       {/* HEADER */}
       <View style={[styles.header, { backgroundColor: theme.navy, paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight ?? 24) + 8 : 16 }]}>
         <View>
@@ -254,7 +199,7 @@ useEffect(() => {
 
         {/* EMPTY STATE */}
         {!loadingStats && recentScans.length === 0 && (
-          <View style={[styles.emptyCard, { backgroundColor: theme.card }]}>
+          <View style={[styles.emptyCard, { backgroundColor: theme.card, marginTop: 32 }]}>
             <Ionicons name="scan-outline" size={36} color={theme.subText} />
             <Text style={[styles.emptyText, { color: theme.subText }]}>No scans yet today</Text>
             <Text style={[styles.emptySubText, { color: theme.subText }]}>Start scanning to capture leads</Text>
