@@ -14,19 +14,18 @@ import {
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
-import { useAppTheme } from '../src/constants/useAppTheme';
-import { styles } from '../src/styles/leadDetailsStyles';
+import { useAppTheme } from '../../src/constants/useAppTheme';
+import { styles } from '../../src/styles/leadDetailsStyles';
+import { saveLeadOffline } from '../../src/hooks/Offlinesync';
 
 const API_URL     = process.env.EXPO_PUBLIC_API_URL || '';
 const ANON_KEY    = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 const BASE_URL    = API_URL.replace('/leads', '');
 
-// ── Debug logs ────────────────────────────────────────────────────────────────
 console.log('API_URL:', API_URL ? '✅ loaded' : '❌ MISSING');
 console.log('ANON_KEY:', ANON_KEY ? '✅ loaded' : '❌ MISSING');
 console.log('BACKEND_URL:', BACKEND_URL ? BACKEND_URL : '❌ MISSING');
-// ─────────────────────────────────────────────────────────────────────────────
 
 const SUPABASE_HEADERS = {
   'apikey':        ANON_KEY,
@@ -44,10 +43,10 @@ const CATEGORY_MAP: Record<string, number> = {
 const INTEREST_OPTIONS = ['AI PCs', 'Multi-cloud', 'Storage', 'Service'];
 
 const INTENT_OPTIONS = [
-  { label: 'High – Ready for follow-up', level: 'high' },
-  { label: 'Medium – Pricing Inquiry',   level: 'medium' },
-  { label: 'Medium – Interested in Demo',level: 'medium' },
-  { label: 'Low – Browsing',             level: 'low' },
+  { label: 'High - Ready for follow-up', level: 'high' },
+  { label: 'Medium - Pricing Inquiry',   level: 'medium' },
+  { label: 'Medium - Interested in Demo',level: 'medium' },
+  { label: 'Low - Browsing',             level: 'low' },
 ];
 
 const INTENT_COLORS = {
@@ -124,6 +123,14 @@ const LeadDetailsScreen = ({
     );
   };
 
+  // ── Duplicate route helper ─────────────────────────────────────────────────
+  const routeToDuplicate = () => {
+    router.push({
+      pathname: '/booth/ScannedBefore',
+      params: { email, leadName, companyName, title, phone, source: 'form' },
+    });
+  };
+
   // ── Core submit logic ─────────────────────────────────────────────────────
   const proceedWithSubmit = async (intent: string, allInterests: string) => {
     setLoading(true);
@@ -144,6 +151,12 @@ const LeadDetailsScreen = ({
         }),
       });
 
+      // Step 2: Check for duplicate from backend
+      if (response.status === 409) {
+        routeToDuplicate();
+        return;
+      }
+
       if (!response.ok) {
         const err = await response.text();
         console.warn('POST /leads error:', err);
@@ -154,7 +167,7 @@ const LeadDetailsScreen = ({
       const leadId = result[0]?.lead_id;
       console.log('Lead created, leadId:', leadId);
 
-      // Step 2: Save interests
+      // Step 3: Save interests
       if (leadId) {
         for (const chip of selectedInterests) {
           const categoryId = CATEGORY_MAP[chip];
@@ -168,7 +181,7 @@ const LeadDetailsScreen = ({
         }
       }
 
-      // Step 3: Gemini AI analysis
+      // Step 4: Groq AI analysis
       let assignedTeam = 'Pending Assignment';
       let aiNotes      = additionalNotes || 'Pending AI analysis.';
 
@@ -193,16 +206,16 @@ const LeadDetailsScreen = ({
         console.warn('BACKEND_URL missing or no leadId — skipping AI');
       }
 
-      // Step 4: Navigate to success
+      // Step 5: Navigate to success
       router.push({
-        pathname: '/successfullysubmitted',
+        pathname: '/booth/successfullysubmitted',
         params: { assignedTeam, intent, interests: allInterests, aiNotes },
       });
 
     } catch (error) {
       console.warn('Submit error, using fallback:', error);
       router.push({
-        pathname: '/successfullysubmitted',
+        pathname: '/booth/successfullysubmitted',
         params: {
           assignedTeam: 'Pending Assignment',
           intent,
@@ -233,6 +246,7 @@ const LeadDetailsScreen = ({
       return;
     }
 
+    // ── Duplicate check before submit ─────────────────────────────────────
     try {
       const checkRes = await fetch(
         `${API_URL}?email=eq.${encodeURIComponent(email)}&select=lead_id`,
@@ -240,14 +254,7 @@ const LeadDetailsScreen = ({
       );
       const existing = await checkRes.json();
       if (Array.isArray(existing) && existing.length > 0) {
-        Alert.alert(
-          'Duplicate Lead',
-          `A lead with email ${email} already exists. Do you want to submit anyway?`,
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Submit Anyway', onPress: () => proceedWithSubmit(intent, allInterests) },
-          ]
-        );
+        routeToDuplicate();
         return;
       }
     } catch {
@@ -359,18 +366,18 @@ const LeadDetailsScreen = ({
       </KeyboardAvoidingView>
 
       <View style={[styles.bottomNav, { backgroundColor: theme.navBg, borderTopColor: theme.subText + '22', paddingBottom: Platform.OS === 'ios' ? 28 : 12 }]}>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/recent-leads' as any)}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/booth/recent-leads' as any)}>
           <Ionicons name="person-outline" size={26} color={theme.subText} />
           <Text style={{ fontSize: 10, fontWeight: '600', color: theme.subText, marginTop: 3 }}>Leads</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={{ alignItems: 'center', marginTop: -20 }} onPress={() => router.push('/qr-scanner' as any)}>
+        <TouchableOpacity style={{ alignItems: 'center', marginTop: -20 }} onPress={() => router.push('/booth/qr-scanner' as any)}>
           <View style={{ width: 58, height: 58, borderRadius: 18, backgroundColor: theme.navy, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 6 }}>
             <MaterialIcons name="qr-code-scanner" size={28} color="#fff" />
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/dashboardscreen' as any)}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/booth/dashboardscreen' as any)}>
           <FontAwesome5 name="home" size={22} color={theme.accent} />
           <Text style={{ fontSize: 10, fontWeight: '600', color: theme.accent, marginTop: 3 }}>Home</Text>
         </TouchableOpacity>

@@ -1,0 +1,23 @@
+$kind: http-request
+name: Analyze Lead
+method: POST
+url: '{{baseUrl}}/analyze-lead/{{createdLeadId}}'
+order: 1200
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 200", () => pm.response.to.have.status(200));
+      pm.test("Response has success true", () => {
+          const json = pm.response.json();
+          pm.expect(json.success).to.be.true;
+      });
+      pm.test("AI analysis has required fields", () => {
+          const ai = pm.response.json().ai_analysis;
+          pm.expect(ai).to.have.property('intent');
+          pm.expect(['Low', 'Medium', 'High']).to.include(ai.intent);
+          pm.expect(ai.confidence).to.be.a('number').and.to.be.within(0, 1);
+          pm.expect(ai.follow_up_required).to.be.a('boolean');
+          pm.expect(ai.follow_up_status).to.be.a('string');
+          pm.expect(ai.notes).to.be.a('string');
+      });

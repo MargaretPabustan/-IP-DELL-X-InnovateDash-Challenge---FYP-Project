@@ -1,0 +1,18 @@
+$kind: http-request
+name: Get All Leads
+method: GET
+url: '{{baseUrl}}/leads'
+order: 200
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 200", () => pm.response.to.have.status(200));
+      pm.test("Response has success true", () => {
+          const json = pm.response.json();
+          pm.expect(json.success).to.be.true;
+      });
+      pm.test("Data is an array", () => {
+          const json = pm.response.json();
+          pm.expect(json.data).to.be.an('array');
+      });

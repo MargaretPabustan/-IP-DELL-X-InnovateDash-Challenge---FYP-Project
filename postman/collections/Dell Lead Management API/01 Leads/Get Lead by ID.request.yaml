@@ -1,0 +1,23 @@
+$kind: http-request
+name: Get Lead by ID
+method: GET
+url: '{{baseUrl}}/leads/{{createdLeadId}}'
+order: 300
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 200", () => pm.response.to.have.status(200));
+      pm.test("Response has success true", () => {
+          const json = pm.response.json();
+          pm.expect(json.success).to.be.true;
+      });
+      pm.test("Lead has required fields", () => {
+          const lead = pm.response.json().data;
+          pm.expect(lead).to.have.property('lead_id');
+          pm.expect(lead).to.have.property('name');
+          pm.expect(lead).to.have.property('email');
+          pm.expect(lead).to.have.property('company');
+          pm.expect(lead).to.have.property('title');
+          pm.expect(lead).to.have.property('phone_number');
+      });

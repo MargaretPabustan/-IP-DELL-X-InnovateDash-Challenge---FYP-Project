@@ -58,7 +58,7 @@ export default function LetsGetStarted() {
 
           <TouchableOpacity
             style={styles.arrowButton}
-            onPress={() => router.push("/dashboardscreen")}
+            onPress={() => router.push("/auth/login")}
             activeOpacity={0.85}
           >
             <Ionicons name="arrow-forward" size={28} color="#fff" />

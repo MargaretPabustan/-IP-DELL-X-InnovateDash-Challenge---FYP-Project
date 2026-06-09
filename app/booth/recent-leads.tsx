@@ -16,7 +16,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
-import { useAppTheme } from '../src/constants/useAppTheme';
+import { useAppTheme } from '../../src/constants/useAppTheme';
 
 const API_URL  = process.env.EXPO_PUBLIC_API_URL || '';
 const ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -319,7 +319,7 @@ export default function RecentLeadsScreen() {
       )}
 
       <View style={[styles.bottomNav, { backgroundColor: theme.navBg, borderTopColor: theme.subText + '22', paddingBottom: Platform.OS === "ios" ? 28 : 12 }]}>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push("/recent-leads" as any)}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push("/booth/recent-leads" as any)}>
           <Ionicons name="person-outline" size={26} color={theme.accent} />
           <Text style={[styles.navLabel, { color: theme.accent }]}>Leads</Text>
         </TouchableOpacity>

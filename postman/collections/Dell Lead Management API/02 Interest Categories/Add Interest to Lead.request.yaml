@@ -1,0 +1,25 @@
+$kind: http-request
+name: Add Interest to Lead
+method: POST
+url: '{{baseUrl}}/lead_interest_categories'
+order: 800
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "lead_id": "{{createdLeadId}}",
+      "category_id": 1
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 201", () => pm.response.to.have.status(201));
+      pm.test("Interest added", () => {
+          const json = pm.response.json();
+          pm.expect(json.success).to.be.true;
+          pm.expect(json.message).to.equal('Interest added');
+      });

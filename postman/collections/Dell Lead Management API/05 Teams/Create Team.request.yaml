@@ -1,0 +1,27 @@
+$kind: http-request
+name: Create Team
+method: POST
+url: '{{baseUrl}}/teams'
+order: 1800
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "team_name": "Alpha Team",
+      "territory": "Singapore",
+      "description": "Handles enterprise accounts in Singapore"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 201", () => pm.response.to.have.status(201));
+      pm.test("Team created", () => {
+          const json = pm.response.json();
+          pm.expect(json.message).to.equal('Team created');
+          pm.expect(Number(json.team_id)).to.be.a('number');
+          pm.environment.set("createdTeamId", String(json.team_id));
+      });
