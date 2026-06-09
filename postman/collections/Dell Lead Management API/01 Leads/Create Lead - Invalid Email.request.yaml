@@ -1,0 +1,28 @@
+$kind: http-request
+name: Create Lead - Invalid Email
+method: POST
+url: '{{baseUrl}}/leads'
+order: 500
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Jane Doe",
+      "email": "not-an-email",
+      "company": "Test Corp",
+      "title": "CTO",
+      "phone_number": "91234567"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 400", () => pm.response.to.have.status(400));
+      pm.test("Returns invalid email error", () => {
+          const json = pm.response.json();
+          pm.expect(json.success).to.be.false;
+          pm.expect(json.message).to.include('email');
+      });

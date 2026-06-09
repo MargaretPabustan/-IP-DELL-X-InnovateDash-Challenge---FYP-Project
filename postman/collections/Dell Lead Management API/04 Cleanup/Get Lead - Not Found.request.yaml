@@ -1,0 +1,15 @@
+$kind: http-request
+name: Get Lead - Not Found
+method: GET
+url: '{{baseUrl}}/leads/99999'
+order: 1600
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 404", () => pm.response.to.have.status(404));
+      pm.test("Response has success false", () => {
+          const json = pm.response.json();
+          pm.expect(json.success).to.be.false;
+          pm.expect(json.message).to.equal('Lead not found');
+      });

@@ -22,6 +22,52 @@ pool.connect()
 // ── GEMINI SETUP ──────────────────────────────────────────────────────────────
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+console.log('GEMINI_API_KEY loaded:', process.env.GEMINI_API_KEY ? '✅ ' + process.env.GEMINI_API_KEY.substring(0, 8) + '...' : '❌ MISSING');
+
+// ── RULE-BASED FALLBACK ───────────────────────────────────────────────────────
+function generateRuleBasedAnalysis(customerIntent, interests) {
+    let intent = 'Low';
+    let confidence = 0.5;
+    let follow_up_required = false;
+    let notes = '';
+    let status = 'NEW';
+
+    const intentLower = (customerIntent || '').toLowerCase();
+
+    if (intentLower.includes('high') || intentLower.includes('ready for follow-up')) {
+        intent = 'High';
+        confidence = 0.85;
+        follow_up_required = true;
+        status = 'QUALIFIED';
+        notes = `High intent lead interested in ${interests}. Recommend immediate follow-up to discuss ${interests} solutions and schedule a product demonstration.`;
+    } else if (intentLower.includes('medium') || intentLower.includes('pricing') || intentLower.includes('demo')) {
+        intent = 'Medium';
+        confidence = 0.65;
+        follow_up_required = true;
+        status = 'CONTACTED';
+        if (intentLower.includes('pricing')) {
+            notes = `Lead is exploring pricing options for ${interests}. Follow up within 3 days with a tailored quote or pricing overview.`;
+        } else if (intentLower.includes('demo')) {
+            notes = `Lead expressed interest in a product demo for ${interests}. Schedule a demonstration within the week to showcase relevant Dell solutions.`;
+        } else {
+            notes = `Medium intent lead interested in ${interests}. Follow up within 3 days to explore their requirements further.`;
+        }
+    } else {
+        intent = 'Low';
+        confidence = 0.4;
+        follow_up_required = false;
+        status = 'NEW';
+        notes = `Lead is currently browsing and interested in ${interests}. Add to the mailing list and follow up with relevant product information in 1-2 weeks.`;
+    }
+
+    const statusDisplay = {
+        'QUALIFIED': 'Ready for Follow-up',
+        'CONTACTED': 'Review for Follow-up',
+        'NEW':       'No Follow-up Needed',
+    };
+
+    return { intent, confidence, follow_up_required, notes, status, follow_up_status: statusDisplay[status] };
+}
 
 // ── VALIDATION ────────────────────────────────────────────────────────────────
 function validateLead(name, email, company, title, phone) {
@@ -34,9 +80,33 @@ function validateLead(name, email, company, title, phone) {
     return null;
 }
 
+// ── HEALTH CHECK ──────────────────────────────────────────────────────────────
+app.get('/', (req, res) => {
+    res.json({
+        status: '✅ Boothflow API is running',
+        version: '1.0.0',
+        endpoints: [
+            'GET /leads',
+            'POST /leads',
+            'GET /leads/:id',
+            'PUT /leads/:id',
+            'DELETE /leads/:id',
+            'GET /interest_categories',
+            'POST /lead_interest_categories',
+            'GET /lead_interest_categories/:lead_id',
+            'DELETE /lead_interest_categories/:lead_id/:category_id',
+            'GET /teams',
+            'POST /teams',
+            'GET /teams/:id',
+            'PUT /teams/:id',
+            'DELETE /teams/:id',
+            'POST /analyze-lead/:id',
+        ]
+    });
+});
+
 // ── LEADS ─────────────────────────────────────────────────────────────────────
 
-// GET all leads
 app.get('/leads', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM leads ORDER BY lead_id');
@@ -46,7 +116,6 @@ app.get('/leads', async (req, res) => {
     }
 });
 
-// GET lead by id
 app.get('/leads/:id', async (req, res) => {
     try {
         const result = await pool.query(
@@ -62,14 +131,12 @@ app.get('/leads/:id', async (req, res) => {
     }
 });
 
-// CREATE lead
 app.post('/leads', async (req, res) => {
     const { name, email, company, title, phone_number, customer_intent } = req.body;
 
     const error = validateLead(name, email, company, title, phone_number);
     if (error) return res.status(400).json({ success: false, message: error });
 
-    // Duplicate email check
     try {
         const existing = await pool.query(
             'SELECT lead_id FROM leads WHERE email = $1', [email]
@@ -102,7 +169,6 @@ app.post('/leads', async (req, res) => {
     }
 });
 
-// UPDATE lead
 app.put('/leads/:id', async (req, res) => {
     const { name, email, company, title, phone_number, customer_intent } = req.body;
 
@@ -125,7 +191,6 @@ app.put('/leads/:id', async (req, res) => {
     }
 });
 
-// DELETE lead
 app.delete('/leads/:id', async (req, res) => {
     try {
         const result = await pool.query(
@@ -167,7 +232,8 @@ app.get('/lead_interest_categories/:lead_id', async (req, res) => {
 });
 
 app.post('/lead_interest_categories', async (req, res) => {
-    const { lead_id, category_id } = req.body;
+    const lead_id = parseInt(req.body.lead_id);
+    const category_id = parseInt(req.body.category_id);
     if (!lead_id || !category_id) {
         return res.status(400).json({ success: false, message: 'lead_id and category_id required' });
     }
@@ -246,7 +312,7 @@ app.delete('/teams/:id', async (req, res) => {
         await pool.query('DELETE FROM teams WHERE team_id=$1', [req.params.id]);
         res.json({ message: 'Team deleted' });
     } catch (err) {
-        res.status(500).json({ message: err.message });
+        res.status(500).json({ success: false, message: err.message });
     }
 });
 
@@ -265,7 +331,6 @@ app.post('/analyze-lead/:id', async (req, res) => {
 
         const lead = leadResult.rows[0];
 
-        // Fetch interests
         const interestsResult = await pool.query(
             `SELECT ic.category_name
              FROM lead_interest_categories lic
@@ -275,7 +340,6 @@ app.post('/analyze-lead/:id', async (req, res) => {
         );
         const interests = interestsResult.rows.map(r => r.category_name).join(', ') || 'Not specified';
 
-        // Gemini prompt
         const prompt = `
 You are a sales analyst for Dell Technologies at a booth event.
 Analyze this lead and determine their purchase intent.
@@ -295,54 +359,81 @@ Return ONLY valid JSON in this exact format, no extra text:
 }
 `;
 
-        const result = await model.generateContent(prompt);
-        const response = result.response.text().replace(/```json|```/g, '').trim();
-
         let aiData;
+        let usedFallback = false;
+
         try {
+            // ── Try Gemini AI first ───────────────────────────────────────────
+            const result = await model.generateContent(prompt);
+            const response = result.response.text().replace(/```json|```/g, '').trim();
             aiData = JSON.parse(response);
-        } catch {
-            return res.status(500).json({ success: false, message: 'AI response not valid JSON' });
+
+            const validIntents = ['Low', 'Medium', 'High'];
+            if (
+                !validIntents.includes(aiData.intent) ||
+                typeof aiData.confidence !== 'number' ||
+                typeof aiData.follow_up_required !== 'boolean'
+            ) {
+                throw new Error('Invalid AI response format');
+            }
+
+            console.log('✅ Gemini AI analysis successful');
+
+        } catch (aiError) {
+            // ── Fallback to rule-based analysis ──────────────────────────────
+            console.warn('⚠️ Gemini failed, using rule-based fallback:', aiError.message);
+            const fallback = generateRuleBasedAnalysis(lead.customer_intent, interests);
+            aiData = {
+                intent:             fallback.intent,
+                confidence:         fallback.confidence,
+                follow_up_required: fallback.follow_up_required,
+                notes:              fallback.notes,
+            };
+            usedFallback = true;
         }
 
-        // Validate
-        const validIntents = ['Low', 'Medium', 'High'];
-        if (
-            !validIntents.includes(aiData.intent) ||
-            typeof aiData.confidence !== 'number' ||
-            typeof aiData.follow_up_required !== 'boolean'
-        ) {
-            return res.status(500).json({ success: false, message: 'Invalid AI response format' });
-        }
-
-        // Follow-up status logic
-        let followUpStatus = 'No Follow-up Needed';
+        // ── Map AI intent to DB status ENUM ──────────────────────────────────
+        let status = 'NEW';
         if (aiData.intent === 'High') {
             if (aiData.confidence >= 0.8 && aiData.follow_up_required) {
-                followUpStatus = 'Ready for Follow-up';
-            } else if (aiData.confidence >= 0.6) {
-                followUpStatus = 'Review for Follow-up';
+                status = 'QUALIFIED';
+            } else {
+                status = 'CONTACTED';
             }
         } else if (aiData.intent === 'Medium' && aiData.follow_up_required) {
-            followUpStatus = 'Review for Follow-up';
+            status = 'CONTACTED';
         }
 
-        // ✅ Save to DB — ai_notes (lowercase), status = followUpStatus
+        // ── Friendly display label for frontend ───────────────────────────────
+        const statusDisplay = {
+            'QUALIFIED': 'Ready for Follow-up',
+            'CONTACTED': 'Review for Follow-up',
+            'NEW':       'No Follow-up Needed',
+        };
+
+        // ── Save to DB ────────────────────────────────────────────────────────
         await pool.query(
             `UPDATE leads
-             SET ai_notes=$1, status=$2
-             WHERE lead_id=$3`,
-            [aiData.notes || null, followUpStatus, lead.lead_id]
+             SET ai_notes=$1, status=$2, confidence_score=$3, follow_up_required=$4
+             WHERE lead_id=$5`,
+            [
+                aiData.notes || null,
+                status,
+                aiData.confidence,
+                aiData.follow_up_required,
+                parseInt(lead.lead_id)
+            ]
         );
 
         res.json({
             success: true,
             lead,
+            used_fallback: usedFallback,
             ai_analysis: {
                 intent:             aiData.intent,
                 confidence:         aiData.confidence,
                 follow_up_required: aiData.follow_up_required,
-                follow_up_status:   followUpStatus,
+                follow_up_status:   statusDisplay[status],
                 notes:              aiData.notes,
             }
         });
