@@ -252,3 +252,15 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
   },
 });
+
+export const autofillFieldStyles = {
+  row: styles.autofillRow,
+  label: styles.autofillLabel,
+  value: styles.autofillValue,
+};
+
+export const othersInputStyles = {
+  row: styles.othersRow,
+  label: styles.othersLabel,
+  input: styles.othersInput,
+};

@@ -17,9 +17,16 @@ import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useAppTheme } from '../src/constants/useAppTheme';
 import { styles } from '../src/styles/leadDetailsStyles';
 
-const API_URL  = process.env.EXPO_PUBLIC_API_URL || '';
-const ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-const BASE_URL = API_URL.replace('/leads', '');
+const API_URL     = process.env.EXPO_PUBLIC_API_URL || '';
+const ANON_KEY    = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+const BASE_URL    = API_URL.replace('/leads', '');
+
+// ── Debug logs ────────────────────────────────────────────────────────────────
+console.log('API_URL:', API_URL ? '✅ loaded' : '❌ MISSING');
+console.log('ANON_KEY:', ANON_KEY ? '✅ loaded' : '❌ MISSING');
+console.log('BACKEND_URL:', BACKEND_URL ? BACKEND_URL : '❌ MISSING');
+// ─────────────────────────────────────────────────────────────────────────────
 
 const SUPABASE_HEADERS = {
   'apikey':        ANON_KEY,
@@ -117,7 +124,7 @@ const LeadDetailsScreen = ({
     );
   };
 
-  // ── Core submit logic ──────────────────────────────────────────────────
+  // ── Core submit logic ─────────────────────────────────────────────────────
   const proceedWithSubmit = async (intent: string, allInterests: string) => {
     setLoading(true);
     if (onSubmit) onSubmit({ leadName, companyName, title, phone, email, allInterests, intent, additionalNotes });
@@ -145,6 +152,7 @@ const LeadDetailsScreen = ({
 
       const result = await response.json();
       const leadId = result[0]?.lead_id;
+      console.log('Lead created, leadId:', leadId);
 
       // Step 2: Save interests
       if (leadId) {
@@ -160,15 +168,35 @@ const LeadDetailsScreen = ({
         }
       }
 
-      // Step 3: Navigate to success
+      // Step 3: Gemini AI analysis
+      let assignedTeam = 'Pending Assignment';
+      let aiNotes      = additionalNotes || 'Pending AI analysis.';
+
+      if (leadId && BACKEND_URL) {
+        try {
+          console.log('Calling AI at:', `${BACKEND_URL}/analyze-lead/${leadId}`);
+          const analyzeRes = await fetch(`${BACKEND_URL}/analyze-lead/${leadId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          const analyzeData = await analyzeRes.json();
+          console.log('AI response:', JSON.stringify(analyzeData));
+
+          if (analyzeData.success) {
+            aiNotes      = analyzeData.ai_analysis?.notes            || aiNotes;
+            assignedTeam = analyzeData.ai_analysis?.follow_up_status || assignedTeam;
+          }
+        } catch (aiError) {
+          console.warn('AI analysis failed:', aiError);
+        }
+      } else {
+        console.warn('BACKEND_URL missing or no leadId — skipping AI');
+      }
+
+      // Step 4: Navigate to success
       router.push({
         pathname: '/successfullysubmitted',
-        params: {
-          assignedTeam: 'Pending Assignment',
-          intent,
-          interests:    allInterests,
-          aiNotes:      additionalNotes || 'Pending AI analysis.',
-        },
+        params: { assignedTeam, intent, interests: allInterests, aiNotes },
       });
 
     } catch (error) {
@@ -187,7 +215,7 @@ const LeadDetailsScreen = ({
     }
   };
 
-  // ── Handle submit with validation + duplicate check ───────────────────
+  // ── Handle submit with validation + duplicate check ───────────────────────
   const handleSubmit = async () => {
     const allInterests = [
       ...selectedInterests,
@@ -196,7 +224,6 @@ const LeadDetailsScreen = ({
 
     const intent = selectedIntent || intentOthers.trim() || '';
 
-    // ── Validation ────────────────────────────────────────────────────────
     if (selectedInterests.length === 0 && !interestOthers.trim()) {
       Alert.alert('Missing Interest', 'Please select at least one customer interest.');
       return;
@@ -205,16 +232,13 @@ const LeadDetailsScreen = ({
       Alert.alert('Missing Intent', 'Please select a customer intent before submitting.');
       return;
     }
-    // ─────────────────────────────────────────────────────────────────────
 
-    // ── Duplicate email check ─────────────────────────────────────────────
     try {
       const checkRes = await fetch(
         `${API_URL}?email=eq.${encodeURIComponent(email)}&select=lead_id`,
         { headers: SUPABASE_HEADERS }
       );
       const existing = await checkRes.json();
-
       if (Array.isArray(existing) && existing.length > 0) {
         Alert.alert(
           'Duplicate Lead',
@@ -227,9 +251,8 @@ const LeadDetailsScreen = ({
         return;
       }
     } catch {
-      // if duplicate check fails, proceed anyway
+      // proceed if check fails
     }
-    // ─────────────────────────────────────────────────────────────────────
 
     proceedWithSubmit(intent, allInterests);
   };
@@ -238,16 +261,7 @@ const LeadDetailsScreen = ({
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.navy }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* Header */}
-      <View
-        style={[
-          styles.header,
-          {
-            backgroundColor: theme.navy,
-            paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12,
-          },
-        ]}
-      >
+      <View style={[styles.header, { backgroundColor: theme.navy, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12 }]}>
         <Text style={[styles.headerText, { color: '#fff' }]}>Boothflow</Text>
       </View>
 
@@ -258,10 +272,7 @@ const LeadDetailsScreen = ({
       >
         <ScrollView
           style={[styles.scrollView, { backgroundColor: theme.bg }]}
-          contentContainerStyle={[
-            styles.scrollContent,
-            { paddingBottom: Platform.OS === 'ios' ? 40 : 24 },
-          ]}
+          contentContainerStyle={[styles.scrollContent, { paddingBottom: Platform.OS === 'ios' ? 40 : 24 }]}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
@@ -280,16 +291,11 @@ const LeadDetailsScreen = ({
                 return (
                   <TouchableOpacity
                     key={option}
-                    style={[
-                      styles.chip,
-                      active && { ...styles.chipActive, backgroundColor: theme.navy, borderColor: theme.navy },
-                    ]}
+                    style={[styles.chip, active && { ...styles.chipActive, backgroundColor: theme.navy, borderColor: theme.navy }]}
                     onPress={() => toggleInterest(option)}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                      {option}
-                    </Text>
+                    <Text style={[styles.chipText, active && styles.chipTextActive]}>{option}</Text>
                   </TouchableOpacity>
                 );
               })}
@@ -304,18 +310,12 @@ const LeadDetailsScreen = ({
               return (
                 <TouchableOpacity
                   key={option.label}
-                  style={[
-                    styles.intentRow,
-                    active && { ...styles.intentRowActive, borderColor: theme.accent },
-                  ]}
+                  style={[styles.intentRow, active && { ...styles.intentRowActive, borderColor: theme.accent }]}
                   onPress={() => setSelectedIntent(option.label)}
                   activeOpacity={0.7}
                 >
                   <View style={[styles.intentDot, { backgroundColor: dotColor }]} />
-                  <Text style={[
-                    styles.intentText,
-                    active && { ...styles.intentTextActive, color: theme.accent },
-                  ]}>
+                  <Text style={[styles.intentText, active && { ...styles.intentTextActive, color: theme.accent }]}>
                     {option.label}
                   </Text>
                   <View style={[styles.radioOuter, active && { borderColor: theme.accent }]}>
@@ -341,11 +341,7 @@ const LeadDetailsScreen = ({
           </SectionCard>
 
           <TouchableOpacity
-            style={[
-              styles.submitButton,
-              { backgroundColor: theme.navy },
-              loading && { opacity: 0.7 },
-            ]}
+            style={[styles.submitButton, { backgroundColor: theme.navy }, loading && { opacity: 0.7 }]}
             onPress={handleSubmit}
             activeOpacity={0.85}
             disabled={loading}
@@ -353,7 +349,7 @@ const LeadDetailsScreen = ({
             {loading ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                 <ActivityIndicator color="#fff" size="small" />
-                <Text style={styles.submitText}>Submitting...</Text>
+                <Text style={styles.submitText}>Analysing with AI...</Text>
               </View>
             ) : (
               <Text style={styles.submitText}>SUBMIT</Text>
@@ -362,33 +358,14 @@ const LeadDetailsScreen = ({
         </ScrollView>
       </KeyboardAvoidingView>
 
-      {/* Bottom Nav */}
-      <View
-        style={[
-          styles.bottomNav,
-          {
-            backgroundColor: theme.navBg,
-            borderTopColor: theme.subText + '22',
-            paddingBottom: Platform.OS === 'ios' ? 28 : 12,
-          },
-        ]}
-      >
+      <View style={[styles.bottomNav, { backgroundColor: theme.navBg, borderTopColor: theme.subText + '22', paddingBottom: Platform.OS === 'ios' ? 28 : 12 }]}>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/recent-leads' as any)}>
           <Ionicons name="person-outline" size={26} color={theme.subText} />
           <Text style={{ fontSize: 10, fontWeight: '600', color: theme.subText, marginTop: 3 }}>Leads</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={{ alignItems: 'center', marginTop: -20 }}
-          onPress={() => router.push('/qr-scanner' as any)}
-        >
-          <View style={{
-            width: 58, height: 58, borderRadius: 18,
-            backgroundColor: theme.navy,
-            alignItems: 'center', justifyContent: 'center',
-            shadowColor: '#000', shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.2, shadowRadius: 8, elevation: 6,
-          }}>
+        <TouchableOpacity style={{ alignItems: 'center', marginTop: -20 }} onPress={() => router.push('/qr-scanner' as any)}>
+          <View style={{ width: 58, height: 58, borderRadius: 18, backgroundColor: theme.navy, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 6 }}>
             <MaterialIcons name="qr-code-scanner" size={28} color="#fff" />
           </View>
         </TouchableOpacity>
