@@ -152,7 +152,7 @@ app.post('/auth/login', async (req, res) => {
         const user = result.rows[0];
 
         // ⚠️ simple check (upgrade later with bcrypt)
-        if (password !== user.password) {
+        if (password !== user.password_hash) {
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
