@@ -19,13 +19,36 @@ const API_URL  = process.env.EXPO_PUBLIC_API_URL || '';
 const ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 
 const SUPABASE_HEADERS = {
-  'apikey':        ANON_KEY,
-  'Authorization': `Bearer ${ANON_KEY}`,
-  'Content-Type':  'application/json',
+  apikey:        ANON_KEY,
+  Authorization: `Bearer ${ANON_KEY}`,
+  "Content-Type":  'application/json',
 };
 
-export default function DashboardScreen() {
+export default function DashboardScreen({ data }) {
   const router = useRouter();
+  
+  const { theme, themeIndex, setThemeIndex } = useAppTheme();
+  const [showThemePicker, setShowThemePicker] = useState(false);
+
+  const [totalLeads, setTotalLeads] = useState(0);
+  const [readyCount, setReadyCount] = useState(0);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [lastUpdated, setLastUpdated] = useState('—');
+  const [loadingStats, setLoadingStats] = useState(true);
+
+  // fetchStats here
+
+  // useEffect here
+
+  // handleScan here
+
+  return (
+    <SafeAreaView>
+      ...
+    </SafeAreaView>
+  );
+}
+
   const { theme, themeIndex, setThemeIndex } = useAppTheme();
   const [showThemePicker, setShowThemePicker] = useState(false);
 
@@ -35,13 +58,19 @@ export default function DashboardScreen() {
   const [lastUpdated,  setLastUpdated]  = useState('—');
   const [loadingStats, setLoadingStats] = useState(true);
 
-  const fetchStats = useCallback(async () => {
-    setLoadingStats(true);
-    try {
-      const response = await fetch(API_URL, {
-        headers: SUPABASE_HEADERS,  // ✅ Supabase headers
-      });
-      const data = await response.json();
+ const fetchStats = useCallback(async () => {
+  setLoadingStats(true);
+  try {
+    const response = await fetch(API_URL, {
+      headers: SUPABASE_HEADERS,
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error: ${response.status}`);
+    }
+
+    const data = await response.json();
+
 
       // ✅ Supabase returns array directly
       if (!Array.isArray(data)) throw new Error('Unexpected response');
@@ -55,16 +84,21 @@ export default function DashboardScreen() {
       setTotalLeads(total);
       setReadyCount(ready);
       setPendingCount(pending);
-      setLastUpdated(new Date().toLocaleTimeString());
-    } catch {
-      // keep previous values on error
-    } finally {
-      setLoadingStats(false);
-    }
-  }, []);
+      setLastUpdated(new Date().toLocaleTimeString()) ;
+      } catch (error) {
+  console.error('Failed to fetch stats:', error);
+} finally {
+  setLoadingStats(false);
+}
+}, []);
 
-  useEffect(() => {
-    fetchStats();
+useEffect(() => {
+  fetchStats();
+  const interval = setInterval(fetchStats, 60000);
+  return () => clearInterval(interval);
+}, [fetchStats]);
+
+        fetchStats();
     const interval = setInterval(fetchStats, 60000);
     return () => clearInterval(interval);
   }, [fetchStats]);
@@ -75,7 +109,6 @@ export default function DashboardScreen() {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-
       {/* HEADER */}
       <View style={[styles.header, { backgroundColor: theme.navy, paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight ?? 24) + 8 : 16 }]}>
         <View>
