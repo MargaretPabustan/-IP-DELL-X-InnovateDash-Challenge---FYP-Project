@@ -18,9 +18,10 @@ import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 import { useAppTheme } from '../../src/constants/useAppTheme';
 
-const API_URL  = process.env.EXPO_PUBLIC_API_URL || '';
-const ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
-const BASE_URL = API_URL.replace('/leads', '');
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+const API_URL     = process.env.EXPO_PUBLIC_API_URL || '';
+const ANON_KEY    = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const BASE_URL    = API_URL.replace('/leads', '');
 
 const SUPABASE_HEADERS = {
   'apikey':        ANON_KEY,
@@ -41,53 +42,83 @@ type Lead = {
   notes: string;
   email: string;
   phone: string;
+  confidence: number | null;
+  follow_up_required: boolean;
 };
 
 function mapLead(item: any): Lead {
   return {
-    id:        String(item.lead_id),
-    lead_id:   item.lead_id,
-    name:      item.name            || '—',
-    role:      item.title           || '—',
-    company:   item.company         || '—',
-    email:     item.email           || '—',
-    phone:     item.phone_number    || '—',
-    interests: '—',                          // ✅ fetched separately when viewing
-    intent:    item.customer_intent || 'Not specified',
-    notes:     item.AI_notes        || 'No notes.',
-    team:      item.assigned_team_id ? `Team ${item.assigned_team_id}` : 'Pending Assignment',
-    status:    (item.customer_intent || '').toLowerCase().includes('high') ? 'green' : 'red',
+    id:                 String(item.lead_id),
+    lead_id:            item.lead_id,
+    name:               item.name            || '—',
+    role:               item.title           || '—',
+    company:            item.company         || '—',
+    email:              item.email           || '—',
+    phone:              item.phone_number    || '—',
+    interests:          '—',
+    intent:             item.customer_intent || 'Not specified',
+    notes:              item.ai_notes        || 'Pending AI analysis.',
+    team:               item.assigned_team_id ? `Team ${item.assigned_team_id}` : 'Pending Assignment',
+    status:             item.status          || 'NEW',
+    confidence:         item.confidence_score || null,
+    follow_up_required: item.follow_up_required || false,
   };
+}
+
+// ─── Status badge helper ──────────────────────────────────────────────────────
+function getStatusColor(status: string) {
+  switch (status) {
+    case 'QUALIFIED': return '#22c55e';
+    case 'CONTACTED': return '#f59e0b';
+    case 'CLOSED':    return '#6366f1';
+    default:          return '#ef4444';
+  }
 }
 
 // ─── View Modal ───────────────────────────────────────────────────────────────
 function ViewModal({ lead, onClose, theme }: { lead: Lead; onClose: () => void; theme: any }) {
   const [interests, setInterests] = useState<string>('Loading...');
 
-  // Fetch interests from lead_interest_categories on open
   useEffect(() => {
     const fetchInterests = async () => {
       try {
-        const response = await fetch(
-          `${BASE_URL}/lead_interest_categories?lead_id=eq.${lead.lead_id}&select=category_id,interest_categories(category_name)`,
-          { headers: SUPABASE_HEADERS }
-        );
+        // ── Try backend first ─────────────────────────────────────────────────
+        const response = await fetch(`${BACKEND_URL}/lead_interest_categories/${lead.lead_id}`);
         const data = await response.json();
-        if (Array.isArray(data) && data.length > 0) {
-          const names = data
-            .map((item: any) => item.interest_categories?.category_name)
-            .filter(Boolean)
-            .join(', ');
+        if (data.success && Array.isArray(data.data) && data.data.length > 0) {
+          const names = data.data.map((item: any) => item.category_name).filter(Boolean).join(', ');
           setInterests(names || '—');
-        } else {
+          return;
+        }
+        setInterests('—');
+      } catch {
+        // ── Fallback to Supabase direct ───────────────────────────────────────
+        try {
+          console.warn('⚠️ Backend interests failed, falling back to Supabase');
+          const response = await fetch(
+            `${BASE_URL}/lead_interest_categories?lead_id=eq.${lead.lead_id}&select=category_id,interest_categories(category_name)`,
+            { headers: SUPABASE_HEADERS }
+          );
+          const data = await response.json();
+          if (Array.isArray(data) && data.length > 0) {
+            const names = data
+              .map((item: any) => item.interest_categories?.category_name)
+              .filter(Boolean)
+              .join(', ');
+            setInterests(names || '—');
+          } else {
+            setInterests('—');
+          }
+        } catch {
           setInterests('—');
         }
-      } catch {
-        setInterests('—');
       }
     };
     fetchInterests();
   }, [lead.lead_id]);
+
+  const statusColor = getStatusColor(lead.status);
+  const confidencePct = lead.confidence ? `${Math.round(lead.confidence * 100)}%` : '—';
 
   return (
     <Modal visible animationType="slide" transparent>
@@ -95,12 +126,15 @@ function ViewModal({ lead, onClose, theme }: { lead: Lead; onClose: () => void; 
         <View style={[modal.sheet, { backgroundColor: theme.card }]}>
           <View style={modal.handle} />
           <View style={modal.leadHeader}>
-            <View style={[modal.avatar, { backgroundColor: lead.status === 'green' ? '#22c55e' : '#ef4444' }]}>
+            <View style={[modal.avatar, { backgroundColor: statusColor }]}>
               <Ionicons name="person" size={22} color="#fff" />
             </View>
-            <View>
+            <View style={{ flex: 1 }}>
               <Text style={[modal.leadName, { color: theme.text }]}>{lead.name}</Text>
               <Text style={[modal.leadSub, { color: theme.subText }]}>{lead.role} · {lead.company}</Text>
+            </View>
+            <View style={[modal.statusBadge, { backgroundColor: statusColor + '22', borderColor: statusColor }]}>
+              <Text style={[modal.statusBadgeText, { color: statusColor }]}>{lead.status}</Text>
             </View>
           </View>
           <View style={[modal.divider, { backgroundColor: theme.bg }]} />
@@ -114,7 +148,11 @@ function ViewModal({ lead, onClose, theme }: { lead: Lead; onClose: () => void; 
           <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.intent}</Text>
           <Text style={modal.fieldLabel}>Interests</Text>
           <Text style={[modal.fieldValue, { color: theme.text }]}>{interests}</Text>
-          <Text style={modal.fieldLabel}>Notes</Text>
+          <Text style={modal.fieldLabel}>AI Confidence</Text>
+          <Text style={[modal.fieldValue, { color: theme.text }]}>{confidencePct}</Text>
+          <Text style={modal.fieldLabel}>Follow-up Required</Text>
+          <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.follow_up_required ? 'Yes' : 'No'}</Text>
+          <Text style={modal.fieldLabel}>AI Notes</Text>
           <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.notes}</Text>
           <TouchableOpacity style={[modal.closeBtn, { backgroundColor: theme.navy }]} onPress={onClose}>
             <Text style={modal.closeBtnText}>Close</Text>
@@ -136,21 +174,41 @@ function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () =
   const handleSave = async () => {
     setSaving(true);
     try {
-      const response = await fetch(`${API_URL}?lead_id=eq.${lead.lead_id}`, {
-        method: 'PATCH',
-        headers: { ...SUPABASE_HEADERS, 'Prefer': 'return=minimal' },
+      // ── Try backend first ───────────────────────────────────────────────────
+      const response = await fetch(`${BACKEND_URL}/leads/${lead.lead_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name,
           company,
           title:           role,
+          email:           lead.email,
           phone_number:    lead.phone,
           customer_intent: lead.intent,
         }),
       });
-      if (!response.ok) throw new Error('Failed to update');
+      if (!response.ok) throw new Error('Backend failed');
       onSave({ ...lead, name, role, company, notes });
-    } catch (error) {
-      Alert.alert('Error', 'Failed to update lead. Please try again.');
+    } catch {
+      // ── Fallback to Supabase direct ─────────────────────────────────────────
+      try {
+        console.warn('⚠️ Backend edit failed, falling back to Supabase');
+        const response = await fetch(`${API_URL}?lead_id=eq.${lead.lead_id}`, {
+          method: 'PATCH',
+          headers: { ...SUPABASE_HEADERS, 'Prefer': 'return=minimal' },
+          body: JSON.stringify({
+            name,
+            company,
+            title:           role,
+            phone_number:    lead.phone,
+            customer_intent: lead.intent,
+          }),
+        });
+        if (!response.ok) throw new Error('Supabase failed');
+        onSave({ ...lead, name, role, company, notes });
+      } catch {
+        Alert.alert('Error', 'Failed to update lead. Please try again.');
+      }
     } finally {
       setSaving(false);
     }
@@ -210,12 +268,22 @@ export default function RecentLeadsScreen() {
     else setLoading(true);
     setError(null);
     try {
-      const response = await fetch(API_URL, { headers: SUPABASE_HEADERS });
+      // ── Try backend first ───────────────────────────────────────────────────
+      const response = await fetch(`${BACKEND_URL}/leads`);
       const data = await response.json();
-      if (!Array.isArray(data)) throw new Error('Unexpected response');
-      setLeads(data.map(mapLead));
-    } catch (err: any) {
-      setError('Could not load leads. Pull down to retry.');
+      if (!data.success || !Array.isArray(data.data)) throw new Error('Backend failed');
+      setLeads(data.data.map(mapLead));
+    } catch {
+      // ── Fallback to Supabase direct ─────────────────────────────────────────
+      try {
+        console.warn('⚠️ Backend leads failed, falling back to Supabase');
+        const response = await fetch(API_URL, { headers: SUPABASE_HEADERS });
+        const data = await response.json();
+        if (!Array.isArray(data)) throw new Error('Supabase failed');
+        setLeads(data.map(mapLead));
+      } catch {
+        setError('Could not load leads. Pull down to retry.');
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -240,14 +308,25 @@ export default function RecentLeadsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const response = await fetch(`${API_URL}?lead_id=eq.${lead.lead_id}`, {
+              // ── Try backend first ───────────────────────────────────────────
+              const response = await fetch(`${BACKEND_URL}/leads/${lead.lead_id}`, {
                 method: 'DELETE',
-                headers: SUPABASE_HEADERS,
               });
-              if (!response.ok) throw new Error('Failed to delete');
+              if (!response.ok) throw new Error('Backend failed');
               setLeads((prev) => prev.filter((l) => l.id !== lead.id));
             } catch {
-              Alert.alert('Error', 'Failed to delete lead. Please try again.');
+              // ── Fallback to Supabase direct ─────────────────────────────────
+              try {
+                console.warn('⚠️ Backend delete failed, falling back to Supabase');
+                const response = await fetch(`${API_URL}?lead_id=eq.${lead.lead_id}`, {
+                  method: 'DELETE',
+                  headers: SUPABASE_HEADERS,
+                });
+                if (!response.ok) throw new Error('Supabase failed');
+                setLeads((prev) => prev.filter((l) => l.id !== lead.id));
+              } catch {
+                Alert.alert('Error', 'Failed to delete lead. Please try again.');
+              }
             }
           },
         },
@@ -295,12 +374,13 @@ export default function RecentLeadsScreen() {
           )}
           {leads.map((lead) => (
             <View key={lead.id} style={[styles.card, { backgroundColor: theme.card }]}>
-              <View style={[styles.avatar, { backgroundColor: lead.status === 'green' ? '#22c55e' : '#ef4444' }]}>
+              <View style={[styles.avatar, { backgroundColor: getStatusColor(lead.status) }]}>
                 <Ionicons name="person" size={20} color="#fff" />
               </View>
               <View style={styles.info}>
                 <Text style={[styles.name, { color: theme.text }]}>{lead.name}</Text>
                 <Text style={[styles.sub, { color: theme.subText }]}>{lead.role} · {lead.company}</Text>
+                <Text style={[styles.statusText, { color: getStatusColor(lead.status) }]}>{lead.status}</Text>
               </View>
               <View style={styles.actions}>
                 <TouchableOpacity style={[styles.editBtn, { borderColor: theme.navy }]} onPress={() => setEditing(lead)}>
@@ -323,12 +403,12 @@ export default function RecentLeadsScreen() {
           <Ionicons name="person-outline" size={26} color={theme.accent} />
           <Text style={[styles.navLabel, { color: theme.accent }]}>Leads</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItemCenter} onPress={() => router.push("/qr-scanner" as any)}>
+        <TouchableOpacity style={styles.navItemCenter} onPress={() => router.push("/booth/qr-scanner" as any)}>
           <View style={[styles.navCenterBtn, { backgroundColor: theme.navy }]}>
             <MaterialIcons name="qr-code-scanner" size={28} color="#fff" />
           </View>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push("/dashboardscreen" as any)}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push("/booth/dashboardscreen" as any)}>
           <FontAwesome5 name="home" size={22} color={theme.subText} />
           <Text style={[styles.navLabel, { color: theme.subText }]}>Home</Text>
         </TouchableOpacity>
@@ -357,6 +437,7 @@ const styles = StyleSheet.create({
   info: { flex: 1 },
   name: { fontSize: 14, fontWeight: "700" },
   sub: { fontSize: 12, marginTop: 2 },
+  statusText: { fontSize: 11, fontWeight: "600", marginTop: 4 },
   actions: { flexDirection: "row", alignItems: "center", gap: 6 },
   editBtn: { borderWidth: 1.5, borderRadius: 8, paddingVertical: 5, paddingHorizontal: 12 },
   editBtnText: { fontSize: 12, fontWeight: "600" },
@@ -390,4 +471,6 @@ const modal = StyleSheet.create({
   cancelText: { fontSize: 14, fontWeight: "600" },
   saveBtn: { flex: 1, borderRadius: 10, paddingVertical: 13, alignItems: "center" },
   saveBtnText: { color: "#fff", fontSize: 14, fontWeight: "700" },
+  statusBadge: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  statusBadgeText: { fontSize: 11, fontWeight: "700" },
 });
