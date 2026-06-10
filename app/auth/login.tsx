@@ -36,7 +36,7 @@ export default function LoginScreen() {
     setTimeout(() => {
       setLoading(false);
       if (employeeId === 'admin') {
-        router.replace('/admin/dashboard' as any);
+        router.replace('/admin/Admin_Dashboard');
       } else if (employeeId === 'manager') {
         router.replace('/manager/dashboard' as any);
       } else {
