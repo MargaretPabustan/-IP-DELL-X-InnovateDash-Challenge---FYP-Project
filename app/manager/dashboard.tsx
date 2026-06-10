@@ -1,67 +1,78 @@
-import { useState, useRef } from "react";
+import React, { useState, useRef } from 'react';
 import {
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend,
-  LineChart, Line,
-} from "recharts";
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  Dimensions,
+} from 'react-native';
+import {
+  PieChart,
+  Pie,
+  Cell,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  LineChart,
+  Line,
+} from 'recharts';
 
 const COLORS = {
-  new: "#5DCAA5",
-  contacted: "#378ADD",
-  qualified: "#7F77DD",
-  overdue: "#E24B4A",
+  new: '#5DCAA5',
+  contacted: '#378ADD',
+  qualified: '#7F77DD',
+  overdue: '#E24B4A',
 };
 
 const statusData = [
-  { name: "New", value: 32, color: COLORS.new },
-  { name: "Contacted", value: 27, color: COLORS.contacted },
-  { name: "Qualified", value: 22, color: COLORS.qualified },
+  { name: 'New', value: 32, color: COLORS.new },
+  { name: 'Contacted', value: 27, color: COLORS.contacted },
+  { name: 'Qualified', value: 22, color: COLORS.qualified },
 ];
 
 const repData = [
-  { rep: "Sara Tan", New: 10, Contacted: 12, Qualified: 6 },
-  { rep: "Marcus Choi", New: 8, Contacted: 10, Qualified: 6 },
-  { rep: "Raj Pinto", New: 14, Contacted: 5, Qualified: 3 },
+  { rep: 'Sara Tan', New: 10, Contacted: 12, Qualified: 6 },
+  { rep: 'Marcus Choi', New: 8, Contacted: 10, Qualified: 6 },
+  { rep: 'Raj Pinto', New: 14, Contacted: 5, Qualified: 3 },
 ];
 
 const followUpData = [
-  { day: "Mon", Sent: 5, Overdue: 1 },
-  { day: "Tue", Sent: 9, Overdue: 2 },
-  { day: "Wed", Sent: 8, Overdue: 1 },
-  { day: "Thu", Sent: 11, Overdue: 3 },
-  { day: "Fri", Sent: 4, Overdue: 2 },
+  { day: 'Mon', Sent: 5, Overdue: 1 },
+  { day: 'Tue', Sent: 9, Overdue: 2 },
+  { day: 'Wed', Sent: 8, Overdue: 1 },
+  { day: 'Thu', Sent: 11, Overdue: 3 },
+  { day: 'Fri', Sent: 4, Overdue: 2 },
 ];
 
 const metrics = [
-  { label: "Team leads", value: "74", sub: "↑ 9 this week" },
-  { label: "Follow-ups due", value: "12", sub: "4 overdue" },
-  { label: "Emails sent", value: "37", sub: "This week" },
-  { label: "Qualified", value: "22", sub: "↑ 3 this week" },
+  { label: 'Team leads', value: '74', sub: '↑ 9 this week' },
+  { label: 'Follow-ups due', value: '12', sub: '4 overdue' },
+  { label: 'Emails sent', value: '37', sub: 'This week' },
+  { label: 'Qualified', value: '22', sub: '↑ 3 this week' },
 ];
 
-const CHART_LABELS = ["Lead status", "Rep activity", "Follow-ups"];
+const CHART_LABELS = ['Lead status', 'Rep activity', 'Follow-ups'];
 
 const CustomTooltip = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
   return (
-    <div style={{
-      background: "#fff",
-      border: "0.5px solid rgba(0,0,0,0.12)",
-      borderRadius: 8,
-      padding: "8px 12px",
-      fontSize: 12,
-    }}>
-      {label && <p style={{ margin: "0 0 4px", fontWeight: 500, color: "#333" }}>{label}</p>}
+    <View style={styles.tooltip}>
+      {label && <Text style={styles.tooltipLabel}>{label}</Text>}
       {payload.map((p) => (
-        <p key={p.name} style={{ margin: "2px 0", color: p.color || p.fill }}>
-          {p.name}: <strong>{p.value}</strong>
-        </p>
+        <Text key={p.name} style={[styles.tooltipItem, { color: p.color || p.fill }]}>
+          {p.name}: {p.value}
+        </Text>
       ))}
-    </div>
+    </View>
   );
 };
 
-const PieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, name }) => {
+const PieLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent }) => {
   const RADIAN = Math.PI / 180;
   const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
   const x = cx + radius * Math.cos(-midAngle * RADIAN);
@@ -78,12 +89,12 @@ export default function ManagerDashboard() {
   const touchStartX = useRef(null);
 
   const handleTouchStart = (e) => {
-    touchStartX.current = e.touches[0].clientX;
+    touchStartX.current = e.nativeEvent.pageX;
   };
 
   const handleTouchEnd = (e) => {
     if (touchStartX.current === null) return;
-    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    const diff = touchStartX.current - e.nativeEvent.pageX;
     if (Math.abs(diff) > 40) {
       if (diff > 0) setChartIndex((i) => Math.min(i + 1, 2));
       else setChartIndex((i) => Math.max(i - 1, 0));
@@ -92,76 +103,70 @@ export default function ManagerDashboard() {
   };
 
   return (
-    <div style={{ maxWidth: 390, margin: "0 auto", fontFamily: "system-ui, sans-serif", background: "#f5f5f7", minHeight: "100vh" }}>
-
+    <View style={styles.root}>
       {/* Header */}
-      <div style={{ background: "#1a1acc", padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
-        <div style={{
-          width: 42, height: 42, borderRadius: "50%", background: "rgba(255,255,255,0.2)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          color: "#fff", fontWeight: 600, fontSize: 14, flexShrink: 0,
-        }}>RS</div>
-        <div style={{ flex: 1 }}>
-          <div style={{ color: "#fff", fontSize: 14, fontWeight: 600 }}>Team A — Manager</div>
-          <div style={{ color: "rgba(255,255,255,0.7)", fontSize: 12 }}>Roshan Selva</div>
-        </div>
-        <div style={{ color: "#fff", fontSize: 17, fontWeight: 700, letterSpacing: -0.5 }}>Boothflow</div>
-      </div>
+      <View style={styles.header}>
+        <View style={styles.avatar}>
+          <Text style={styles.avatarText}>RS</Text>
+        </View>
+        <View style={styles.headerInfo}>
+          <Text style={styles.headerTeam}>Team A — Manager</Text>
+          <Text style={styles.headerName}>Roshan Selva</Text>
+        </View>
+        <Text style={styles.logo}>Boothflow</Text>
+      </View>
 
-      <div style={{ padding: "16px 14px" }}>
-
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+      >
         {/* Metric cards */}
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 18 }}>
+        <View style={styles.metricsGrid}>
           {metrics.map((m) => (
-            <div key={m.label} style={{
-              background: "#fff", borderRadius: 12,
-              border: "0.5px solid rgba(0,0,0,0.08)", padding: "12px 14px",
-            }}>
-              <div style={{ fontSize: 11, color: "#888", marginBottom: 4 }}>{m.label}</div>
-              <div style={{ fontSize: 24, fontWeight: 600, color: "#111", lineHeight: 1 }}>{m.value}</div>
-              <div style={{ fontSize: 11, color: "#aaa", marginTop: 4 }}>{m.sub}</div>
-            </div>
+            <View key={m.label} style={styles.metricCard}>
+              <Text style={styles.metricLabel}>{m.label}</Text>
+              <Text style={styles.metricValue}>{m.value}</Text>
+              <Text style={styles.metricSub}>{m.sub}</Text>
+            </View>
           ))}
-        </div>
+        </View>
 
         {/* Chart carousel */}
-        <div style={{ background: "#fff", borderRadius: 16, border: "0.5px solid rgba(0,0,0,0.08)", padding: "16px 14px", overflow: "hidden" }}>
-
+        <View style={styles.card}>
           {/* Tab indicators */}
-          <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+          <View style={styles.tabRow}>
             {CHART_LABELS.map((label, i) => (
-              <button
+              <TouchableOpacity
                 key={label}
-                onClick={() => setChartIndex(i)}
-                style={{
-                  flex: 1, padding: "6px 0", borderRadius: 8, border: "none", cursor: "pointer",
-                  fontSize: 11, fontWeight: 600,
-                  background: chartIndex === i ? "#1a1acc" : "rgba(0,0,0,0.05)",
-                  color: chartIndex === i ? "#fff" : "#888",
-                  transition: "all 0.2s",
-                }}
-              >{label}</button>
+                onPress={() => setChartIndex(i)}
+                style={[styles.tab, chartIndex === i && styles.tabActive]}
+              >
+                <Text style={[styles.tabText, chartIndex === i && styles.tabTextActive]}>
+                  {label}
+                </Text>
+              </TouchableOpacity>
             ))}
-          </div>
+          </View>
 
           {/* Swipe area */}
-          <div
+          <View
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
-            style={{ minHeight: 260 }}
+            style={styles.chartArea}
           >
             {/* Pie chart */}
             {chartIndex === 0 && (
-              <div>
-                <div style={{ fontSize: 12, color: "#888", marginBottom: 10 }}>Lead status breakdown · 74 total</div>
-                <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
+              <View>
+                <Text style={styles.chartSubtitle}>Lead status breakdown · 74 total</Text>
+                <View style={styles.legend}>
                   {statusData.map((s) => (
-                    <span key={s.name} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#555" }}>
-                      <span style={{ width: 10, height: 10, borderRadius: 2, background: s.color, display: "inline-block" }} />
-                      {s.name} {s.value}
-                    </span>
+                    <View key={s.name} style={styles.legendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: s.color }]} />
+                      <Text style={styles.legendText}>{s.name} {s.value}</Text>
+                    </View>
                   ))}
-                </div>
+                </View>
                 <ResponsiveContainer width="100%" height={220}>
                   <PieChart>
                     <Pie
@@ -179,134 +184,430 @@ export default function ManagerDashboard() {
                     <Tooltip content={<CustomTooltip />} />
                   </PieChart>
                 </ResponsiveContainer>
-              </div>
+              </View>
             )}
 
             {/* Bar chart */}
             {chartIndex === 1 && (
-              <div>
-                <div style={{ fontSize: 12, color: "#888", marginBottom: 10 }}>Leads by rep and status</div>
-                <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
-                  {[["New", COLORS.new], ["Contacted", COLORS.contacted], ["Qualified", COLORS.qualified]].map(([name, color]) => (
-                    <span key={name} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#555" }}>
-                      <span style={{ width: 10, height: 10, borderRadius: 2, background: color, display: "inline-block" }} />
-                      {name}
-                    </span>
+              <View>
+                <Text style={styles.chartSubtitle}>Leads by rep and status</Text>
+                <View style={styles.legend}>
+                  {[['New', COLORS.new], ['Contacted', COLORS.contacted], ['Qualified', COLORS.qualified]].map(([name, color]) => (
+                    <View key={name} style={styles.legendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: color }]} />
+                      <Text style={styles.legendText}>{name}</Text>
+                    </View>
                   ))}
-                </div>
+                </View>
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart data={repData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" vertical={false} />
-                    <XAxis dataKey="rep" tick={{ fontSize: 11, fill: "#999" }} tickLine={false} axisLine={false}
-                      tickFormatter={(v) => v.split(" ")[0]} />
-                    <YAxis tick={{ fontSize: 11, fill: "#999" }} tickLine={false} axisLine={false} />
+                    <XAxis
+                      dataKey="rep"
+                      tick={{ fontSize: 11, fill: '#999' }}
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(v) => v.split(' ')[0]}
+                    />
+                    <YAxis tick={{ fontSize: 11, fill: '#999' }} tickLine={false} axisLine={false} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Bar dataKey="New" stackId="a" fill={COLORS.new} radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="New" stackId="a" fill={COLORS.new} />
                     <Bar dataKey="Contacted" stackId="a" fill={COLORS.contacted} />
                     <Bar dataKey="Qualified" stackId="a" fill={COLORS.qualified} radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
-              </div>
+              </View>
             )}
 
             {/* Line chart */}
             {chartIndex === 2 && (
-              <div>
-                <div style={{ fontSize: 12, color: "#888", marginBottom: 10 }}>Follow-ups this week</div>
-                <div style={{ display: "flex", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
-                  {[["Sent", COLORS.contacted], ["Overdue", COLORS.overdue]].map(([name, color]) => (
-                    <span key={name} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12, color: "#555" }}>
-                      <span style={{ width: 10, height: 10, borderRadius: 2, background: color, display: "inline-block" }} />
-                      {name}
-                    </span>
+              <View>
+                <Text style={styles.chartSubtitle}>Follow-ups this week</Text>
+                <View style={styles.legend}>
+                  {[['Sent', COLORS.contacted], ['Overdue', COLORS.overdue]].map(([name, color]) => (
+                    <View key={name} style={styles.legendItem}>
+                      <View style={[styles.legendDot, { backgroundColor: color }]} />
+                      <Text style={styles.legendText}>{name}</Text>
+                    </View>
                   ))}
-                </div>
+                </View>
                 <ResponsiveContainer width="100%" height={220}>
                   <LineChart data={followUpData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
-                    <XAxis dataKey="day" tick={{ fontSize: 11, fill: "#999" }} tickLine={false} axisLine={false} />
-                    <YAxis tick={{ fontSize: 11, fill: "#999" }} tickLine={false} axisLine={false} />
+                    <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#999' }} tickLine={false} axisLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: '#999' }} tickLine={false} axisLine={false} />
                     <Tooltip content={<CustomTooltip />} />
-                    <Line type="monotone" dataKey="Sent" stroke={COLORS.contacted} strokeWidth={2.5}
-                      dot={{ r: 4, fill: COLORS.contacted }} activeDot={{ r: 6 }} />
-                    <Line type="monotone" dataKey="Overdue" stroke={COLORS.overdue} strokeWidth={2.5}
-                      strokeDasharray="5 3" dot={{ r: 4, fill: COLORS.overdue }} activeDot={{ r: 6 }} />
+                    <Line
+                      type="monotone" dataKey="Sent"
+                      stroke={COLORS.contacted} strokeWidth={2.5}
+                      dot={{ r: 4, fill: COLORS.contacted }} activeDot={{ r: 6 }}
+                    />
+                    <Line
+                      type="monotone" dataKey="Overdue"
+                      stroke={COLORS.overdue} strokeWidth={2.5}
+                      strokeDasharray="5 3"
+                      dot={{ r: 4, fill: COLORS.overdue }} activeDot={{ r: 6 }}
+                    />
                   </LineChart>
                 </ResponsiveContainer>
-              </div>
+              </View>
             )}
-          </div>
+          </View>
 
           {/* Dot indicators */}
-          <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 12 }}>
+          <View style={styles.dotsRow}>
             {[0, 1, 2].map((i) => (
-              <div key={i} onClick={() => setChartIndex(i)} style={{
-                width: chartIndex === i ? 20 : 6,
-                height: 6, borderRadius: 3, cursor: "pointer",
-                background: chartIndex === i ? "#1a1acc" : "rgba(0,0,0,0.15)",
-                transition: "all 0.25s",
-              }} />
+              <TouchableOpacity key={i} onPress={() => setChartIndex(i)}>
+                <View style={[styles.dot, chartIndex === i && styles.dotActive]} />
+              </TouchableOpacity>
             ))}
-          </div>
-        </div>
+          </View>
+        </View>
 
         {/* Team breakdown */}
-        <div style={{ background: "#fff", borderRadius: 16, border: "0.5px solid rgba(0,0,0,0.08)", padding: "16px 14px", marginTop: 14 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 12 }}>Team breakdown</div>
+        <View style={[styles.card, styles.cardSpaced]}>
+          <Text style={styles.sectionTitle}>Team breakdown</Text>
           {[
-            { initials: "ST", name: "Sara Tan", sub: "28 leads · 7 qualified", pct: "25%", color: "#5DCAA5" },
-            { initials: "MC", name: "Marcus Choi", sub: "24 leads · 6 qualified", pct: "25%", color: "#378ADD" },
-            { initials: "RP", name: "Raj Pinto", sub: "22 leads · 5 qualified", pct: "23%", color: "#7F77DD" },
-          ].map((rep) => (
-            <div key={rep.name} style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-              <div style={{
-                width: 34, height: 34, borderRadius: "50%",
-                background: rep.color + "22", color: rep.color,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: 12, fontWeight: 600, flexShrink: 0,
-              }}>{rep.initials}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 500, color: "#111" }}>{rep.name}</div>
-                <div style={{ fontSize: 11, color: "#aaa" }}>{rep.sub}</div>
-              </div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: rep.color }}>{rep.pct}</div>
-            </div>
+            { initials: 'ST', name: 'Sara Tan', sub: '28 leads · 7 qualified', pct: '25%', color: '#5DCAA5' },
+            { initials: 'MC', name: 'Marcus Choi', sub: '24 leads · 6 qualified', pct: '25%', color: '#378ADD' },
+            { initials: 'RP', name: 'Raj Pinto', sub: '22 leads · 5 qualified', pct: '23%', color: '#7F77DD' },
+          ].map((rep, idx) => (
+            <View key={rep.name} style={[styles.repRow, idx < 2 && styles.repRowSpaced]}>
+              <View style={[styles.repAvatar, { backgroundColor: rep.color + '22' }]}>
+                <Text style={[styles.repAvatarText, { color: rep.color }]}>{rep.initials}</Text>
+              </View>
+              <View style={styles.repInfo}>
+                <Text style={styles.repName}>{rep.name}</Text>
+                <Text style={styles.repSub}>{rep.sub}</Text>
+              </View>
+              <Text style={[styles.repPct, { color: rep.color }]}>{rep.pct}</Text>
+            </View>
           ))}
-        </div>
+        </View>
 
         {/* Recent activity */}
-        <div style={{ background: "#fff", borderRadius: 16, border: "0.5px solid rgba(0,0,0,0.08)", padding: "16px 14px", marginTop: 14 }}>
-          <div style={{ fontSize: 11, fontWeight: 600, color: "#888", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 12 }}>Recent activity</div>
+        <View style={[styles.card, styles.cardSpaced, styles.cardBottomPadding]}>
+          <Text style={styles.sectionTitle}>Recent activity</Text>
           {[
-            { dot: COLORS.new, text: "Apex Corp → Contacted", sub: "Sara Tan · 2m ago" },
-            { dot: COLORS.contacted, text: "Follow-up sent to Redfin", sub: "Marcus Choi · 8m ago" },
-            { dot: COLORS.qualified, text: "Note added to Blog Labs", sub: "Raj Pinto · 23m ago" },
+            { dot: COLORS.new, text: 'Apex Corp → Contacted', sub: 'Sara Tan · 2m ago' },
+            { dot: COLORS.contacted, text: 'Follow-up sent to Redfin', sub: 'Marcus Choi · 8m ago' },
+            { dot: COLORS.qualified, text: 'Note added to Blog Labs', sub: 'Raj Pinto · 23m ago' },
           ].map((item, i) => (
-            <div key={i} style={{ display: "flex", gap: 10, marginBottom: i < 2 ? 12 : 0, alignItems: "flex-start" }}>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", background: item.dot, marginTop: 4, flexShrink: 0 }} />
-              <div>
-                <div style={{ fontSize: 13, color: "#222" }}>{item.text}</div>
-                <div style={{ fontSize: 11, color: "#aaa" }}>{item.sub}</div>
-              </div>
-            </div>
+            <View key={i} style={[styles.activityRow, i < 2 && styles.activityRowSpaced]}>
+              <View style={[styles.activityDot, { backgroundColor: item.dot }]} />
+              <View>
+                <Text style={styles.activityText}>{item.text}</Text>
+                <Text style={styles.activitySub}>{item.sub}</Text>
+              </View>
+            </View>
           ))}
-        </div>
-
-      </div>
+        </View>
+      </ScrollView>
 
       {/* Bottom nav */}
-      <div style={{
-        position: "sticky", bottom: 0,
-        background: "#fff", borderTop: "0.5px solid rgba(0,0,0,0.08)",
-        display: "flex", padding: "10px 0 16px",
-      }}>
-        {["Dashboard", "Leads", "Emails", "Export"].map((tab, i) => (
-          <button key={tab} style={{
-            flex: 1, border: "none", background: "none", cursor: "pointer",
-            fontSize: 12, color: i === 0 ? "#1a1acc" : "#999", fontWeight: i === 0 ? 600 : 400, padding: "4px 0",
-          }}>{tab}</button>
+      <View style={styles.bottomNav}>
+        {['Dashboard', 'Leads', 'Emails', 'Export'].map((tab, i) => (
+          <TouchableOpacity key={tab} style={styles.navItem}>
+            <Text style={[styles.navText, i === 0 && styles.navTextActive]}>{tab}</Text>
+          </TouchableOpacity>
         ))}
-      </div>
-    </div>
+      </View>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  root: {
+    maxWidth: 390,
+    alignSelf: 'center',
+    backgroundColor: '#f5f5f7',
+    flex: 1,
+  },
+
+  // Header
+  header: {
+    backgroundColor: '#1a1acc',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  avatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  avatarText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  headerInfo: {
+    flex: 1,
+  },
+  headerTeam: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  headerName: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12,
+  },
+  logo: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '700',
+    letterSpacing: -0.5,
+  },
+
+  // Scroll
+  scroll: {
+    flex: 1,
+  },
+  scrollContent: {
+    padding: 14,
+    paddingBottom: 90,
+  },
+
+  // Metrics
+  metricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 18,
+  },
+  metricCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 0.5,
+    borderColor: 'rgba(0,0,0,0.08)',
+    padding: 12,
+    paddingHorizontal: 14,
+    width: '47.5%',
+  },
+  metricLabel: {
+    fontSize: 11,
+    color: '#888',
+    marginBottom: 4,
+  },
+  metricValue: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#111',
+    lineHeight: 28,
+  },
+  metricSub: {
+    fontSize: 11,
+    color: '#aaa',
+    marginTop: 4,
+  },
+
+  // Card
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    borderWidth: 0.5,
+    borderColor: 'rgba(0,0,0,0.08)',
+    padding: 16,
+    paddingHorizontal: 14,
+    overflow: 'hidden',
+  },
+  cardSpaced: {
+    marginTop: 14,
+  },
+  cardBottomPadding: {
+    paddingBottom: 4,
+  },
+
+  // Chart tabs
+  tabRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 14,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    alignItems: 'center',
+  },
+  tabActive: {
+    backgroundColor: '#1a1acc',
+  },
+  tabText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#888',
+  },
+  tabTextActive: {
+    color: '#fff',
+  },
+  chartArea: {
+    minHeight: 260,
+  },
+  chartSubtitle: {
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 10,
+  },
+  legend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 10,
+  },
+  legendItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  legendDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 2,
+  },
+  legendText: {
+    fontSize: 12,
+    color: '#555',
+  },
+
+  // Dot indicators
+  dotsRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 12,
+  },
+  dot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(0,0,0,0.15)',
+  },
+  dotActive: {
+    width: 20,
+    backgroundColor: '#1a1acc',
+  },
+
+  // Team breakdown
+  sectionTitle: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#888',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 12,
+  },
+  repRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  repRowSpaced: {
+    marginBottom: 12,
+  },
+  repAvatar: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  repAvatarText: {
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  repInfo: {
+    flex: 1,
+  },
+  repName: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#111',
+  },
+  repSub: {
+    fontSize: 11,
+    color: '#aaa',
+  },
+  repPct: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  // Recent activity
+  activityRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 10,
+  },
+  activityRowSpaced: {
+    marginBottom: 12,
+  },
+  activityDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginTop: 4,
+  },
+  activityText: {
+    fontSize: 13,
+    color: '#222',
+  },
+  activitySub: {
+    fontSize: 11,
+    color: '#aaa',
+  },
+
+  // Tooltip
+  tooltip: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.12)',
+    borderRadius: 8,
+    padding: 10,
+  },
+  tooltipLabel: {
+    marginBottom: 4,
+    fontWeight: '500',
+    color: '#333',
+    fontSize: 13,
+  },
+  tooltipItem: {
+    marginVertical: 2,
+    fontSize: 12,
+  },
+
+  // Bottom nav
+  bottomNav: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#fff',
+    borderTopWidth: 0.5,
+    borderTopColor: 'rgba(0,0,0,0.08)',
+    flexDirection: 'row',
+    paddingTop: 10,
+    paddingBottom: 16,
+  },
+  navItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  navText: {
+    fontSize: 12,
+    color: '#999',
+    fontWeight: '400',
+  },
+  navTextActive: {
+    color: '#1a1acc',
+    fontWeight: '600',
+  },
+});
