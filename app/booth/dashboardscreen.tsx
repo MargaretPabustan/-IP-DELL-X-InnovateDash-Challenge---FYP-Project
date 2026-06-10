@@ -199,7 +199,7 @@ export default function DashboardScreen() {
 
         {/* EMPTY STATE */}
         {!loadingStats && recentScans.length === 0 && (
-          <View style={[styles.emptyCard, { backgroundColor: theme.card }]}>
+          <View style={[styles.emptyCard, { backgroundColor: theme.card, marginTop: 32 }]}>
             <Ionicons name="scan-outline" size={36} color={theme.subText} />
             <Text style={[styles.emptyText, { color: theme.subText }]}>No scans yet today</Text>
             <Text style={[styles.emptySubText, { color: theme.subText }]}>Start scanning to capture leads</Text>

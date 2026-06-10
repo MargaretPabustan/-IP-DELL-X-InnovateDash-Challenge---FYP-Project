@@ -3,11 +3,41 @@ require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
+const jwt = require('jsonwebtoken');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const app = express();
 app.use(express.json());
 app.use(cors());
+
+// - JWT AUTH MIDDLEWARE
+function authenticateToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+        return res.status(401).json({ message: 'No token provided' });
+    }
+
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+        if (err) {
+            return res.status(403).json({ message: 'Invalid token' });
+        }
+
+        req.user = user;
+        next();
+    });
+}
+
+// ROLE MIDDLEWARE - Decides authenticated user's permissions
+function authorizeRoles(...roles) {
+    return (req, res, next) => {
+        if (!roles.includes(req.user.role)) {
+            return res.status(403).json({ message: 'Forbidden' });
+        }
+        next();
+    };
+}
 
 // ── SUPABASE CONNECTION ───────────────────────────────────────────────────────
 const pool = new Pool({
@@ -105,7 +135,51 @@ app.get('/', (req, res) => {
     });
 });
 
-// ── LEADS ─────────────────────────────────────────────────────────────────────
+//LOGIN ROUTES - Authenticates User
+app.post('/auth/login', async (req, res) => {
+    const { email, password } = req.body;
+
+    try {
+        const result = await pool.query(
+            'SELECT * FROM users WHERE email=$1',
+            [email]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+
+        const user = result.rows[0];
+
+        // ⚠️ simple check (upgrade later with bcrypt)
+        if (password !== user.password_hash) {
+            return res.status(401).json({ message: 'Invalid credentials' });
+        }
+
+        const token = jwt.sign(
+            { id: user.user_id, role: user.role, team_id: user.team_id },
+            process.env.JWT_SECRET,
+            { expiresIn: '8h' }
+        );
+
+        res.json({
+            token,
+            role: user.role
+        });
+
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+///auth/me - Returns authenticated user's info
+app.get('/auth/me', authenticateToken, (req, res) => {
+    res.json(req.user);
+});
+
+
+// ── LEADS ───────────────────────────────────────────────────────────────────── 
+app.use('/leads', authenticateToken); //Protects all /leads routes with JWT authentication
+app.use('/leads',authorizeRoles('admin','manager','rep')); //Protects all /leads routes with JWT authentication
 
 app.get('/leads', async (req, res) => {
     try {
@@ -443,6 +517,7 @@ Return ONLY valid JSON in this exact format, no extra text:
         res.status(500).json({ success: false, message: 'AI analysis failed' });
     }
 });
+
 
 // ── START SERVER ──────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
