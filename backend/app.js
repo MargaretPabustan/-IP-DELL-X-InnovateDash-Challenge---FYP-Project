@@ -390,6 +390,159 @@ app.delete('/teams/:id', async (req, res) => {
     }
 });
 
+// - MANAGER ROUTES ────────────────────────────────────────────────────────
+app.use('/manager', authenticateToken);
+app.use('/manager', authorizeRoles('admin', 'manager'));
+app.get('/manager/dashboard', async (req, res) => {
+    try {
+        const totalLeads = await pool.query('SELECT COUNT(*) FROM leads');
+        const qualified = await pool.query("SELECT COUNT(*) FROM leads WHERE status='QUALIFIED'");
+        const contacted = await pool.query("SELECT COUNT(*) FROM leads WHERE status='CONTACTED'");
+        const newLeads = await pool.query("SELECT COUNT(*) FROM leads WHERE status='NEW'");
+
+        const followups = await pool.query(`
+            SELECT COUNT(*) 
+            FROM lead_activity_logs 
+            WHERE activity_type = 'FOLLOWUP_SENT'
+        `);
+
+        const emails = await pool.query(`
+            SELECT COUNT(*) 
+            FROM lead_activity_logs 
+            WHERE activity_type = 'EMAIL_SENT'
+        `);
+
+        res.json({
+            success: true,
+            data: {
+                total_leads: +totalLeads.rows[0].count,
+                qualified: +qualified.rows[0].count,
+                contacted: +contacted.rows[0].count,
+                new_leads: +newLeads.rows[0].count,
+                followups_done: +followups.rows[0].count,
+                emails_sent: +emails.rows[0].count
+            }
+        });
+
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+app.get('/manager/leads', async (req, res) => {
+    const { status } = req.query;
+
+    try {
+        let query = `SELECT * FROM leads`;
+        let params = [];
+
+        if (status) {
+            query += ` WHERE status = $1`;
+            params.push(status);
+        }
+
+        query += ` ORDER BY created_at DESC`;
+
+        const result = await pool.query(query, params);
+
+        res.json({
+            success: true,
+            data: result.rows
+        });
+
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+app.get('/manager/emails', async (req, res) => {
+    try {
+        // Sent emails
+        const sent = await pool.query(`
+            SELECT *
+            FROM lead_activity_logs
+            WHERE activity_type = 'EMAIL_SENT'
+            ORDER BY created_at DESC
+        `);
+
+        // Emails sent this week
+        const weekly = await pool.query(`
+            SELECT COUNT(*)
+            FROM lead_activity_logs
+            WHERE activity_type = 'EMAIL_SENT'
+            AND created_at >= NOW() - INTERVAL '7 days'
+        `);
+
+        // Overdue followups (based on due_date)
+        const overdue = await pool.query(`
+            SELECT COUNT(*)
+            FROM lead_followups
+            WHERE followup_status = 'pending'
+            AND due_date < CURRENT_DATE
+        `);
+
+        res.json({
+            success: true,
+            data: {
+                sent: sent.rows,
+                sentThisWeek: weekly.rows[0].count,
+                overdue: overdue.rows[0].count
+            }
+        });
+
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+app.get('/manager/export/leads', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT 
+                lead_id,
+                name,
+                company,
+                title,
+                email,
+                phone_number,
+                status,
+                created_at
+            FROM leads
+            ORDER BY created_at DESC
+        `);
+
+        res.json({
+            success: true,
+            data: result.rows
+        });
+
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+app.get('/manager/activity', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT 
+                la.activity_id,
+                la.activity_type,
+                la.activity_description,
+                la.created_at,
+                l.name AS lead_name,
+                l.company
+            FROM lead_activity_logs la
+            LEFT JOIN leads l ON la.lead_id = l.lead_id
+            ORDER BY la.created_at DESC
+            LIMIT 100
+        `);
+
+        res.json({ success: true, data: result.rows });
+
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 // ── GEMINI AI ANALYSIS ────────────────────────────────────────────────────────
 
 app.post('/analyze-lead/:id', async (req, res) => {
