@@ -35,42 +35,12 @@ export default function LoginScreen() {
 
     setLoading(true);
 
-    try {
-      // ── Debug logs ───────────────────────────────────────────────────────
-      console.log('🔐 Attempting login...');
-      console.log('BACKEND_URL:', BACKEND_URL || '❌ MISSING');
-      console.log('Email:', employeeId.trim());
-      console.log('Endpoint:', `${BACKEND_URL}/auth/login`);
-
-      // ── Call real backend ────────────────────────────────────────────────
-      const res = await fetch(`${BACKEND_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email:    employeeId.trim(),
-          password: password.trim(),
-        }),
-      });
-
-      console.log('📡 Response status:', res.status);
-
-      const data = await res.json();
-      console.log('📦 Response data:', JSON.stringify(data));
-
-      if (!res.ok) {
-        Alert.alert('Login Failed', data.message || 'Invalid credentials.');
-        return;
-      }
-
-      // ── Store token securely ─────────────────────────────────────────────
-      await SecureStore.setItemAsync('token', data.token);
-      await SecureStore.setItemAsync('role', data.role);
-      console.log('✅ Token stored, role:', data.role);
-
-      // ── Route based on role ──────────────────────────────────────────────
-      if (data.role === 'admin') {
+    // ── TEMP: hardcoded for testing ──────────────────────────────────────
+    setTimeout(() => {
+      setLoading(false);
+      if (employeeId === 'admin') {
         router.replace('/admin/dashboard' as any);
-      } else if (data.role === 'manager') {
+      } else if (employeeId === 'manager') {
         router.replace('/manager/dashboard' as any);
       } else {
         router.replace('/booth/dashboardscreen' as any);
