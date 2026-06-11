@@ -391,9 +391,7 @@ app.delete('/teams/:id', async (req, res) => {
 });
 
 // - MANAGER ROUTES ────────────────────────────────────────────────────────
-app.use('/manager', authenticateToken);
-app.use('/manager', authorizeRoles('admin', 'manager'));
-app.get('/manager/dashboard', async (req, res) => {
+app.get('/manager/dashboard', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
         const totalLeads = await pool.query('SELECT COUNT(*) FROM leads');
         const qualified = await pool.query("SELECT COUNT(*) FROM leads WHERE status='QUALIFIED'");
@@ -429,7 +427,7 @@ app.get('/manager/dashboard', async (req, res) => {
     }
 });
 
-app.get('/manager/leads', async (req, res) => {
+app.get('/manager/leads', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     const { status } = req.query;
 
     try {
@@ -455,7 +453,7 @@ app.get('/manager/leads', async (req, res) => {
     }
 });
 
-app.get('/manager/emails', async (req, res) => {
+app.get('/manager/emails', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
         // Sent emails
         const sent = await pool.query(`
@@ -494,7 +492,7 @@ app.get('/manager/emails', async (req, res) => {
         res.status(500).json({ success: false, message: err.message });
     }
 });
-app.get('/manager/export/leads', async (req, res) => {
+app.get('/manager/export/leads', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
         const result = await pool.query(`
             SELECT 
@@ -520,7 +518,7 @@ app.get('/manager/export/leads', async (req, res) => {
     }
 });
 
-app.get('/manager/activity', async (req, res) => {
+app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
         const result = await pool.query(`
             SELECT 
@@ -543,11 +541,6 @@ app.get('/manager/activity', async (req, res) => {
     }
 });
 // - ADMIN ROUTES ───────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────
-// ADMIN MIDDLEWARE (MUST BE ABOVE ALL ADMIN ROUTES)
-// ─────────────────────────────────────────────────────────────
-app.use('/admin', authenticateToken);
-app.use('/admin', authorizeRoles('admin'));
 
 
 // ─────────────────────────────────────────────────────────────
@@ -555,7 +548,7 @@ app.use('/admin', authorizeRoles('admin'));
 // ─────────────────────────────────────────────────────────────
 
 // GET all users
-app.get('/admin/users', async (req, res) => {
+app.get('/admin/users', authenticateToken, authorizeRoles('admin'), async (req, res) => {
     try {
         const result = await pool.query(`
             SELECT user_id, full_name, email, role, team_id, is_active, created_at
@@ -572,7 +565,7 @@ app.get('/admin/users', async (req, res) => {
 
 
 // CREATE user
-app.post('/admin/users', async (req, res) => {
+app.post('/admin/users', authenticateToken, authorizeRoles('admin'), async (req, res) => {
     const { full_name, email, password_hash, role, team_id } = req.body;
 
     try {
@@ -594,7 +587,7 @@ app.post('/admin/users', async (req, res) => {
 
 
 // UPDATE user
-app.put('/admin/users/:id', async (req, res) => {
+app.put('/admin/users/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
     const { full_name, email, role, team_id, is_active } = req.body;
 
     try {
@@ -613,7 +606,7 @@ app.put('/admin/users/:id', async (req, res) => {
 
 
 // DELETE user
-app.delete('/admin/users/:id', async (req, res) => {
+app.delete('/admin/users/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
     try {
         await pool.query(`DELETE FROM users WHERE user_id=$1`, [req.params.id]);
 
@@ -630,7 +623,7 @@ app.delete('/admin/users/:id', async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 
 // GET all teams
-app.get('/admin/teams', async (req, res) => {
+app.get('/admin/teams', authenticateToken, authorizeRoles('admin'), async (req, res) => {
     try {
         const result = await pool.query(`SELECT * FROM teams ORDER BY team_id DESC`);
         res.json({ success: true, data: result.rows });
@@ -641,7 +634,7 @@ app.get('/admin/teams', async (req, res) => {
 
 
 // CREATE team
-app.post('/admin/teams', async (req, res) => {
+app.post('/admin/teams', authenticateToken, authorizeRoles('admin'), async (req, res) => {
     const { team_name, territory, description } = req.body;
 
     try {
@@ -659,7 +652,7 @@ app.post('/admin/teams', async (req, res) => {
 
 
 // UPDATE team
-app.put('/admin/teams/:id', async (req, res) => {
+app.put('/admin/teams/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
     const { team_name, territory, description } = req.body;
 
     try {
@@ -678,7 +671,7 @@ app.put('/admin/teams/:id', async (req, res) => {
 
 
 // DELETE team
-app.delete('/admin/teams/:id', async (req, res) => {
+app.delete('/admin/teams/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
     try {
         await pool.query(`DELETE FROM teams WHERE team_id=$1`, [req.params.id]);
 
@@ -695,7 +688,7 @@ app.delete('/admin/teams/:id', async (req, res) => {
 // ⚠️ REQUIRES system_activity_logs TABLE
 // ─────────────────────────────────────────────────────────────
 
-app.get('/admin/activitylogs', async (req, res) => {
+app.get('/admin/activitylogs', authenticateToken, authorizeRoles('admin'), async (req, res) => {
     try {
         const result = await pool.query(`
             SELECT 
@@ -719,6 +712,39 @@ app.get('/admin/activitylogs', async (req, res) => {
         res.status(500).json({ success: false, message: err.message });
     }
 });
+// ADMIN MANAGER PERMISSIONS ROUTES - Only accessible by admin users to manage manager accounts and what permissions they can perform
+
+app.put(
+  "/admin/users/:id/permissions",
+  authenticateToken,
+  authorizeRoles("admin"),
+  async (req, res) => {
+    try {
+      const { permissions } = req.body;
+
+      const result = await pool.query(
+        `UPDATE users 
+         SET permissions = $1::jsonb 
+         WHERE user_id = $2
+         RETURNING user_id, permissions`,
+        [JSON.stringify(permissions), req.params.id]
+      );
+
+      if (result.rows.length === 0) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      res.json({
+        success: true,
+        message: "Permissions updated",
+        data: result.rows[0]
+      });
+
+    } catch (err) {
+      res.status(500).json({ message: err.message });
+    }
+  }
+);
 
 
 // ── GEMINI AI ANALYSIS ────────────────────────────────────────────────────────
