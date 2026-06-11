@@ -542,6 +542,184 @@ app.get('/manager/activity', async (req, res) => {
         res.status(500).json({ success: false, message: err.message });
     }
 });
+// - ADMIN ROUTES ───────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// ADMIN MIDDLEWARE (MUST BE ABOVE ALL ADMIN ROUTES)
+// ─────────────────────────────────────────────────────────────
+app.use('/admin', authenticateToken);
+app.use('/admin', authorizeRoles('admin'));
+
+
+// ─────────────────────────────────────────────────────────────
+// USERS (ADMIN CRUD)
+// ─────────────────────────────────────────────────────────────
+
+// GET all users
+app.get('/admin/users', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT user_id, full_name, email, role, team_id, is_active, created_at
+            FROM users
+            ORDER BY user_id DESC
+        `);
+
+        res.json({ success: true, data: result.rows });
+
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+
+// CREATE user
+app.post('/admin/users', async (req, res) => {
+    const { full_name, email, password_hash, role, team_id } = req.body;
+
+    try {
+        const result = await pool.query(`
+            INSERT INTO users (full_name, email, password_hash, role, team_id)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING user_id
+        `, [full_name, email, password_hash, role, team_id]);
+
+        res.status(201).json({
+            success: true,
+            user_id: result.rows[0].user_id
+        });
+
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+
+// UPDATE user
+app.put('/admin/users/:id', async (req, res) => {
+    const { full_name, email, role, team_id, is_active } = req.body;
+
+    try {
+        await pool.query(`
+            UPDATE users
+            SET full_name=$1, email=$2, role=$3, team_id=$4, is_active=$5
+            WHERE user_id=$6
+        `, [full_name, email, role, team_id, is_active, req.params.id]);
+
+        res.json({ success: true, message: 'User updated' });
+
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+
+// DELETE user
+app.delete('/admin/users/:id', async (req, res) => {
+    try {
+        await pool.query(`DELETE FROM users WHERE user_id=$1`, [req.params.id]);
+
+        res.json({ success: true, message: 'User deleted' });
+
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+
+// ─────────────────────────────────────────────────────────────
+// TEAMS (ADMIN CRUD)
+// ─────────────────────────────────────────────────────────────
+
+// GET all teams
+app.get('/admin/teams', async (req, res) => {
+    try {
+        const result = await pool.query(`SELECT * FROM teams ORDER BY team_id DESC`);
+        res.json({ success: true, data: result.rows });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+
+// CREATE team
+app.post('/admin/teams', async (req, res) => {
+    const { team_name, territory, description } = req.body;
+
+    try {
+        await pool.query(`
+            INSERT INTO teams (team_name, territory, description)
+            VALUES ($1, $2, $3)
+        `, [team_name, territory, description]);
+
+        res.json({ success: true, message: 'Team created' });
+
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+
+// UPDATE team
+app.put('/admin/teams/:id', async (req, res) => {
+    const { team_name, territory, description } = req.body;
+
+    try {
+        await pool.query(`
+            UPDATE teams
+            SET team_name=$1, territory=$2, description=$3
+            WHERE team_id=$4
+        `, [team_name, territory, description, req.params.id]);
+
+        res.json({ success: true, message: 'Team updated' });
+
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+
+// DELETE team
+app.delete('/admin/teams/:id', async (req, res) => {
+    try {
+        await pool.query(`DELETE FROM teams WHERE team_id=$1`, [req.params.id]);
+
+        res.json({ success: true, message: 'Team deleted' });
+
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+
+// ─────────────────────────────────────────────────────────────
+// SYSTEM ACTIVITY LOGS (ADMIN AUDIT LOG)
+// ⚠️ REQUIRES system_activity_logs TABLE
+// ─────────────────────────────────────────────────────────────
+
+app.get('/admin/activitylogs', async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT 
+                sa.activity_id,
+                sa.action,
+                sa.entity_type,
+                sa.entity_id,
+                sa.description,
+                sa.created_at,
+                u.full_name AS user_name,
+                u.email
+            FROM system_activity_logs sa
+            LEFT JOIN users u ON sa.user_id = u.user_id
+            ORDER BY sa.created_at DESC
+            LIMIT 200
+        `);
+
+        res.json({ success: true, data: result.rows });
+
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
 
 // ── GEMINI AI ANALYSIS ────────────────────────────────────────────────────────
 
