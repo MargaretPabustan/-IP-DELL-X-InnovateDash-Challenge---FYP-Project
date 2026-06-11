@@ -27,8 +27,10 @@ jobs:
         run: npm run lint || echo "No lint script defined"
 
       - name: Run tests
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: npm test || echo "No tests yet"
 
       - name: TypeScript build
         run: npx tsc --noEmit || echo "No TypeScript config"
-        
