@@ -23,10 +23,6 @@ const ANON_KEY    = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 const BASE_URL    = API_URL.replace('/leads', '');
 
-console.log('API_URL:', API_URL ? '✅ loaded' : '❌ MISSING');
-console.log('ANON_KEY:', ANON_KEY ? '✅ loaded' : '❌ MISSING');
-console.log('BACKEND_URL:', BACKEND_URL ? BACKEND_URL : '❌ MISSING');
-
 const SUPABASE_HEADERS = {
   'apikey':        ANON_KEY,
   'Authorization': `Bearer ${ANON_KEY}`,
@@ -54,6 +50,25 @@ const INTENT_COLORS = {
   medium: '#9A6700',
   low:    '#CF222E',
 };
+
+// ── Masking helpers ────────────────────────────────────────────────────────
+function maskEmail(email: string): string {
+  if (!email || !email.includes('@')) return email;
+  const [local, domain] = email.split('@');
+  if (local.length <= 2) return `${local[0]}***@${domain}`;
+  return `${local[0]}${local[1]}***@${domain}`;
+}
+
+function maskPhone(phone: string): string {
+  if (!phone || phone.length < 4) return phone;
+  return phone.slice(0, 2) + '****' + phone.slice(-2);
+}
+
+function maskCompany(company: string): string {
+  if (!company || company.length <= 2) return company;
+  const visible = company.slice(0, 2);
+  return `${visible}${'*'.repeat(Math.min(company.length - 2, 5))}`;
+}
 
 const AutofillField = ({ label, value }: { label: string; value: string }) => (
   <View style={styles.autofillRow}>
@@ -137,16 +152,16 @@ const LeadDetailsScreen = ({
     if (onSubmit) onSubmit({ leadName, companyName, title, phone, email, allInterests, intent, additionalNotes });
 
     try {
-      // Step 1: Create the lead
+      // Step 1: Create the lead — send unmasked values to backend
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: { ...SUPABASE_HEADERS, 'Prefer': 'return=representation' },
         body: JSON.stringify({
           name:            leadName,
-          email:           email,
-          company:         companyName,
+          email:           email,           // ← unmasked
+          company:         companyName,     // ← unmasked
           title:           title,
-          phone_number:    phone,
+          phone_number:    phone,           // ← unmasked
           customer_intent: intent,
         }),
       });
@@ -181,7 +196,7 @@ const LeadDetailsScreen = ({
         }
       }
 
-      // Step 4: Groq AI analysis
+      // Step 4: AI analysis
       let assignedTeam = 'Pending Assignment';
       let aiNotes      = additionalNotes || 'Pending AI analysis.';
 
@@ -283,12 +298,13 @@ const LeadDetailsScreen = ({
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+          {/* ── Display masked values for privacy ── */}
           <SectionCard title="Details:">
             <AutofillField label="Name"    value={leadName} />
-            <AutofillField label="Company" value={companyName} />
+            <AutofillField label="Company" value={maskCompany(companyName)} />
             <AutofillField label="Title"   value={title} />
-            <AutofillField label="Phone"   value={phone} />
-            <AutofillField label="Email"   value={email} />
+            <AutofillField label="Phone"   value={maskPhone(phone)} />
+            <AutofillField label="Email"   value={maskEmail(email)} />
           </SectionCard>
 
           <SectionCard title="Customer Interest:">
