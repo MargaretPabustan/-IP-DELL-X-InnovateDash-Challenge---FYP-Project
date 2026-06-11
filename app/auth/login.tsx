@@ -38,7 +38,7 @@ export default function LoginScreen() {
       if (employeeId === 'admin') {
         router.replace('/admin/Admin_Dashboard');
       } else if (employeeId === 'manager') {
-        router.replace('/manager/dashboard' as any);
+        router.replace('/manager/Managerfinaldashboard' as any);
       } else {
         router.replace('/booth/dashboardscreen' as any);
       }
