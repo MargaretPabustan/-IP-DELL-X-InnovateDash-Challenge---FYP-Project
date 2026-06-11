@@ -17,6 +17,7 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
 import { useAppTheme } from '../../src/constants/useAppTheme';
+import * as SecureStore from 'expo-secure-store';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 const API_URL     = process.env.EXPO_PUBLIC_API_URL || '';
@@ -28,6 +29,32 @@ const SUPABASE_HEADERS = {
   'Authorization': `Bearer ${ANON_KEY}`,
   'Content-Type':  'application/json',
 };
+
+// ── Get auth headers with JWT token ──────────────────────────────────────────
+async function getAuthHeaders() {
+  try {
+    const token = await SecureStore.getItemAsync('token');
+    return {
+      'Content-Type':  'application/json',
+      'Authorization': `Bearer ${token}`,
+    };
+  } catch {
+    return { 'Content-Type': 'application/json' };
+  }
+}
+
+// ── Masking helpers ───────────────────────────────────────────────────────────
+function maskEmail(email: string): string {
+  if (!email || !email.includes('@')) return email;
+  const [local, domain] = email.split('@');
+  if (local.length <= 2) return `${local[0]}***@${domain}`;
+  return `${local[0]}${local[1]}***@${domain}`;
+}
+
+function maskPhone(phone: string): string {
+  if (!phone || phone.length < 4) return phone;
+  return phone.slice(0, 2) + '****' + phone.slice(-2);
+}
 
 type Lead = {
   id: string;
@@ -65,13 +92,22 @@ function mapLead(item: any): Lead {
   };
 }
 
-// ─── Status badge helper ──────────────────────────────────────────────────────
+// ─── Status helpers ───────────────────────────────────────────────────────────
 function getStatusColor(status: string) {
   switch (status) {
     case 'QUALIFIED': return '#22c55e';
-    case 'CONTACTED': return '#f59e0b';
+    case 'CONTACTED': return '#3b82f6';
     case 'CLOSED':    return '#6366f1';
-    default:          return '#ef4444';
+    default:          return '#94a3b8';
+  }
+}
+
+function getStatusLabel(status: string) {
+  switch (status) {
+    case 'QUALIFIED': return 'Ready for Follow-up';
+    case 'CONTACTED': return 'Follow-up in Progress';
+    case 'CLOSED':    return 'Closed';
+    default:          return 'No Follow-up Needed';
   }
 }
 
@@ -82,8 +118,10 @@ function ViewModal({ lead, onClose, theme }: { lead: Lead; onClose: () => void; 
   useEffect(() => {
     const fetchInterests = async () => {
       try {
-        // ── Try backend first ─────────────────────────────────────────────────
-        const response = await fetch(`${BACKEND_URL}/lead_interest_categories/${lead.lead_id}`);
+        const authHeaders = await getAuthHeaders();
+        const response = await fetch(`${BACKEND_URL}/lead_interest_categories/${lead.lead_id}`, {
+          headers: authHeaders,
+        });
         const data = await response.json();
         if (data.success && Array.isArray(data.data) && data.data.length > 0) {
           const names = data.data.map((item: any) => item.category_name).filter(Boolean).join(', ');
@@ -92,9 +130,7 @@ function ViewModal({ lead, onClose, theme }: { lead: Lead; onClose: () => void; 
         }
         setInterests('—');
       } catch {
-        // ── Fallback to Supabase direct ───────────────────────────────────────
         try {
-          console.warn('⚠️ Backend interests failed, falling back to Supabase');
           const response = await fetch(
             `${BASE_URL}/lead_interest_categories?lead_id=eq.${lead.lead_id}&select=category_id,interest_categories(category_name)`,
             { headers: SUPABASE_HEADERS }
@@ -118,7 +154,7 @@ function ViewModal({ lead, onClose, theme }: { lead: Lead; onClose: () => void; 
   }, [lead.lead_id]);
 
   const statusColor = getStatusColor(lead.status);
-  const confidencePct = lead.confidence ? `${Math.round(lead.confidence * 100)}%` : '—';
+  const statusLabel = getStatusLabel(lead.status);
 
   return (
     <Modal visible animationType="slide" transparent>
@@ -138,20 +174,21 @@ function ViewModal({ lead, onClose, theme }: { lead: Lead; onClose: () => void; 
             </View>
           </View>
           <View style={[modal.divider, { backgroundColor: theme.bg }]} />
+
+          {/* ── Masked PII fields ──────────────────────────────────────────── */}
           <Text style={modal.fieldLabel}>Email</Text>
-          <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.email}</Text>
+          <Text style={[modal.fieldValue, { color: theme.text }]}>{maskEmail(lead.email)}</Text>
           <Text style={modal.fieldLabel}>Phone</Text>
-          <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.phone}</Text>
+          <Text style={[modal.fieldValue, { color: theme.text }]}>{maskPhone(lead.phone)}</Text>
+
           <Text style={modal.fieldLabel}>Assigned Team</Text>
           <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.team}</Text>
           <Text style={modal.fieldLabel}>Priority / Intent</Text>
           <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.intent}</Text>
           <Text style={modal.fieldLabel}>Interests</Text>
           <Text style={[modal.fieldValue, { color: theme.text }]}>{interests}</Text>
-          <Text style={modal.fieldLabel}>AI Confidence</Text>
-          <Text style={[modal.fieldValue, { color: theme.text }]}>{confidencePct}</Text>
-          <Text style={modal.fieldLabel}>Follow-up Required</Text>
-          <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.follow_up_required ? 'Yes' : 'No'}</Text>
+          <Text style={modal.fieldLabel}>Follow-up Status</Text>
+          <Text style={[modal.fieldValue, { color: statusColor, fontWeight: '700' }]}>{statusLabel}</Text>
           <Text style={modal.fieldLabel}>AI Notes</Text>
           <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.notes}</Text>
           <TouchableOpacity style={[modal.closeBtn, { backgroundColor: theme.navy }]} onPress={onClose}>
@@ -174,10 +211,10 @@ function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () =
   const handleSave = async () => {
     setSaving(true);
     try {
-      // ── Try backend first ───────────────────────────────────────────────────
+      const authHeaders = await getAuthHeaders();
       const response = await fetch(`${BACKEND_URL}/leads/${lead.lead_id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders,
         body: JSON.stringify({
           name,
           company,
@@ -190,7 +227,6 @@ function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () =
       if (!response.ok) throw new Error('Backend failed');
       onSave({ ...lead, name, role, company, notes });
     } catch {
-      // ── Fallback to Supabase direct ─────────────────────────────────────────
       try {
         console.warn('⚠️ Backend edit failed, falling back to Supabase');
         const response = await fetch(`${API_URL}?lead_id=eq.${lead.lead_id}`, {
@@ -268,15 +304,19 @@ export default function RecentLeadsScreen() {
     else setLoading(true);
     setError(null);
     try {
-      // ── Try backend first ───────────────────────────────────────────────────
-      const response = await fetch(`${BACKEND_URL}/leads`);
+      // ── Try backend first with JWT ─────────────────────────────────────────
+      const authHeaders = await getAuthHeaders();
+      console.log('🔑 Token exists:', !!(await SecureStore.getItemAsync('token')));
+      console.log('📡 Fetching from:', `${BACKEND_URL}/leads`);
+      const response = await fetch(`${BACKEND_URL}/leads`, { headers: authHeaders });
+      console.log('📡 Status:', response.status);
       const data = await response.json();
       if (!data.success || !Array.isArray(data.data)) throw new Error('Backend failed');
       setLeads(data.data.map(mapLead));
-    } catch {
-      // ── Fallback to Supabase direct ─────────────────────────────────────────
+    } catch (err: any) {
+      // ── Fallback to Supabase ───────────────────────────────────────────────
+      console.warn('⚠️ Backend leads failed:', err.message, '— falling back to Supabase');
       try {
-        console.warn('⚠️ Backend leads failed, falling back to Supabase');
         const response = await fetch(API_URL, { headers: SUPABASE_HEADERS });
         const data = await response.json();
         if (!Array.isArray(data)) throw new Error('Supabase failed');
@@ -308,18 +348,18 @@ export default function RecentLeadsScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              // ── Try backend first ───────────────────────────────────────────
+              const authHeaders = await getAuthHeaders();
               const response = await fetch(`${BACKEND_URL}/leads/${lead.lead_id}`, {
-                method: 'DELETE',
+                method:  'DELETE',
+                headers: authHeaders,
               });
               if (!response.ok) throw new Error('Backend failed');
               setLeads((prev) => prev.filter((l) => l.id !== lead.id));
             } catch {
-              // ── Fallback to Supabase direct ─────────────────────────────────
               try {
                 console.warn('⚠️ Backend delete failed, falling back to Supabase');
                 const response = await fetch(`${API_URL}?lead_id=eq.${lead.lead_id}`, {
-                  method: 'DELETE',
+                  method:  'DELETE',
                   headers: SUPABASE_HEADERS,
                 });
                 if (!response.ok) throw new Error('Supabase failed');
@@ -380,7 +420,7 @@ export default function RecentLeadsScreen() {
               <View style={styles.info}>
                 <Text style={[styles.name, { color: theme.text }]}>{lead.name}</Text>
                 <Text style={[styles.sub, { color: theme.subText }]}>{lead.role} · {lead.company}</Text>
-                <Text style={[styles.statusText, { color: getStatusColor(lead.status) }]}>{lead.status}</Text>
+                <Text style={[styles.statusText, { color: getStatusColor(lead.status) }]}>{getStatusLabel(lead.status)}</Text>
               </View>
               <View style={styles.actions}>
                 <TouchableOpacity style={[styles.editBtn, { borderColor: theme.navy }]} onPress={() => setEditing(lead)}>

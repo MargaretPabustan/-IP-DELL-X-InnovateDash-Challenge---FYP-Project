@@ -44,7 +44,8 @@
           "cameraPermission": "Allow Boothflow to access your camera to scan QR codes."
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,

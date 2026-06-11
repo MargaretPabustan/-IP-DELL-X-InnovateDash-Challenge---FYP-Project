@@ -15,6 +15,9 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as SecureStore from 'expo-secure-store';
+
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -26,24 +29,60 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!employeeId.trim() || !password.trim()) {
-      Alert.alert('Missing Fields', 'Please enter your Employee ID and password.');
+      Alert.alert('Missing Fields', 'Please enter your email and password.');
       return;
     }
 
     setLoading(true);
 
-    // ── TEMP: hardcoded for testing ──────────────────────────────────────
-    setTimeout(() => {
-      setLoading(false);
-      if (employeeId === 'admin') {
+    try {
+      // ── Debug logs ───────────────────────────────────────────────────────
+      console.log('🔐 Attempting login...');
+      console.log('BACKEND_URL:', BACKEND_URL || '❌ MISSING');
+      console.log('Email:', employeeId.trim());
+      console.log('Endpoint:', `${BACKEND_URL}/auth/login`);
+
+      // ── Call real backend ────────────────────────────────────────────────
+      const res = await fetch(`${BACKEND_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email:    employeeId.trim(),
+          password: password.trim(),
+        }),
+      });
+
+      console.log('📡 Response status:', res.status);
+
+      const data = await res.json();
+      console.log('📦 Response data:', JSON.stringify(data));
+
+      if (!res.ok) {
+        Alert.alert('Login Failed', data.message || 'Invalid credentials.');
+        return;
+      }
+
+      // ── Store token securely ─────────────────────────────────────────────
+      await SecureStore.setItemAsync('token', data.token);
+      await SecureStore.setItemAsync('role', data.role);
+      console.log('✅ Token stored, role:', data.role);
+
+      // ── Route based on role ──────────────────────────────────────────────
+      if (data.role === 'admin') {
         router.replace('/admin/dashboard' as any);
-      } else if (employeeId === 'manager') {
+      } else if (data.role === 'manager') {
         router.replace('/manager/dashboard' as any);
       } else {
         router.replace('/booth/dashboardscreen' as any);
       }
-    }, 1000);
-    // ── Remove above and replace with real login when backend is ready ───
+
+    } catch (err: any) {
+      console.log('❌ Login error:', err.message);
+      console.log('❌ Error details:', JSON.stringify(err));
+      Alert.alert('Connection Error', 'Could not connect to the server. Please check your internet connection.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -78,23 +117,22 @@ export default function LoginScreen() {
           {/* Form Card */}
           <View style={styles.formCard}>
 
-            {/* Employee ID */}
-            <Text style={styles.fieldLabel}>EMPLOYEE ID</Text>
+            <Text style={styles.fieldLabel}>EMAIL</Text>
             <View style={styles.inputWrapper}>
-              <Ionicons name="id-card-outline" size={18} color="#94a3b8" style={styles.inputIcon} />
+              <Ionicons name="mail-outline" size={18} color="#94a3b8" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
                 value={employeeId}
                 onChangeText={setEmployeeId}
-                placeholder="Enter your employee ID"
+                placeholder="Enter your email"
                 placeholderTextColor="#94a3b8"
                 autoCapitalize="none"
                 autoCorrect={false}
+                keyboardType="email-address"
                 returnKeyType="next"
               />
             </View>
 
-            {/* Password */}
             <Text style={[styles.fieldLabel, { marginTop: 16 }]}>PASSWORD</Text>
             <View style={styles.inputWrapper}>
               <Ionicons name="lock-closed-outline" size={18} color="#94a3b8" style={styles.inputIcon} />
@@ -122,7 +160,6 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Login Button */}
             <TouchableOpacity
               style={[styles.loginBtn, loading && { opacity: 0.7 }]}
               onPress={handleLogin}
@@ -141,7 +178,6 @@ export default function LoginScreen() {
 
           </View>
 
-          {/* Footer */}
           <Text style={styles.footer}>
             Having trouble? Contact your system administrator.
           </Text>
