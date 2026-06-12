@@ -4,11 +4,22 @@ const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
+const bcrypt = require('bcrypt'); //Importing the module for bcrypt hashing for secure login authentication. //
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+
 
 const app = express();
 app.use(express.json());
 app.use(cors());
+
+
+app.post('/debug-bcrypt', async (req, res) => {
+    const { password, hash } = req.body;
+
+    const result = await bcrypt.compare(password, hash);
+
+    res.json({ result });
+});
 
 // - JWT AUTH MIDDLEWARE
 function authenticateToken(req, res, next) {
@@ -140,26 +151,42 @@ app.post('/auth/login', async (req, res) => {
     const { email, password } = req.body;
 
     try {
+
         const result = await pool.query(
-            'SELECT * FROM users WHERE email=$1',
+            'SELECT * FROM users WHERE email = $1',
             [email]
         );
 
         if (result.rows.length === 0) {
-            return res.status(401).json({ message: 'Invalid credentials' });
+            return res.status(401).json({
+                message: 'Invalid credentials'
+            });
         }
 
         const user = result.rows[0];
 
-        // ⚠️ simple check (upgrade later with bcrypt)
-        if (password !== user.password_hash) {
-            return res.status(401).json({ message: 'Invalid credentials' });
+        // Compare entered password against stored hash
+        const validPassword = await bcrypt.compare(
+            password,
+            user.password_hash
+        );
+
+        if (!validPassword) {
+            return res.status(401).json({
+                message: 'Invalid credentials'
+            });
         }
 
         const token = jwt.sign(
-            { id: user.user_id, role: user.role, team_id: user.team_id },
+            {
+                id: user.user_id,
+                role: user.role,
+                team_id: user.team_id
+            },
             process.env.JWT_SECRET,
-            { expiresIn: '8h' }
+            {
+                expiresIn: '8h'
+            }
         );
 
         res.json({
@@ -168,7 +195,11 @@ app.post('/auth/login', async (req, res) => {
         });
 
     } catch (err) {
-        res.status(500).json({ message: err.message });
+
+        res.status(500).json({
+            message: err.message
+        });
+
     }
 });
 ///auth/me - Returns authenticated user's info
@@ -566,23 +597,20 @@ app.get('/admin/users', authenticateToken, authorizeRoles('admin'), async (req, 
 
 // CREATE user
 app.post('/admin/users', authenticateToken, authorizeRoles('admin'), async (req, res) => {
-    const { full_name, email, password_hash, role, team_id } = req.body;
+    const { full_name, email, password, role, team_id } = req.body;
 
-    try {
-        const result = await pool.query(`
-            INSERT INTO users (full_name, email, password_hash, role, team_id)
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING user_id
-        `, [full_name, email, password_hash, role, team_id]);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-        res.status(201).json({
-            success: true,
-            user_id: result.rows[0].user_id
-        });
+    const result = await pool.query(`
+        INSERT INTO users (full_name, email, password_hash, role, team_id)
+        VALUES ($1, $2, $3, $4, $5)
+        RETURNING user_id
+    `, [full_name, email, hashedPassword, role, team_id]);
 
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
+    res.status(201).json({
+        success: true,
+        user_id: result.rows[0].user_id
+    });
 });
 
 
