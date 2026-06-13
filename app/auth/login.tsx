@@ -16,6 +16,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
+import NetInfo from '@react-native-community/netinfo';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
@@ -36,28 +37,108 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
+      // ── Check connectivity first ─────────────────────────────────────────
+      let isConnected = true;
+      try {
+        const netState = await NetInfo.fetch();
+        isConnected = netState.isConnected ?? true;
+      } catch {
+        // If NetInfo fails, assume connected and let the request fail naturally
+      }
+
+      if (!isConnected) {
+        // ── Offline: check if there's a stored token from a previous login ──
+        const storedToken = await SecureStore.getItemAsync('token');
+        const storedRole  = await SecureStore.getItemAsync('role');
+
+        if (storedToken && storedRole) {
+          Alert.alert(
+            'Offline Mode',
+            'No internet connection. You have been signed in using your last session. Some features may be limited.',
+            [{
+              text: 'Continue',
+              onPress: () => {
+                if (storedRole === 'admin') {
+                  router.replace('/admin/Admin_Dashboard' as any);
+                } else if (storedRole === 'manager') {
+                  router.replace('/manager/dashboard' as any);
+                } else {
+                  router.replace('/booth/dashboardscreen' as any);
+                }
+              },
+            }]
+          );
+        } else {
+          Alert.alert(
+            'No Internet Connection',
+            'You need an internet connection to sign in for the first time. Please check your Wi-Fi or mobile data.',
+            [{ text: 'OK' }]
+          );
+        }
+        return;
+      }
+
       // ── Debug logs ───────────────────────────────────────────────────────
       console.log('🔐 Attempting login...');
       console.log('BACKEND_URL:', BACKEND_URL || '❌ MISSING');
       console.log('Email:', employeeId.trim());
       console.log('Endpoint:', `${BACKEND_URL}/auth/login`);
 
-      // ── Call real backend ────────────────────────────────────────────────
-      const res = await fetch(`${BACKEND_URL}/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email:    employeeId.trim(),
-          password: password.trim(),
-        }),
-      });
+      // ── Call backend with timeout ────────────────────────────────────────
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+      let res: Response;
+      try {
+        res = await fetch(`${BACKEND_URL}/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email:    employeeId.trim(),
+            password: password.trim(),
+          }),
+          signal: controller.signal,
+        });
+      } catch (fetchErr: any) {
+        clearTimeout(timeout);
+
+        // ── Server unreachable — try stored token fallback ─────────────────
+        const storedToken = await SecureStore.getItemAsync('token');
+        const storedRole  = await SecureStore.getItemAsync('role');
+
+        if (storedToken && storedRole) {
+          Alert.alert(
+            'Server Unavailable',
+            'Could not reach the server. You have been signed in using your last session. Some features may be limited.',
+            [{
+              text: 'Continue Offline',
+              onPress: () => {
+                if (storedRole === 'admin') {
+                  router.replace('/admin/Admin_Dashboard' as any);
+                } else if (storedRole === 'manager') {
+                  router.replace('/manager/dashboard' as any);
+                } else {
+                  router.replace('/booth/dashboardscreen' as any);
+                }
+              },
+            },
+            { text: 'Cancel', style: 'cancel' }]
+          );
+        } else if (fetchErr?.name === 'AbortError') {
+          Alert.alert('Server Timeout', 'The server took too long to respond. Please try again.', [{ text: 'OK' }]);
+        } else {
+          Alert.alert('Server Unavailable', 'Could not reach the server. Please try again later or contact your administrator.', [{ text: 'OK' }]);
+        }
+        return;
+      }
+      clearTimeout(timeout);
 
       console.log('📡 Response status:', res.status);
       const data = await res.json();
       console.log('📦 Response data:', JSON.stringify(data));
 
       if (!res.ok) {
-        Alert.alert('Login Failed', data.message || 'Invalid credentials.');
+        Alert.alert('Login Failed', data.message || 'Invalid email or password.');
         return;
       }
 
@@ -68,7 +149,7 @@ export default function LoginScreen() {
 
       // ── Route based on role ──────────────────────────────────────────────
       if (data.role === 'admin') {
-        router.replace('/admin/dashboard' as any);
+        router.replace('/admin/Admin_Dashboard' as any);
       } else if (data.role === 'manager') {
         router.replace('/manager/dashboard' as any);
       } else {
@@ -77,8 +158,11 @@ export default function LoginScreen() {
 
     } catch (err: any) {
       console.log('❌ Login error:', err.message);
-      console.log('❌ Error details:', JSON.stringify(err));
-      Alert.alert('Connection Error', 'Could not connect to the server. Please check your internet connection.');
+      Alert.alert(
+        'Something Went Wrong',
+        'An unexpected error occurred. Please try again.',
+        [{ text: 'OK' }]
+      );
     } finally {
       setLoading(false);
     }
@@ -115,7 +199,6 @@ export default function LoginScreen() {
 
           {/* Form Card */}
           <View style={styles.formCard}>
-
             <Text style={styles.fieldLabel}>EMAIL</Text>
             <View style={styles.inputWrapper}>
               <Ionicons name="mail-outline" size={18} color="#94a3b8" style={styles.inputIcon} />
@@ -147,15 +230,8 @@ export default function LoginScreen() {
                 returnKeyType="done"
                 onSubmitEditing={handleLogin}
               />
-              <TouchableOpacity
-                onPress={() => setShowPassword(!showPassword)}
-                style={styles.eyeBtn}
-              >
-                <Ionicons
-                  name={showPassword ? 'eye-outline' : 'eye-off-outline'}
-                  size={18}
-                  color="#94a3b8"
-                />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+                <Ionicons name={showPassword ? 'eye-outline' : 'eye-off-outline'} size={18} color="#94a3b8" />
               </TouchableOpacity>
             </View>
 
@@ -174,13 +250,11 @@ export default function LoginScreen() {
                 <Text style={styles.loginBtnText}>SIGN IN</Text>
               )}
             </TouchableOpacity>
-
           </View>
 
           <Text style={styles.footer}>
             Having trouble? Contact your system administrator.
           </Text>
-
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

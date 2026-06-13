@@ -13,8 +13,8 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useAppTheme } from '../../src/constants/useAppTheme';
 
-
-const GREEN = '#27AE60';
+const GREEN  = '#27AE60';
+const ORANGE = '#f59e0b';
 
 export default function SuccessfullySubmittedScreen() {
   const router = useRouter();
@@ -25,39 +25,43 @@ export default function SuccessfullySubmittedScreen() {
   const intent       = (params.intent       as string) || 'Not specified';
   const interests    = (params.interests    as string) || 'None';
   const aiNotes      = (params.aiNotes      as string) || 'Pending AI analysis.';
+  const isOffline    = params.offline === 'true';
+
+  const accentColor = isOffline ? ORANGE : GREEN;
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
       {/* Header */}
-      <View
-        style={[
-          styles.header,
-          {
-            backgroundColor: theme.navy,
-            paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12,
-          },
-        ]}
-      >
+      <View style={[styles.header, { backgroundColor: theme.navy, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12 }]}>
         <Text style={styles.headerTitle}>Boothflow</Text>
       </View>
 
       <ScrollView
-        contentContainerStyle={[
-          styles.scrollContent,
-          { paddingBottom: Platform.OS === 'ios' ? 40 : 24 },
-        ]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: Platform.OS === 'ios' ? 40 : 24 }]}
         showsVerticalScrollIndicator={false}
       >
         {/* Success Icon + Title */}
         <View style={styles.successSection}>
-          <View style={[styles.checkCircle, { borderColor: GREEN, backgroundColor: theme.card }]}>
-            <Text style={styles.checkMark}>✓</Text>
+          <View style={[styles.checkCircle, { borderColor: accentColor, backgroundColor: theme.card }]}>
+            <Ionicons
+              name={isOffline ? 'cloud-offline-outline' : 'checkmark'}
+              size={36}
+              color={accentColor}
+            />
           </View>
           <Text style={[styles.successTitle, { color: theme.text }]}>
-            SUCCESSFULLY{'\n'}SUBMITTED
+            {isOffline ? 'SAVED OFFLINE' : 'SUCCESSFULLY\nSUBMITTED'}
           </Text>
+          {isOffline && (
+            <View style={[styles.offlineBanner, { backgroundColor: ORANGE + '18', borderColor: ORANGE + '44' }]}>
+              <Ionicons name="wifi-outline" size={14} color={ORANGE} />
+              <Text style={[styles.offlineBannerText, { color: ORANGE }]}>
+                No internet — lead saved locally and will sync when reconnected
+              </Text>
+            </View>
+          )}
         </View>
 
         {/* Routing Result Card */}
@@ -65,7 +69,9 @@ export default function SuccessfullySubmittedScreen() {
           <Text style={[styles.cardTitle, { color: theme.text }]}>Routing Result:</Text>
           <View style={styles.routingRow}>
             <Text style={[styles.routingLabel, { color: theme.subText }]}>Assigned Team:</Text>
-            <Text style={[styles.routingValue, { color: theme.text }]}>{assignedTeam}</Text>
+            <Text style={[styles.routingValue, { color: isOffline ? ORANGE : theme.text }]}>
+              {assignedTeam}
+            </Text>
           </View>
           <View style={[styles.divider, { backgroundColor: theme.subText + '22' }]} />
           <View style={styles.routingRow}>
@@ -82,20 +88,28 @@ export default function SuccessfullySubmittedScreen() {
         {/* AI Notes Card */}
         <View style={[styles.card, { backgroundColor: theme.card, borderColor: theme.subText + '33' }]}>
           <View style={styles.aiNotesHeader}>
-            <View style={[styles.aiChip, { backgroundColor: theme.navy }]}>
-              <Text style={styles.aiChipText}>✦ AI</Text>
+            <View style={[styles.aiChip, { backgroundColor: isOffline ? ORANGE : theme.navy }]}>
+              <Text style={styles.aiChipText}>{isOffline ? '⏳ PENDING' : '✦ AI'}</Text>
             </View>
-            <Text style={[styles.cardTitle, { color: theme.text }]}>Suggested Follow-Up / Notes</Text>
+            <Text style={[styles.cardTitle, { color: theme.text }]}>
+              {isOffline ? 'Notes' : 'Suggested Follow-Up / Notes'}
+            </Text>
           </View>
           <Text style={[styles.aiNotesText, { color: theme.subText }]}>{aiNotes}</Text>
+          {isOffline && (
+            <Text style={[styles.offlineNote, { color: ORANGE }]}>
+              AI analysis will run automatically once this lead syncs online.
+            </Text>
+          )}
         </View>
 
         {/* Actions */}
         <TouchableOpacity
           style={[styles.primaryButton, { backgroundColor: theme.navy, shadowColor: theme.navy }]}
-          onPress={() => router.push('/qr-scanner' as any)}
+          onPress={() => router.push('/booth/qr-scanner' as any)}
           activeOpacity={0.85}
         >
+          <MaterialIcons name="qr-code-scanner" size={18} color="#fff" />
           <Text style={styles.primaryButtonText}>Scan Next Lead</Text>
         </TouchableOpacity>
 
@@ -109,28 +123,19 @@ export default function SuccessfullySubmittedScreen() {
       </ScrollView>
 
       {/* Bottom Nav */}
-      <View
-        style={[
-          styles.bottomNav,
-          {
-            backgroundColor: theme.navBg,
-            borderTopColor: theme.subText + '22',
-            paddingBottom: Platform.OS === 'ios' ? 28 : 12,
-          },
-        ]}
-      >
+      <View style={[styles.bottomNav, { backgroundColor: theme.navBg, borderTopColor: theme.subText + '22', paddingBottom: Platform.OS === 'ios' ? 28 : 12 }]}>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/booth/recent-leads' as any)}>
           <Ionicons name="person-outline" size={26} color={theme.subText} />
           <Text style={[styles.navLabel, { color: theme.subText }]}>Leads</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItemCenter} onPress={() => router.push('/qr-scanner' as any)}>
+        <TouchableOpacity style={styles.navItemCenter} onPress={() => router.push('/booth/qr-scanner' as any)}>
           <View style={[styles.navCenterBtn, { backgroundColor: theme.navy }]}>
             <MaterialIcons name="qr-code-scanner" size={28} color="#fff" />
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/dashboardscreen' as any)}>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/booth/dashboardscreen' as any)}>
           <FontAwesome5 name="home" size={22} color={theme.accent} />
           <Text style={[styles.navLabel, { color: theme.accent }]}>Home</Text>
         </TouchableOpacity>
@@ -141,35 +146,25 @@ export default function SuccessfullySubmittedScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  header: {
-    paddingHorizontal: 20,
-    paddingBottom: 14,
-    alignItems: 'flex-end',
-  },
-  headerTitle: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '700',
-    letterSpacing: 0.5,
-  },
+  header: { paddingHorizontal: 20, paddingBottom: 14, alignItems: 'flex-end' },
+  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700', letterSpacing: 0.5 },
   scrollContent: { padding: 20 },
-  successSection: { alignItems: 'center', paddingVertical: 28 },
+  successSection: { alignItems: 'center', paddingVertical: 28, gap: 10 },
   checkCircle: {
-    width: 80, height: 80, borderRadius: 40,
-    borderWidth: 4,
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 14,
-    shadowColor: GREEN,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2, shadowRadius: 8, elevation: 4,
+    width: 80, height: 80, borderRadius: 40, borderWidth: 4,
+    alignItems: 'center', justifyContent: 'center', marginBottom: 4,
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4,
   },
-  checkMark: { fontSize: 36, color: GREEN, fontWeight: '700', lineHeight: 40 },
   successTitle: { fontSize: 22, fontWeight: '800', textAlign: 'center', letterSpacing: 1 },
+  offlineBanner: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    borderWidth: 1, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+    marginTop: 4,
+  },
+  offlineBannerText: { fontSize: 12, fontWeight: '600', flex: 1, lineHeight: 16 },
   card: {
-    borderRadius: 12, padding: 16, marginBottom: 14,
-    borderWidth: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    borderRadius: 12, padding: 16, marginBottom: 14, borderWidth: 1,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
   },
   cardTitle: { fontSize: 14, fontWeight: '700', marginBottom: 10 },
@@ -181,16 +176,15 @@ const styles = StyleSheet.create({
   aiChip: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   aiChipText: { color: '#fff', fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
   aiNotesText: { fontSize: 13, lineHeight: 20 },
+  offlineNote: { fontSize: 12, fontStyle: 'italic', marginTop: 8, lineHeight: 18 },
   primaryButton: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     borderRadius: 10, paddingVertical: 15,
-    alignItems: 'center', marginTop: 6, marginBottom: 10,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
+    marginTop: 6, marginBottom: 10,
+    shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4,
   },
   primaryButtonText: { color: '#fff', fontSize: 15, fontWeight: '700', letterSpacing: 0.5 },
-  secondaryButton: {
-    borderWidth: 1.5, borderRadius: 10, paddingVertical: 14, alignItems: 'center',
-  },
+  secondaryButton: { borderWidth: 1.5, borderRadius: 10, paddingVertical: 14, alignItems: 'center' },
   secondaryButtonText: { fontSize: 15, fontWeight: '600' },
   bottomNav: {
     flexDirection: 'row', borderTopWidth: 1,

@@ -1,17 +1,30 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import NetInfo from '@react-native-community/netinfo';
 
 const OFFLINE_LEADS_KEY = 'offline_leads';
+const MAX_RETRY_ATTEMPTS = 5;
 
-// ── Save lead locally ──────────────────────────────────────────────────────
+const CATEGORY_MAP: Record<string, number> = {
+  'AI PCs':      1,
+  'Multi-cloud': 2,
+  'Storage':     3,
+  'Service':     4,
+};
+
+// ── Save lead locally when offline ────────────────────────────────────────
 export const saveLeadOffline = async (lead: any) => {
   try {
     const existing = await getOfflineLeads();
-    const updated = [...existing, { ...lead, offline_id: Date.now() }];
-    await AsyncStorage.setItem(OFFLINE_LEADS_KEY, JSON.stringify(updated));
-    console.log('✅ Lead saved offline');
+    const entry = {
+      ...lead,
+      offline_id:      Date.now(),
+      captured_at:     new Date().toISOString(),
+      retry_attempts:  0,
+    };
+    await AsyncStorage.setItem(OFFLINE_LEADS_KEY, JSON.stringify([...existing, entry]));
+    console.log('✅ Lead saved offline:', lead.name);
   } catch (err) {
     console.error('❌ Failed to save lead offline:', err);
+    throw err; // re-throw so caller knows it failed
   }
 };
 
@@ -25,12 +38,12 @@ export const getOfflineLeads = async (): Promise<any[]> => {
   }
 };
 
-// ── Clear synced leads ─────────────────────────────────────────────────────
+// ── Clear all offline leads ────────────────────────────────────────────────
 export const clearOfflineLeads = async () => {
   await AsyncStorage.removeItem(OFFLINE_LEADS_KEY);
 };
 
-// ── Sync offline leads to Supabase ────────────────────────────────────────
+// ── Sync offline leads to server when back online ─────────────────────────
 export const syncOfflineLeads = async (
   apiUrl: string,
   backendUrl: string,
@@ -39,15 +52,32 @@ export const syncOfflineLeads = async (
   const leads = await getOfflineLeads();
   if (leads.length === 0) return;
 
-  console.log(`🔄 Syncing ${leads.length} offline leads...`);
+  console.log(`🔄 Syncing ${leads.length} offline lead(s)...`);
 
   const failed: any[] = [];
 
   for (const lead of leads) {
-    try {
-      const { offline_id, interests, ...leadData } = lead;
+    // Drop leads that have failed too many times
+    if (lead.retry_attempts >= MAX_RETRY_ATTEMPTS) {
+      console.warn(`⛔ Dropping lead "${lead.name}" after ${MAX_RETRY_ATTEMPTS} failed attempts`);
+      continue;
+    }
 
-      // Step 1 — Create lead in Supabase
+    try {
+      const { offline_id, captured_at, retry_attempts, interests, additional_notes, ...leadData } = lead;
+
+      // Step 1 — Duplicate check before inserting
+      const checkRes = await fetch(
+        `${apiUrl}?email=eq.${encodeURIComponent(leadData.email)}&select=lead_id`,
+        { headers }
+      );
+      const existing = await checkRes.json();
+      if (Array.isArray(existing) && existing.length > 0) {
+        console.log(`⏭ Skipping duplicate: ${leadData.email}`);
+        continue; // already in DB, skip silently
+      }
+
+      // Step 2 — Create lead
       const res = await fetch(apiUrl, {
         method: 'POST',
         headers: { ...headers, 'Prefer': 'return=representation' },
@@ -56,47 +86,72 @@ export const syncOfflineLeads = async (
 
       if (!res.ok) {
         const err = await res.json();
-        // Skip duplicates silently
-        if (err.code === 'DUPLICATE_EMAIL') continue;
-        failed.push(lead);
+        // Supabase unique violation = 23505, treat as duplicate
+        if (err.code === '23505') {
+          console.log(`⏭ Duplicate detected on insert: ${leadData.email}`);
+          continue;
+        }
+        console.warn(`❌ Failed to sync "${lead.name}":`, err);
+        failed.push({ ...lead, retry_attempts: (retry_attempts || 0) + 1 });
         continue;
       }
 
       const result = await res.json();
       const leadId = result[0]?.lead_id;
 
-      // Step 2 — Save interests
-      if (leadId && interests?.length > 0) {
-        for (const categoryId of interests) {
+      // Step 3 — Save interests
+      // Interests can be stored as a comma string ("AI PCs, Storage") or array of category IDs
+      if (leadId && interests) {
+        let categoryIds: number[] = [];
+
+        if (typeof interests === 'string') {
+          // Convert interest names to category IDs
+          categoryIds = interests
+            .split(',')
+            .map((s: string) => s.trim())
+            .map((name: string) => CATEGORY_MAP[name])
+            .filter(Boolean);
+        } else if (Array.isArray(interests)) {
+          categoryIds = interests.filter((i: any) => typeof i === 'number');
+        }
+
+        for (const categoryId of categoryIds) {
           await fetch(`${apiUrl.replace('/leads', '')}/lead_interest_categories`, {
             method: 'POST',
-            headers,
+            headers: { ...headers, 'Prefer': 'return=minimal' },
             body: JSON.stringify({ lead_id: leadId, category_id: categoryId }),
-          });
+          }).catch((e) => console.warn('Interest sync failed:', e));
         }
       }
 
-      // Step 3 — Run AI analysis
+      // Step 4 — Trigger AI analysis (fire and forget)
       if (leadId && backendUrl) {
-        await fetch(`${backendUrl}/analyze-lead/${leadId}`, {
+        fetch(`${backendUrl}/analyze-lead/${leadId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
         }).catch(() => {});
       }
 
-      console.log(`✅ Synced lead: ${leadData.name}`);
+      console.log(`✅ Synced: ${leadData.name} (captured ${captured_at})`);
 
-    } catch {
-      failed.push(lead);
+    } catch (err) {
+      console.warn(`❌ Sync error for "${lead.name}":`, err);
+      failed.push({ ...lead, retry_attempts: (lead.retry_attempts || 0) + 1 });
     }
   }
 
-  // Keep only failed leads for retry
+  // Persist only the ones that failed (with incremented retry count)
   if (failed.length > 0) {
     await AsyncStorage.setItem(OFFLINE_LEADS_KEY, JSON.stringify(failed));
-    console.log(`⚠️ ${failed.length} leads failed to sync, will retry later`);
+    console.log(`⚠️ ${failed.length} lead(s) failed — will retry on next reconnect`);
   } else {
     await clearOfflineLeads();
-    console.log('✅ All offline leads synced successfully');
+    console.log('✅ All offline leads synced');
   }
+};
+
+// ── Get count of pending offline leads (for UI badges etc) ────────────────
+export const getOfflineLeadCount = async (): Promise<number> => {
+  const leads = await getOfflineLeads();
+  return leads.length;
 };

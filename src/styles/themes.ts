@@ -1,5 +1,4 @@
 // src/constants/themes.ts
-// Add or edit themes here freely
 
 export type Theme = {
   name: string;
@@ -11,6 +10,8 @@ export type Theme = {
   subText: string;
   navBg: string;
   scanColor: string;
+  inputBg: string;   // background for text inputs
+  border: string;    // dividers, borders, handle
 };
 
 export const THEMES: Theme[] = [
@@ -24,6 +25,8 @@ export const THEMES: Theme[] = [
     subText: '#555555',
     navBg: '#ffffff',
     scanColor: '#333333',
+    inputBg: '#f4f4f4',
+    border: '#e2e8f0',
   },
   {
     name: 'Midnight',
@@ -35,6 +38,8 @@ export const THEMES: Theme[] = [
     subText: '#aaaacc',
     navBg: '#1a1a2e',
     scanColor: '#ffffff',
+    inputBg: '#1a1a2e',
+    border: '#2a2a4a',
   },
   {
     name: 'Forest',
@@ -46,6 +51,8 @@ export const THEMES: Theme[] = [
     subText: '#40916c',
     navBg: '#ffffff',
     scanColor: '#1b4332',
+    inputBg: '#f0faf2',
+    border: '#b7e4c7',
   },
   {
     name: 'Sunset',
@@ -57,6 +64,8 @@ export const THEMES: Theme[] = [
     subText: '#a4133c',
     navBg: '#ffffff',
     scanColor: '#590d22',
+    inputBg: '#fff5f7',
+    border: '#ffd6e0',
   },
   {
     name: 'Purple',
@@ -68,6 +77,8 @@ export const THEMES: Theme[] = [
     subText: '#7209b7',
     navBg: '#ffffff',
     scanColor: '#3a0ca3',
+    inputBg: '#f5f0ff',
+    border: '#d8b4fe',
   },
   {
     name: 'Slate',
@@ -79,5 +90,7 @@ export const THEMES: Theme[] = [
     subText: '#64748b',
     navBg: '#ffffff',
     scanColor: '#334155',
+    inputBg: '#f8fafc',
+    border: '#e2e8f0',
   },
 ];
