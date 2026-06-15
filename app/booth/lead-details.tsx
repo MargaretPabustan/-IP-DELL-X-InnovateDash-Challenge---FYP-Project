@@ -93,7 +93,23 @@ async function getScannedBy(): Promise<string | null> {
     const token = await SecureStore.getItemAsync('token');
     if (!token) return null;
     const me = parseJwt(token);
-    return String(me?.sub || me?.id || me?.user_id || '');
+    const userId = me?.sub || me?.id || me?.user_id;
+    if (!userId) return null;
+
+    // Fetch full_name from Supabase
+    const res = await fetch(
+      `${process.env.EXPO_PUBLIC_API_URL?.replace(/\/[^/]+$/, '')}/users?user_id=eq.${userId}&select=full_name`,
+      {
+        headers: {
+          'apikey':        process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
+          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ''}`,
+          'Content-Type':  'application/json',
+        },
+      }
+    );
+    const users = await res.json();
+    const fullName = Array.isArray(users) && users[0]?.full_name;
+    return fullName || String(userId);
   } catch { return null; }
 }
 
@@ -179,6 +195,28 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
       const scannedBy    = await getScannedBy();
       const teamId       = resolveTeamId(interest, selectedInterests);
 
+      // Also get the rep's full name to store alongside the ID
+      let scannedByName: string | null = null;
+      try {
+        const token = await SecureStore.getItemAsync('token');
+        const me = token ? parseJwt(token) : null;
+        const userId = me?.sub || me?.id || me?.user_id;
+        if (userId) {
+          const userRes = await fetch(
+            `${process.env.EXPO_PUBLIC_API_URL?.replace(/\/[^/]+$/, '')}/users?user_id=eq.${userId}&select=full_name`,
+            {
+              headers: {
+                'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
+                'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ''}`,
+                'Content-Type': 'application/json',
+              },
+            }
+          );
+          const users = await userRes.json();
+          scannedByName = Array.isArray(users) && users[0]?.full_name ? users[0].full_name : null;
+        }
+      } catch {}
+
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: { ...SUPABASE_HEADERS, 'Prefer': 'return=representation' },
@@ -192,6 +230,7 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
           assigned_team_id: teamId,
           ai_notes:         additionalNotes || null,
           scanned_by:       scannedBy,
+          scanned_by_name:  scannedByName,
         }),
       });
 

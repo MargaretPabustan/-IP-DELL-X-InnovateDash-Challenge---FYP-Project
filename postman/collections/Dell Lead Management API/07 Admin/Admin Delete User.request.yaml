@@ -1,0 +1,19 @@
+$kind: http-request
+name: Admin Delete User
+method: DELETE
+url: '{{baseUrl}}/admin/users/{{createdUserId}}'
+order: 500
+headers:
+  - key: Authorization
+    value: 'Bearer {{adminToken}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 200", () => pm.response.to.have.status(200));
+      pm.test("Returns user deleted message", () => {
+          pm.expect(pm.response.json().message).to.equal("User deleted");
+      });
+      pm.test("Response time is under 3000ms", () => {
+          pm.expect(pm.response.responseTime).to.be.below(3000);
+      });

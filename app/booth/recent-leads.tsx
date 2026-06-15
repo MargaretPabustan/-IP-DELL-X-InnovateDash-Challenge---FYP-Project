@@ -382,12 +382,10 @@ export default function RecentLeadsScreen() {
     setError(null);
 
     try {
-      // Get this rep's user ID from JWT
       const token = await SecureStore.getItemAsync('token');
       const me = token ? parseJwt(token) : null;
       const userId = me?.sub || me?.id || me?.user_id;
 
-      // Always filter by scanned_by — reps only see their own leads
       const url = userId
         ? `${SUPABASE_BASE}/leads?scanned_by=eq.${userId}&select=*&order=created_at.desc`
         : `${SUPABASE_BASE}/leads?select=*&order=created_at.desc`;

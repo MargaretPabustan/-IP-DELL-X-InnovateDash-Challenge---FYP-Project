@@ -62,18 +62,9 @@ export default function DashboardScreen() {
       const me = parseJwt(token);
       const userId = me?.sub || me?.id || me?.user_id;
 
-      // Fetch rep's full_name first
-      const userRes = await fetch(
-        `${SUPABASE_BASE}/users?user_id=eq.${userId}&select=full_name`,
-        { headers: SUPABASE_HEADERS }
-      );
-      const users = await userRes.json();
-      const fullName = Array.isArray(users) && users[0]?.full_name;
-      if (!fullName) throw new Error('Could not get name');
-
-      // Filter leads by scanned_by name
+      // Filter leads by scanned_by user ID
       const res = await fetch(
-        `${SUPABASE_BASE}/leads?scanned_by=eq.${encodeURIComponent(fullName)}&select=*`,
+        `${SUPABASE_BASE}/leads?scanned_by=eq.${userId}&select=*`,
         { headers: SUPABASE_HEADERS }
       );
       const data = await res.json();
@@ -87,7 +78,7 @@ export default function DashboardScreen() {
         .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         .slice(0, 3);
 
-      setTotalLeads(data.length);       // rep's all-time total
+      setTotalLeads(data.length);
       setMyLeadsToday(todayLeads.length);
       setRecentScans(recent);
       setLastUpdated(new Date().toLocaleTimeString());

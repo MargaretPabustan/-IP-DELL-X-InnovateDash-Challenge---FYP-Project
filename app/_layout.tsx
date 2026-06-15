@@ -61,10 +61,10 @@ export default function RootLayout() {
 
   // ── Prevent screenshots & screen recording app-wide ──────────────────────
   useEffect(() => {
-    ScreenCapture.preventScreenCaptureAsync();
-    return () => {
-      ScreenCapture.allowScreenCaptureAsync();
-    };
+    //ScreenCapture.preventScreenCaptureAsync();
+    //return () => {
+      //ScreenCapture.allowScreenCaptureAsync();
+    //};
   }, []);
 
   // ── Auth guard — check token on app load ──────────────────────────────────

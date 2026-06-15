@@ -1,0 +1,20 @@
+$kind: http-request
+name: Manager Get Leads - Filter by Status
+method: GET
+url: '{{baseUrl}}/manager/leads?status=QUALIFIED'
+order: 300
+headers:
+  - key: Authorization
+    value: 'Bearer {{managerToken}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 200", () => pm.response.to.have.status(200));
+      pm.test("All returned leads are QUALIFIED", () => {
+          const leads = pm.response.json().data;
+          leads.forEach(l => pm.expect(l.status).to.equal("QUALIFIED"));
+      });
+      pm.test("Response time is under 3000ms", () => {
+          pm.expect(pm.response.responseTime).to.be.below(3000);
+      });

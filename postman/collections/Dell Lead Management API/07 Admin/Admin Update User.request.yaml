@@ -1,0 +1,31 @@
+$kind: http-request
+name: Admin Update User
+method: PUT
+url: '{{baseUrl}}/admin/users/{{createdUserId}}'
+order: 300
+headers:
+  - key: Authorization
+    value: 'Bearer {{adminToken}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "full_name": "Updated Rep User",
+      "email": "testrep.updated@boothflow.com",
+      "role": "rep",
+      "team_id": null,
+      "is_active": true
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 200", () => pm.response.to.have.status(200));
+      pm.test("Returns user updated message", () => {
+          pm.expect(pm.response.json().message).to.equal("User updated");
+      });
+      pm.test("Response time is under 3000ms", () => {
+          pm.expect(pm.response.responseTime).to.be.below(3000);
+      });

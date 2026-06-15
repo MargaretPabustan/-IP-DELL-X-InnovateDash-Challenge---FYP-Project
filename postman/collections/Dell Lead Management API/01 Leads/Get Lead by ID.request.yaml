@@ -3,6 +3,9 @@ name: Get Lead by ID
 method: GET
 url: '{{baseUrl}}/leads/{{createdLeadId}}'
 order: 300
+headers:
+  - key: Authorization
+    value: 'Bearer {{authToken}}'
 scripts:
   - type: afterResponse
     language: text/javascript
@@ -20,4 +23,13 @@ scripts:
           pm.expect(lead).to.have.property('company');
           pm.expect(lead).to.have.property('title');
           pm.expect(lead).to.have.property('phone_number');
+          pm.expect(lead).to.have.property('status');
+          pm.expect(lead).to.have.property('assigned_team_id');
+      });
+      pm.test("Lead ID matches requested ID", () => {
+          const lead = pm.response.json().data;
+          pm.expect(lead.lead_id.toString()).to.eql(pm.environment.get('createdLeadId').toString());
+      });
+      pm.test("Response time is under 3000ms", () => {
+          pm.expect(pm.response.responseTime).to.be.below(3000);
       });
