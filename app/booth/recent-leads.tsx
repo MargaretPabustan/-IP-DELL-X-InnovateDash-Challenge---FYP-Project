@@ -54,8 +54,9 @@ async function getAuthHeaders() {
 function maskEmail(email: string): string {
   if (!email || !email.includes('@')) return email;
   const [local, domain] = email.split('@');
-  if (local.length <= 2) return `${local[0]}***@${domain}`;
-  return `${local[0]}${local[1]}***@${domain}`;
+  const domainParts = domain.split('.');
+  const tld = domainParts[domainParts.length - 1];
+  return `${local}@***.${tld}`;
 }
 
 function maskPhone(phone: string): string {
@@ -203,11 +204,11 @@ function ViewModal({ lead, onClose, theme }: { lead: Lead; onClose: () => void; 
 
 // ─── Edit Modal ───────────────────────────────────────────────────────────────
 function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () => void; onSave: (updated: Lead) => void; theme: any }) {
-  const [name, setName]       = useState(lead.name);
-  const [role, setRole]       = useState(lead.role);
+  const [name,    setName]    = useState(lead.name);
+  const [role,    setRole]    = useState(lead.role);
   const [company, setCompany] = useState(lead.company);
-  const [notes, setNotes]     = useState(lead.notes);
-  const [saving, setSaving]   = useState(false);
+  const [notes,   setNotes]   = useState(lead.notes);
+  const [saving,  setSaving]  = useState(false);
 
   const handleSave = async () => {
     setSaving(true);
@@ -286,22 +287,11 @@ function ProfileModal({ onClose, theme }: { onClose: () => void; theme: any }) {
 
         let fullUser = null;
         const userRes = await fetch(
-          `${SUPABASE_BASE}/users?user_id=eq.${userId}&select=user_id,full_name,email,role,team_id`,
+          `${SUPABASE_BASE}/users?user_id=eq.${userId}&select=user_id,full_name,email,role`,
           { headers: SUPABASE_HEADERS }
         );
         const users = await userRes.json();
         fullUser = Array.isArray(users) && users.length > 0 ? users[0] : null;
-
-        if (!fullUser) {
-          const allRes = await fetch(
-            `${SUPABASE_BASE}/users?select=user_id,full_name,email,role,team_id`,
-            { headers: SUPABASE_HEADERS }
-          );
-          const allUsers = await allRes.json();
-          fullUser = Array.isArray(allUsers)
-            ? allUsers.find((u: any) => String(u.user_id) === String(userId)) ?? null
-            : null;
-        }
 
         setProfile({
           email:     fullUser?.email     || me?.email     || '—',
@@ -344,29 +334,10 @@ function ProfileModal({ onClose, theme }: { onClose: () => void; theme: any }) {
               <View style={[modal.roleBadge, { backgroundColor: theme.navy + '18' }]}>
                 <Text style={[modal.roleBadgeText, { color: theme.navy }]}>{profile.role?.toUpperCase()}</Text>
               </View>
-              <View style={[modal.profileDetails, { backgroundColor: theme.inputBg }]}>
-                <View style={modal.profileRow}>
-                  <Ionicons name="person-outline" size={15} color={theme.subText} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={modal.fieldLabel}>NAME</Text>
-                    <Text style={[modal.fieldValue, { color: theme.text }]}>{profile.full_name || '—'}</Text>
-                  </View>
-                </View>
-                <View style={[modal.profileRow, { borderTopWidth: 1, borderTopColor: theme.border }]}>
-                  <Ionicons name="mail-outline" size={15} color={theme.subText} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={modal.fieldLabel}>EMAIL</Text>
-                    <Text style={[modal.fieldValue, { color: theme.text }]}>{profile.email || '—'}</Text>
-                  </View>
-                </View>
-                <View style={[modal.profileRow, { borderTopWidth: 1, borderTopColor: theme.border }]}>
-                  <Ionicons name="shield-checkmark-outline" size={15} color={theme.subText} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={modal.fieldLabel}>ROLE</Text>
-                    <Text style={[modal.fieldValue, { color: theme.text }]}>{profile.role || '—'}</Text>
-                  </View>
-                </View>
-              </View>
+              <Text style={modal.fieldLabel}>NAME</Text>
+              <Text style={[modal.fieldValue, { color: theme.text }]}>{profile.full_name || '—'}</Text>
+              <Text style={modal.fieldLabel}>EMAIL</Text>
+              <Text style={[modal.fieldValue, { color: theme.text }]}>{profile.email || '—'}</Text>
             </View>
           ) : (
             <Text style={{ color: '#94a3b8', textAlign: 'center', paddingVertical: 24 }}>Could not load profile.</Text>
@@ -393,7 +364,6 @@ export default function RecentLeadsScreen() {
   const [viewing,    setViewing]    = useState<Lead | null>(null);
   const [editing,    setEditing]    = useState<Lead | null>(null);
   const [showProfile, setShowProfile] = useState(false);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const [search,       setSearch]  = useState('');
   const [activeFilter, setFilter]  = useState('ALL');
@@ -416,7 +386,6 @@ export default function RecentLeadsScreen() {
       const token = await SecureStore.getItemAsync('token');
       const me = token ? parseJwt(token) : null;
       const userId = me?.sub || me?.id || me?.user_id;
-      if (userId) setCurrentUserId(String(userId));
 
       // Always filter by scanned_by — reps only see their own leads
       const url = userId
@@ -449,7 +418,7 @@ export default function RecentLeadsScreen() {
         l.role.toLowerCase().includes(q)
       );
     }
-    return [...result].sort((a, b) => a.name.localeCompare(b.name));
+    return result;
   }, [leads, activeFilter, search]);
 
   const handleSave = (updated: Lead) => {
@@ -574,23 +543,23 @@ export default function RecentLeadsScreen() {
 
       {/* BOTTOM NAV */}
       <View style={[styles.bottomNav, { backgroundColor: theme.navBg, borderTopColor: theme.subText + '22', paddingBottom: Platform.OS === 'ios' ? 28 : 12 }]}>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/booth/recent-leads' as any)}>
-          <Ionicons name="person-outline" size={26} color={theme.accent} />
-          <Text style={[styles.navLabel, { color: theme.accent }]}>Leads</Text>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/booth/dashboardscreen' as any)}>
+          <FontAwesome5 name="home" size={22} color={theme.subText} />
+          <Text style={[styles.navLabel, { color: theme.subText }]}>Home</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItemCenter} onPress={() => router.push('/booth/qr-scanner' as any)}>
           <View style={[styles.navCenterBtn, { backgroundColor: theme.navy }]}>
             <MaterialIcons name="qr-code-scanner" size={28} color="#fff" />
           </View>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/booth/dashboardscreen' as any)}>
-          <FontAwesome5 name="home" size={22} color={theme.subText} />
-          <Text style={[styles.navLabel, { color: theme.subText }]}>Home</Text>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/booth/recent-leads' as any)}>
+          <Ionicons name="person-outline" size={26} color={theme.accent} />
+          <Text style={[styles.navLabel, { color: theme.accent }]}>Leads</Text>
         </TouchableOpacity>
       </View>
 
-      {viewing     && <ViewModal    lead={viewing} onClose={() => setViewing(null)} theme={theme} />}
-      {editing     && <EditModal    lead={editing} onClose={() => setEditing(null)} onSave={handleSave} theme={theme} />}
+      {viewing    && <ViewModal    lead={viewing} onClose={() => setViewing(null)} theme={theme} />}
+      {editing    && <EditModal    lead={editing} onClose={() => setEditing(null)} onSave={handleSave} theme={theme} />}
       {showProfile && <ProfileModal onClose={() => setShowProfile(false)} theme={theme} />}
     </SafeAreaView>
   );
@@ -665,8 +634,6 @@ const modal = StyleSheet.create({
   profileAvatarText: { color: '#fff', fontSize: 28, fontWeight: '800' },
   roleBadge: { borderRadius: 8, paddingHorizontal: 14, paddingVertical: 4 },
   roleBadgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 1.5 },
-  profileDetails: { width: '100%', borderRadius: 14, padding: 16, gap: 4, marginTop: 4 },
-  profileRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
   logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#ef4444', borderRadius: 14, paddingVertical: 14, marginTop: 16 },
   logoutText: { color: '#fff', fontSize: 15, fontWeight: '700' },
 });

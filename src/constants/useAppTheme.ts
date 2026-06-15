@@ -46,7 +46,7 @@ export const THEMES: Theme[] = [
   },
   // 3. Midnight — deep dark + sky blue
   {
-    name: 'Midnight',
+    name: 'Dark',
     navy: '#0f172a',
     accent: '#38bdf8',
     bg: '#020617',

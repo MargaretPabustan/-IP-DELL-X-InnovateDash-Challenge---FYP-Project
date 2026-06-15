@@ -8,7 +8,6 @@ import {
   StatusBar,
   Platform,
   ScrollView,
-  Modal,
   Pressable,
   ActivityIndicator,
   Alert,
@@ -40,15 +39,6 @@ function parseJwt(token: string): any {
   } catch { return null; }
 }
 
-const HOUR_SLOTS = [
-  { label: '8am',  start: 8  },
-  { label: '10am', start: 10 },
-  { label: '12pm', start: 12 },
-  { label: '2pm',  start: 14 },
-  { label: '4pm',  start: 16 },
-  { label: '6pm',  start: 18 },
-];
-
 export default function DashboardScreen() {
   const router = useRouter();
   const { theme, themeIndex, setThemeIndex } = useAppTheme();
@@ -57,11 +47,9 @@ export default function DashboardScreen() {
 
   const [totalLeads,    setTotalLeads]    = useState(0);
   const [myLeadsToday,  setMyLeadsToday]  = useState(0);
-  const [hourlyLeads,   setHourlyLeads]   = useState<{ label: string; count: number }[]>([]);
   const [recentScans,   setRecentScans]   = useState<any[]>([]);
   const [lastUpdated,   setLastUpdated]   = useState('—');
   const [loadingStats,  setLoadingStats]  = useState(true);
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
 
   const [profile,        setProfile]        = useState<any>(null);
   const [loadingProfile, setLoadingProfile] = useState(false);
@@ -73,35 +61,34 @@ export default function DashboardScreen() {
       if (!token) throw new Error('No token');
       const me = parseJwt(token);
       const userId = me?.sub || me?.id || me?.user_id;
-      setCurrentUserId(String(userId));
 
-      const myRes = await fetch(
-        `${SUPABASE_BASE}/leads?scanned_by=eq.${userId}&select=*`,
+      // Fetch rep's full_name first
+      const userRes = await fetch(
+        `${SUPABASE_BASE}/users?user_id=eq.${userId}&select=full_name`,
         { headers: SUPABASE_HEADERS }
       );
-      const myData = await myRes.json();
-      if (!Array.isArray(myData)) throw new Error('Unexpected response');
+      const users = await userRes.json();
+      const fullName = Array.isArray(users) && users[0]?.full_name;
+      if (!fullName) throw new Error('Could not get name');
+
+      // Filter leads by scanned_by name
+      const res = await fetch(
+        `${SUPABASE_BASE}/leads?scanned_by=eq.${encodeURIComponent(fullName)}&select=*`,
+        { headers: SUPABASE_HEADERS }
+      );
+      const data = await res.json();
+      if (!Array.isArray(data)) throw new Error('Unexpected response');
 
       const today = new Date().toDateString();
-      const todayLeads = myData.filter((l: any) =>
+      const todayLeads = data.filter((l: any) =>
         new Date(l.created_at).toDateString() === today
       );
       const recent = [...todayLeads]
         .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
         .slice(0, 3);
 
-      // Build 2-hour slot buckets for today
-      const hourly = HOUR_SLOTS.map(slot => ({
-        label: slot.label,
-        count: todayLeads.filter((l: any) => {
-          const h = new Date(l.created_at).getHours();
-          return h >= slot.start && h < slot.start + 2;
-        }).length,
-      }));
-
-      setTotalLeads(myData.length);
+      setTotalLeads(data.length);       // rep's all-time total
       setMyLeadsToday(todayLeads.length);
-      setHourlyLeads(hourly);
       setRecentScans(recent);
       setLastUpdated(new Date().toLocaleTimeString());
     } catch {
@@ -143,7 +130,6 @@ export default function DashboardScreen() {
         email:     fullUser?.email     || me?.email     || '—',
         full_name: fullUser?.full_name || me?.full_name || me?.name || '—',
         role:      fullUser?.role      || me?.role      || '—',
-        team_id:   fullUser?.team_id   || null,
       });
     } catch (e) {
       console.error('fetchProfile error:', e);
@@ -199,12 +185,15 @@ export default function DashboardScreen() {
           <Text style={styles.logo}>Boothflow</Text>
         </View>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={[styles.themeBtn, { borderColor: 'rgba(255,255,255,0.25)', marginRight: 8 }]} onPress={fetchStats}>
-            <Ionicons name="refresh-outline" size={18} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.themeBtn, { borderColor: 'rgba(255,255,255,0.25)', marginRight: 10 }]} onPress={() => setShowThemePicker(true)}>
-            <Ionicons name="color-palette-outline" size={18} color="#fff" />
-          </TouchableOpacity>
+          <View style={[styles.headerBtnGroup, { borderColor: 'rgba(255,255,255,0.25)' }]}>
+            <TouchableOpacity style={styles.headerBtn} onPress={fetchStats}>
+              <Ionicons name="refresh-outline" size={18} color="#fff" />
+            </TouchableOpacity>
+            <View style={styles.headerBtnDivider} />
+            <TouchableOpacity style={styles.headerBtn} onPress={() => setShowThemePicker(true)}>
+              <Ionicons name="color-palette-outline" size={18} color="#fff" />
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity style={styles.profileBtn} onPress={handleOpenProfile}>
             <Ionicons name="person-circle" size={38} color="#fff" />
           </TouchableOpacity>
@@ -217,8 +206,8 @@ export default function DashboardScreen() {
         {/* SCAN SECTION */}
         <TouchableOpacity style={[styles.scanSection, { backgroundColor: theme.card }]} onPress={handleScan} activeOpacity={0.85}>
           <View style={[styles.scanAccent, { backgroundColor: theme.navy + '0d' }]} />
-          <View style={[styles.scanIconRing, { borderColor: theme.navy + '20', backgroundColor: theme.navy + '08' }]}>
-            <MaterialIcons name="qr-code-scanner" size={96} color={theme.navy} />
+          <View style={[styles.scanIconRing, { borderColor: theme.scanColor + '30', backgroundColor: theme.scanColor + '10' }]}>
+            <MaterialIcons name="qr-code-scanner" size={96} color={theme.scanColor} />
           </View>
           <Text style={[styles.scanText, { color: theme.text }]}>Tap to Scan</Text>
           <Text style={[styles.scanSubText, { color: theme.subText }]}>Point at a QR code to capture lead</Text>
@@ -227,59 +216,59 @@ export default function DashboardScreen() {
           </View>
         </TouchableOpacity>
 
-        {/* OVERVIEW STRIP */}
-        <View style={[styles.overviewStrip, { backgroundColor: theme.card }]}>
-          <View style={styles.overviewItem}>
-            <Text style={[styles.overviewNumber, { color: theme.text }]}>{loadingStats ? '—' : totalLeads}</Text>
-            <Text style={[styles.overviewLabel, { color: theme.subText }]}>All Time</Text>
+        {/* TOTAL LEADS CARD — rep's own all-time total */}
+        <Text style={[styles.sectionLabel, { color: theme.subText }]}>OVERVIEW</Text>
+        <View style={[styles.totalCard, { backgroundColor: theme.card }]}>
+          <View style={styles.totalCardRow}>
+            <View>
+              <Text style={[styles.totalCardLabel, { color: theme.subText }]}>Total Leads Captured</Text>
+              <Text style={[styles.totalNumber, { color: theme.text }]}>
+                {loadingStats ? '—' : totalLeads}
+              </Text>
+            </View>
+            <View style={[styles.totalBadge, { backgroundColor: theme.accent + '18' }]}>
+              <Ionicons name="people" size={28} color={theme.accent} />
+            </View>
           </View>
-          <View style={[styles.overviewDivider, { backgroundColor: theme.bg }]} />
-          <View style={styles.overviewItem}>
-            <Text style={[styles.overviewNumber, { color: theme.text }]}>{loadingStats ? '—' : myLeadsToday}</Text>
-            <Text style={[styles.overviewLabel, { color: theme.subText }]}>Today</Text>
-          </View>
-          <View style={[styles.overviewDivider, { backgroundColor: theme.bg }]} />
-          <View style={styles.overviewItem}>
-            <Text style={[styles.overviewNumber, { color: theme.text }]}>{loadingStats ? '—' : recentScans.length}</Text>
-            <Text style={[styles.overviewLabel, { color: theme.subText }]}>Recent</Text>
-          </View>
-          <View style={styles.overviewUpdateRow}>
-            <Text style={[styles.overviewUpdate, { color: theme.subText }]}>
-              {loadingStats ? 'Updating...' : `↻ ${lastUpdated}`}
-            </Text>
-          </View>
+          <View style={[styles.totalDivider, { backgroundColor: theme.bg }]} />
+          <Text style={[styles.totalCardFooter, { color: theme.subText }]}>
+            {loadingStats ? 'Updating...' : `Updated at ${lastUpdated}`}
+          </Text>
         </View>
 
         {/* STATS ROW */}
         <Text style={[styles.sectionLabel, { color: theme.subText }]}>TODAY</Text>
         <View style={styles.statsRow}>
-
           {/* My Leads Today */}
           <TouchableOpacity
             style={[styles.statCard, { backgroundColor: theme.card }]}
             activeOpacity={0.85}
-            onPress={() => router.push({ pathname: '/booth/recent-leads' as any, params: { filterBy: 'scanned_by', filterValue: currentUserId } })}
+            onPress={() => router.push('/booth/recent-leads' as any)}
           >
             <View style={[styles.statIconBox, { backgroundColor: '#dbeafe' }]}>
               <Ionicons name="person-add" size={24} color="#2563eb" />
             </View>
-            <Text style={[styles.statNumber, { color: theme.text }]}>{loadingStats ? '—' : myLeadsToday}</Text>
+            <Text style={[styles.statNumber, { color: theme.text }]}>
+              {loadingStats ? '—' : myLeadsToday}
+            </Text>
             <Text style={[styles.statLabel, { color: theme.subText }]}>My leads today</Text>
             <View style={[styles.statChip, { backgroundColor: '#dbeafe' }]}>
               <Text style={[styles.statChipText, { color: '#2563eb' }]}>View →</Text>
             </View>
           </TouchableOpacity>
 
-          {/* Activity Today — taps to full chart page */}
+          {/* Activity — taps to chart page */}
           <TouchableOpacity
-            style={[styles.chartCard, { backgroundColor: theme.card }]}
+            style={[styles.statCard, { backgroundColor: theme.card }]}
             activeOpacity={0.85}
             onPress={() => router.push('/booth/activity' as any)}
           >
             <View style={[styles.statIconBox, { backgroundColor: theme.accent + '18' }]}>
               <Ionicons name="bar-chart-outline" size={24} color={theme.accent} />
             </View>
-            <Text style={[styles.statNumber, { color: theme.text }]}>{loadingStats ? '—' : myLeadsToday}</Text>
+            <Text style={[styles.statNumber, { color: theme.text }]}>
+              {loadingStats ? '—' : myLeadsToday}
+            </Text>
             <Text style={[styles.statLabel, { color: theme.subText }]}>Activity today</Text>
             <View style={[styles.statChip, { backgroundColor: theme.accent + '18' }]}>
               <Text style={[styles.statChipText, { color: theme.accent }]}>View chart →</Text>
@@ -330,18 +319,18 @@ export default function DashboardScreen() {
 
       {/* BOTTOM NAV */}
       <View style={[styles.bottomNav, { backgroundColor: theme.navBg, borderTopColor: theme.subText + '22', paddingBottom: Platform.OS === 'ios' ? 28 : 12 }]}>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/booth/recent-leads' as any)}>
-          <Ionicons name="person-outline" size={26} color={theme.subText} />
-          <Text style={[styles.navLabel, { color: theme.subText }]}>Leads</Text>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/booth/dashboardscreen' as any)}>
+          <FontAwesome5 name="home" size={22} color={theme.accent} />
+          <Text style={[styles.navLabel, { color: theme.accent }]}>Home</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItemCenter} onPress={handleScan}>
           <View style={[styles.navCenterBtn, { backgroundColor: theme.navy }]}>
             <MaterialIcons name="qr-code-scanner" size={28} color="#fff" />
           </View>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/booth/dashboardscreen' as any)}>
-          <FontAwesome5 name="home" size={22} color={theme.accent} />
-          <Text style={[styles.navLabel, { color: theme.accent }]}>Home</Text>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/booth/recent-leads' as any)}>
+          <Ionicons name="person-outline" size={26} color={theme.subText} />
+          <Text style={[styles.navLabel, { color: theme.subText }]}>Leads</Text>
         </TouchableOpacity>
       </View>
 
@@ -376,13 +365,6 @@ export default function DashboardScreen() {
                   <Text style={styles.dropdownRowLabel}>Role</Text>
                   <Text style={styles.dropdownRowValue}>{profile.role || '—'}</Text>
                 </View>
-                {profile.team_id && (
-                  <View style={styles.dropdownRow}>
-                    <Ionicons name="people-outline" size={14} color="#94a3b8" />
-                    <Text style={styles.dropdownRowLabel}>Team</Text>
-                    <Text style={styles.dropdownRowValue}>{profile.team_id}</Text>
-                  </View>
-                )}
               </>
             ) : (
               <Text style={styles.profileError}>Could not load profile.</Text>
@@ -396,13 +378,12 @@ export default function DashboardScreen() {
         </Pressable>
       )}
 
-      {/* THEME PICKER */}
-      <Modal visible={showThemePicker} transparent animationType="slide">
-        <Pressable style={styles.modalBackdrop} onPress={() => setShowThemePicker(false)}>
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHandle} />
-            <Text style={styles.modalTitle}>Appearance</Text>
-            <Text style={styles.modalSub}>Choose a colour theme</Text>
+      {/* THEME DROPDOWN */}
+      {showThemePicker && (
+        <Pressable style={styles.dropdownBackdrop} onPress={() => setShowThemePicker(false)}>
+          <Pressable style={styles.dropdown} onPress={() => {}}>
+            <View style={styles.dropdownArrow} />
+            <Text style={styles.themeDropdownTitle}>Appearance</Text>
             <View style={styles.themeGrid}>
               {THEMES.map((t, index) => (
                 <TouchableOpacity
@@ -415,13 +396,13 @@ export default function DashboardScreen() {
                     <View style={[styles.swatchSmall, { backgroundColor: t.accent, right: 0, bottom: 0 }]} />
                   </View>
                   <Text style={[styles.themeName, themeIndex === index && { color: t.accent, fontWeight: '700' }]}>{t.name}</Text>
-                  {themeIndex === index && <Ionicons name="checkmark-circle" size={14} color={t.accent} />}
+                  {themeIndex === index && <Ionicons name="checkmark-circle" size={12} color={t.accent} />}
                 </TouchableOpacity>
               ))}
             </View>
-          </View>
+          </Pressable>
         </Pressable>
-      </Modal>
+      )}
     </SafeAreaView>
   );
 }
@@ -431,12 +412,15 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 22, paddingBottom: 18, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
   logoSub: { color: 'rgba(255,255,255,0.5)', fontSize: 10, fontWeight: '600', letterSpacing: 2, marginBottom: 2 },
   logo: { color: '#fff', fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
-  headerRight: { flexDirection: 'row', alignItems: 'center', marginBottom: 2 },
-  themeBtn: { padding: 7, borderRadius: 10, borderWidth: 1 },
+  headerRight: { flexDirection: 'row', alignItems: 'center', marginBottom: 2, gap: 8 },
+  headerBtnGroup: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderRadius: 10, overflow: 'hidden' },
+  headerBtn: { padding: 7, paddingHorizontal: 10 },
+  headerBtnDivider: { width: 1, height: 18, backgroundColor: 'rgba(255,255,255,0.25)' },
   profileBtn: { marginLeft: 2 },
   body: { flex: 1 },
   bodyContent: { paddingHorizontal: 18, paddingTop: 20, paddingBottom: 24 },
   sectionLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1.5, marginBottom: 10, marginTop: 20 },
+  // Scan
   scanSection: { alignItems: 'center', borderRadius: 20, paddingVertical: 32, paddingHorizontal: 20, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.08, shadowRadius: 10, elevation: 4 },
   scanAccent: { position: 'absolute', width: 160, height: 160, borderRadius: 80, top: -60, right: -40 },
   scanIconRing: { width: 148, height: 148, borderRadius: 74, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center', marginBottom: 18 },
@@ -444,13 +428,15 @@ const styles = StyleSheet.create({
   scanSubText: { fontSize: 13, marginBottom: 18 },
   scanBadge: { borderRadius: 20, paddingHorizontal: 20, paddingVertical: 7 },
   scanBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700', letterSpacing: 1.5 },
-  overviewStrip: { borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3, flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', marginTop: 20 },
-  overviewItem: { flex: 1, alignItems: 'center' },
-  overviewNumber: { fontSize: 26, fontWeight: '800', letterSpacing: -0.5 },
-  overviewLabel: { fontSize: 11, fontWeight: '600', marginTop: 2 },
-  overviewDivider: { width: 1, height: 36, marginHorizontal: 8 },
-  overviewUpdateRow: { width: '100%', alignItems: 'flex-end', marginTop: 10, paddingTop: 8, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.05)' },
-  overviewUpdate: { fontSize: 11, fontWeight: '500' },
+  // Total card
+  totalCard: { borderRadius: 16, padding: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3 },
+  totalCardRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  totalCardLabel: { fontSize: 12, fontWeight: '600', letterSpacing: 0.3, marginBottom: 4 },
+  totalNumber: { fontSize: 42, fontWeight: '800', letterSpacing: -1 },
+  totalBadge: { width: 56, height: 56, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  totalDivider: { height: 1, marginVertical: 12 },
+  totalCardFooter: { fontSize: 12, fontWeight: '500' },
+  // Stats row
   statsRow: { flexDirection: 'row', gap: 12 },
   statCard: { flex: 1, borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3 },
   statIconBox: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
@@ -458,8 +444,7 @@ const styles = StyleSheet.create({
   statLabel: { fontSize: 12, marginTop: 4, lineHeight: 17 },
   statChip: { alignSelf: 'flex-start', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, marginTop: 10 },
   statChipText: { fontSize: 11, fontWeight: '700' },
-  chartCard: { flex: 1, borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3 },
-  chartTitle: { fontSize: 10, fontWeight: '700', letterSpacing: 1, marginBottom: 4 },
+  // Recent
   recentCard: { borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3 },
   recentRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10 },
   recentAvatar: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
@@ -469,14 +454,17 @@ const styles = StyleSheet.create({
   recentCompany: { fontSize: 12, marginTop: 2 },
   recentTime: { fontSize: 11, fontWeight: '500' },
   recentDivider: { height: 1, marginHorizontal: 4 },
-  emptyCard: { borderRadius: 20, padding: 28, alignItems: 'center', gap: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 2 },
+  // Empty
+  emptyCard: { borderRadius: 20, padding: 28, alignItems: 'center', gap: 10 },
   emptyTitle: { fontSize: 16, fontWeight: '700' },
   emptySubText: { fontSize: 13, textAlign: 'center', lineHeight: 20 },
+  // Nav
   bottomNav: { flexDirection: 'row', borderTopWidth: 1, paddingTop: 10, paddingHorizontal: 24, justifyContent: 'space-between', alignItems: 'center' },
   navItem: { alignItems: 'center', gap: 3, paddingHorizontal: 8 },
   navLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 0.3 },
   navItemCenter: { alignItems: 'center', marginTop: -20 },
   navCenterBtn: { width: 58, height: 58, borderRadius: 18, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 6 },
+  // Profile dropdown
   profileError: { color: '#94a3b8', textAlign: 'center', paddingVertical: 16, fontSize: 13 },
   dropdownBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 },
   dropdown: { position: 'absolute', top: Platform.OS === 'android' ? 80 : 100, right: 16, width: 280, backgroundColor: '#fff', borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 12, zIndex: 101 },
@@ -494,15 +482,12 @@ const styles = StyleSheet.create({
   dropdownRowValue: { fontSize: 12, fontWeight: '600', color: '#334155' },
   dropdownLogout: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 16, paddingTop: 12 },
   dropdownLogoutText: { fontSize: 14, fontWeight: '600', color: '#ef4444' },
-  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  modalSheet: { backgroundColor: '#fff', borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: Platform.OS === 'ios' ? 44 : 28 },
-  modalHandle: { width: 36, height: 4, backgroundColor: '#e2e8f0', borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
-  modalTitle: { fontSize: 20, fontWeight: '800', color: '#0f172a', letterSpacing: -0.3 },
-  modalSub: { fontSize: 13, color: '#94a3b8', marginTop: 2, marginBottom: 20 },
-  themeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  themeOption: { width: '30%', alignItems: 'center', padding: 12, borderRadius: 14, borderWidth: 1.5, borderColor: '#f1f5f9', gap: 8, backgroundColor: '#fafafa' },
-  swatchStack: { width: 44, height: 44, position: 'relative' },
-  swatchLarge: { width: 36, height: 36, borderRadius: 10, position: 'absolute', top: 0, left: 0 },
-  swatchSmall: { width: 20, height: 20, borderRadius: 6, position: 'absolute', borderWidth: 2, borderColor: '#fff' },
-  themeName: { fontSize: 12, color: '#64748b', fontWeight: '600', textAlign: 'center' },
+  // Theme dropdown
+  themeDropdownTitle: { fontSize: 13, fontWeight: '700', color: '#0f172a', paddingHorizontal: 16, paddingTop: 14, paddingBottom: 10 },
+  themeGrid: { flexDirection: 'row', paddingHorizontal: 12, paddingBottom: 14, gap: 8 },
+  themeOption: { flex: 1, alignItems: 'center', padding: 8, borderRadius: 12, borderWidth: 1.5, borderColor: '#f1f5f9', gap: 5, backgroundColor: '#fafafa' },
+  swatchStack: { width: 36, height: 36, position: 'relative' },
+  swatchLarge: { width: 28, height: 28, borderRadius: 8, position: 'absolute', top: 0, left: 0 },
+  swatchSmall: { width: 16, height: 16, borderRadius: 5, position: 'absolute', borderWidth: 2, borderColor: '#fff' },
+  themeName: { fontSize: 10, color: '#64748b', fontWeight: '600', textAlign: 'center' },
 });
