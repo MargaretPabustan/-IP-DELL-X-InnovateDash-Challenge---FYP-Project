@@ -14,6 +14,11 @@ body:
       "password": "{{adminPassword}}"
     }
 scripts:
+  - type: beforeRequest
+    language: text/javascript
+    code: |-
+      console.log("adminEmail:", pm.environment.get("adminEmail"));
+      console.log("adminPassword:", pm.environment.get("adminPassword"));
   - type: afterResponse
     language: text/javascript
     code: |-
@@ -22,7 +27,7 @@ scripts:
           const json = pm.response.json();
           pm.expect(json).to.have.property("token");
           pm.environment.set("adminToken", json.token);
-          console.log("adminToken saved");
+          console.log("adminToken saved:", json.token ? "YES" : "NO");
       });
       pm.test("Role is admin", () => {
           pm.expect(pm.response.json().role).to.equal("admin");

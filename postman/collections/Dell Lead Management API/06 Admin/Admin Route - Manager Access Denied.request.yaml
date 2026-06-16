@@ -1,0 +1,38 @@
+$kind: http-request
+name: Admin Route - Manager Access Denied
+method: GET
+url: '{{baseUrl}}/admin/users'
+order: 800
+headers:
+  - key: Authorization
+    value: 'Bearer {{repToken}}'
+scripts:
+  - type: beforeRequest
+    language: text/javascript
+    code: |-
+      const baseUrl = pm.environment.get("baseUrl");
+      pm.sendRequest({
+          url: baseUrl + "/auth/login",
+          method: "POST",
+          header: { "Content-Type": "application/json" },
+          body: {
+              mode: "raw",
+              raw: JSON.stringify({ 
+                  email: pm.environment.get("repLoginEmail"), 
+                  password: pm.environment.get("repLoginPassword") 
+              })
+          }
+      }, function(err, res) {
+          const token = res.json().token;
+          pm.environment.set("repToken", token);
+      });
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 403", () => pm.response.to.have.status(403));
+      pm.test("Returns Forbidden message", () => {
+          pm.expect(pm.response.json().message).to.equal("Forbidden");
+      });
+      pm.test("Response time is under 3000ms", () => {
+          pm.expect(pm.response.responseTime).to.be.below(3000);
+      });
