@@ -1,3 +1,12 @@
 id: dell-lead-management-api
 name: Dell Lead Management API
 schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json'
+folders:
+  - 00 Auth
+  - 01 Leads
+  - 02 Interest Categories
+  - 03 AI Analysis
+  - 04 Teams
+  - 05 Manager
+  - 06 Admin
+  - 07 Cleanup
