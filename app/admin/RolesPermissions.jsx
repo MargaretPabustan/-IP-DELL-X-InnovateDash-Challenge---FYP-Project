@@ -1,21 +1,77 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import * as SecureStore from "expo-secure-store";
 import {
   View,
   Text,
   Switch,
   StyleSheet,
   ScrollView,
+  TouchableOpacity,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || "";
+
 export default function RolesPermissions() {
+  // Replace with route.params.userId later
+  const userId = 1;
+
   const [permissions, setPermissions] = useState({
-    createUser: true,
-    editUser: true,
+    createUser: false,
+    editUser: false,
     deleteUser: false,
-    manageTeams: true,
-    viewReports: true,
+    manageTeams: false,
+    viewReports: false,
   });
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    loadPermissions();
+  }, []);
+
+  const loadPermissions = async () => {
+    try {
+      const token = await SecureStore.getItemAsync("token");
+
+      const response = await fetch(
+        `${BACKEND_URL}/admin/users/${userId}/permissions`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setPermissions(
+          data.permissions || {
+            createUser: false,
+            editUser: false,
+            deleteUser: false,
+            manageTeams: false,
+            viewReports: false,
+          }
+        );
+      } else {
+        Alert.alert(
+          "Error",
+          data.message || "Failed to load permissions"
+        );
+      }
+    } catch (error) {
+      console.log("Load permissions error:", error);
+      Alert.alert("Error", "Unable to load permissions");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const togglePermission = (key) => {
     setPermissions((prev) => ({
@@ -24,10 +80,64 @@ export default function RolesPermissions() {
     }));
   };
 
+  const savePermissions = async () => {
+    try {
+      setSaving(true);
+
+      const token = await SecureStore.getItemAsync("token");
+
+      const response = await fetch(
+        `${BACKEND_URL}/admin/users/${userId}/permissions`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            permissions,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (response.ok) {
+        Alert.alert(
+          "Success",
+          "Permissions updated successfully"
+        );
+      } else {
+        Alert.alert(
+          "Error",
+          data.message || "Failed to update permissions"
+        );
+      }
+    } catch (error) {
+      console.log("Save permissions error:", error);
+      Alert.alert(
+        "Error",
+        "Unable to connect to server"
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Text>Loading permissions...</Text>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView>
-        <Text style={styles.title}>Roles & Permissions</Text>
+        <Text style={styles.title}>
+          Roles & Permissions
+        </Text>
 
         {Object.keys(permissions).map((key) => (
           <View key={key} style={styles.permissionRow}>
@@ -41,6 +151,16 @@ export default function RolesPermissions() {
             />
           </View>
         ))}
+
+        <TouchableOpacity
+          style={styles.saveButton}
+          onPress={savePermissions}
+          disabled={saving}
+        >
+          <Text style={styles.saveButtonText}>
+            {saving ? "Saving..." : "Save Permissions"}
+          </Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -73,5 +193,19 @@ const styles = StyleSheet.create({
   permissionText: {
     fontSize: 16,
     textTransform: "capitalize",
+  },
+
+  saveButton: {
+    backgroundColor: "#1a1a2e",
+    padding: 15,
+    borderRadius: 10,
+    marginTop: 20,
+    alignItems: "center",
+  },
+
+  saveButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "bold",
+    fontSize: 16,
   },
 });

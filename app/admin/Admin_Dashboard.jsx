@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useRouter } from "expo-router";
+import * as SecureStore from "expo-secure-store";
 import {
   SafeAreaView,
   View,
@@ -7,117 +8,189 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
+  ActivityIndicator,
 } from "react-native";
+
+
+
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
 export default function AdminDashboard() {
   const router = useRouter();
 
+  const [teams, setTeams] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    
+    fetchTeams();
+    const deleteTeam = async (teamId) => {
+  try {
+    const token = await SecureStore.getItemAsync("token");
+
+    const response = await fetch(
+      `${BACKEND_URL}/admin/teams/${teamId}`,
+      {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    const data = await response.json();
+
+    if (data.success) {
+      setTeams((prev) =>
+        prev.filter((team) => team.team_id !== teamId)
+      );
+    } else {
+      console.log(data.message);
+    }
+  } catch (error) {
+    console.log("Delete team error:", error);
+  }
+};
+  }, []);
+
+  const fetchTeams = async () => {
+  try {
+    const token = await SecureStore.getItemAsync("token");
+
+    const response = await fetch(`${BACKEND_URL}/admin/teams`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+    });
+
+    const data = await response.json();
+
+    if (response.ok && data.success) {
+      setTeams(data.data || []);
+    } else {
+      console.log("Failed to fetch teams:", data.message);
+    }
+  } catch (error) {
+    console.log("Fetch teams error:", error);
+  } finally {
+    setLoading(false);
+  }
+};
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#1a1a2e" />
+        <Text style={{ marginTop: 10 }}>Loading Teams...</Text>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
-
         {/* HEADER */}
-        <Text style={styles.title}>Team A - Admin</Text>
-        <Text style={styles.subtitle}>Jessica Lim</Text>
+        <Text style={styles.title}>Admin Dashboard</Text>
+        <Text style={styles.subtitle}>Team Management</Text>
 
         {/* TEAMS SECTION */}
         <Text style={styles.sectionTitle}>Teams</Text>
 
-        {/* Team Card 1 */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Team A - West</Text>
-          <Text style={styles.cardSub}>Manager: Jamie Lee • 8 reps</Text>
-
-          <Text style={styles.label}>Leads</Text>
-          <Text style={styles.status}>Active</Text>
-
-          <Text style={styles.progressText}>74 / 100</Text>
-
-          <View style={styles.row}>
-            <TouchableOpacity>
-              <Text style={styles.action}>Edit</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity>
-              <Text style={styles.action}>Assign</Text>
-            </TouchableOpacity>
+        {teams.length === 0 ? (
+          <View style={styles.card}>
+            <Text>No teams found.</Text>
           </View>
-        </View>
+        ) : (
+          teams.map((team) => (
+            <View key={team.team_id} style={styles.card}>
+              <Text style={styles.cardTitle}>
+                {team.team_name}
+              </Text>
 
-        {/* Team Card 2 */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Team B - East</Text>
-          <Text style={styles.cardSub}>Manager: Rita Patel • 6 reps</Text>
+              <Text style={styles.cardSub}>
+                Territory: {team.territory || "N/A"}
+              </Text>
 
-          <Text style={styles.label}>Leads</Text>
-          <Text style={styles.status}>Active</Text>
+              <Text style={styles.label}>Description</Text>
 
-          <Text style={styles.progressText}>59 / 100</Text>
+              <Text style={styles.status}>
+                {team.description || "No description available"}
+              </Text>
 
-          <View style={styles.row}>
-            <TouchableOpacity>
-              <Text style={styles.action}>Edit</Text>
-            </TouchableOpacity>
+            <View style={styles.row}>
+  <TouchableOpacity
+    onPress={() =>
+      router.push({
+        pathname: "/admin/TeamPage",
+        params: { teamId: team.team_id },
+      })
+    }
+  >
+    <Text style={styles.action}>Edit</Text>
+  </TouchableOpacity>
 
-            <TouchableOpacity>
-              <Text style={styles.action}>Assign</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Team Card 3 */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Team C - Enterprise</Text>
-          <Text style={styles.cardSub}>Manager: Unassigned • 3 reps</Text>
-
-          <Text style={styles.label}>Leads</Text>
-          <Text style={styles.status}>Inactive</Text>
-
-          <Text style={styles.progressText}>22 / 100</Text>
-
-          <View style={styles.row}>
-            <TouchableOpacity>
-              <Text style={styles.action}>Edit</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity>
-              <Text style={styles.action}>Assign</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+  <TouchableOpacity
+    onPress={() => deleteTeam(team.team_id)}
+  >
+    <Text style={[styles.action, { color: "red" }]}>
+      Delete
+    </Text>
+  </TouchableOpacity>
+</View>
+            </View>
+          ))
+        )}
 
         {/* NEW TEAM BUTTON */}
-        <TouchableOpacity style={styles.newTeamBtn}>
+        <TouchableOpacity
+          style={styles.newTeamBtn}
+          onPress={() => router.push("/admin/TeamPage")}
+        >
           <Text style={styles.newTeamText}>+ New Team</Text>
         </TouchableOpacity>
-
       </ScrollView>
-
 
       {/* BOTTOM NAV */}
       <View style={styles.bottomNav}>
-        <Text style={styles.navItem} onPress={() => router.push("/admin/Admin_Dashboard")}>
+        <Text
+          style={styles.navItem}
+          onPress={() => router.push("/admin/Admin_Dashboard")}
+        >
           Dashboard
         </Text>
 
-        <Text style={styles.navItem} onPress={() => router.push("/admin/UsersPage")}>
+        <Text
+          style={styles.navItem}
+          onPress={() => router.push("/admin/UsersPage")}
+        >
           Users
         </Text>
 
-        <Text style={styles.navItem} onPress={() => router.push("/admin/TeamPage")}>
+        <Text
+          style={styles.navItem}
+          onPress={() => router.push("/admin/TeamPage")}
+        >
           Teams
         </Text>
 
-        <Text style={styles.navItem} onPress={() => router.push("/admin/ActivityLogs")}>
+        <Text
+          style={styles.navItem}
+          onPress={() => router.push("/admin/ActivityLogs")}
+        >
           Activity
         </Text>
 
-        <Text style={styles.navItem} onPress={() => router.push("/admin/RolesPermissions")}>
+        <Text
+          style={styles.navItem}
+          onPress={() => router.push("/admin/RolesPermissions")}
+        >
           Roles
         </Text>
       </View>
-
-  </SafeAreaView>
+    </SafeAreaView>
   );
 }
 
@@ -126,6 +199,12 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F5F6FA",
     padding: 16,
+  },
+
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
 
   title: {
@@ -173,18 +252,13 @@ const styles = StyleSheet.create({
   status: {
     fontSize: 14,
     fontWeight: "600",
-    marginBottom: 5,
-  },
-
-  progressText: {
-    fontSize: 14,
-    fontWeight: "bold",
-    marginBottom: 10,
+    marginTop: 4,
   },
 
   row: {
     flexDirection: "row",
     justifyContent: "space-between",
+    marginTop: 12,
   },
 
   action: {
@@ -198,6 +272,7 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     marginTop: 10,
+    marginBottom: 20,
   },
 
   newTeamText: {
