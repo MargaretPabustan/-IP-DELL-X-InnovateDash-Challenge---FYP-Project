@@ -386,6 +386,40 @@ app.get('/manager/export/leads', authenticateToken, authorizeRoles('admin', 'man
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
+// ── EXCEL EXPORT ROUTE ──────────────────────────────────────────────────
+const ExcelJS = require('exceljs');
+
+app.get('/export/leads/excel', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM leads ORDER BY created_at DESC');
+
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Leads');
+
+        worksheet.columns = [
+            { header: 'Lead ID', key: 'lead_id', width: 10 },
+            { header: 'Name', key: 'name', width: 20 },
+            { header: 'Company', key: 'company', width: 20 },
+            { header: 'Title', key: 'title', width: 20 },
+            { header: 'Email', key: 'email', width: 25 },
+            { header: 'Phone', key: 'phone_number', width: 15 },
+            { header: 'Status', key: 'status', width: 15 },
+            { header: 'Created At', key: 'created_at', width: 20 },
+        ];
+
+        result.rows.forEach(row => worksheet.addRow(row));
+
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename=leads.xlsx');
+
+        await workbook.xlsx.write(res);
+        res.end();
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
+});
+
+
 app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
         const result = await pool.query(`
@@ -601,6 +635,56 @@ Return ONLY valid JSON in this exact format, no extra text:
     } catch (error) {
         console.error('AI analysis error:', error);
         res.status(500).json({ success: false, message: 'AI analysis failed' });
+    }
+});
+
+// ── FOLLOW-UP EMAIL ROUTE ───────────────────────────────────────────────
+const nodemailer = require('nodemailer'); // already imported above
+
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+    }
+});
+
+app.post('/send-followup/:id', async (req, res) => {
+    try {
+        const leadResult = await pool.query('SELECT * FROM leads WHERE lead_id=$1', [req.params.id]);
+        if (leadResult.rows.length === 0) return res.status(404).json({ success: false, message: 'Lead not found' });
+
+        const lead = leadResult.rows[0];
+
+        // Schedule email after 24h
+        setTimeout(async () => {
+            const emailBody = `Hi ${lead.name},
+
+Thank you for visiting our booth. Here are the details you asked for.
+
+We’d also like to invite you to our upcoming webinar on **June 25th at 3:00 PM (SGT)**, where we’ll showcase solutions related to your interests.
+
+Best regards,
+Dell Boothflow Team`;
+
+            await transporter.sendMail({
+                from: `"Boothflow" <${process.env.EMAIL_USER}>`,
+                to: lead.email,
+                subject: "Follow-up & Upcoming Webinar",
+                text: emailBody
+            });
+
+            await pool.query(
+                `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'EMAIL_SENT', 'Follow-up email sent after 1 day')`,
+                [lead.lead_id]
+            );
+
+            console.log(`📧 Follow-up email sent to ${lead.email}`);
+        }, 24 * 60 * 60 * 1000); // 24 hours
+
+        res.json({ success: true, message: 'Follow-up scheduled for 24h later' });
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
     }
 });
 
