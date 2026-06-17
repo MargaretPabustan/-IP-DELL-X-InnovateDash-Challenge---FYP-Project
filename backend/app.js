@@ -6,6 +6,8 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const ExcelJS = require('exceljs');
+const nodemailer = require('nodemailer');
 
 const app = express();
 app.use(express.json());
@@ -47,12 +49,10 @@ pool.connect()
 
 // ── GEMINI SETUP ──────────────────────────────────────────────────────────────
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 console.log('GEMINI_API_KEY loaded:', process.env.GEMINI_API_KEY ? '✅ ' + process.env.GEMINI_API_KEY.substring(0, 8) + '...' : '❌ MISSING');
 
 // ── INTEREST → TEAM MAPPING ───────────────────────────────────────────────────
-// Mirrors the frontend INTEREST_TEAM_MAP exactly
-// Team 1: AI PCs, Team 2: Multi-cloud, Team 3: Storage, Team 4: Service, Team 5: Others
 const INTEREST_TEAM_MAP = {
     'AI PCs':      1,
     'Multi-cloud': 2,
@@ -61,7 +61,6 @@ const INTEREST_TEAM_MAP = {
 };
 const OTHERS_TEAM_ID = 5;
 
-// Resolves team from primary interest (QR), then selected interests, then Others
 function resolveTeamId(primaryInterest, selectedInterests = []) {
     if (primaryInterest && INTEREST_TEAM_MAP[primaryInterest]) {
         return INTEREST_TEAM_MAP[primaryInterest];
@@ -123,6 +122,8 @@ app.get('/', (req, res) => {
             'POST /lead_interest_categories', 'GET /lead_interest_categories/:lead_id', 'DELETE /lead_interest_categories/:lead_id/:category_id',
             'GET /teams', 'POST /teams', 'GET /teams/:id', 'PUT /teams/:id', 'DELETE /teams/:id',
             'POST /analyze-lead/:id',
+            'GET /export/leads/excel',
+            'POST /send-followup/:id',
         ]
     });
 });
@@ -174,7 +175,6 @@ app.get('/leads/:id', async (req, res) => {
     }
 });
 
-// ── POST /leads — now accepts assigned_team_id and primary_interest ────────────
 app.post('/leads', async (req, res) => {
     const {
         name, email, company, title, phone_number,
@@ -182,15 +182,14 @@ app.post('/leads', async (req, res) => {
         assigned_team_id,
         primary_interest,
         selected_interests,
-        additional_notes,
+        additional_notes,   // rep's notes — stored temporarily, fed to AI
         scanned_by,
-        scanned_by_name,    // full name of the rep who scanned this lead
+        scanned_by_name,
     } = req.body;
 
     const error = validateLead(name, email, company, title, phone_number);
     if (error) return res.status(400).json({ success: false, message: error });
 
-    // ── Duplicate check ────────────────────────────────────────────────────
     try {
         const existing = await pool.query('SELECT lead_id FROM leads WHERE email = $1', [email]);
         if (existing.rows.length > 0) {
@@ -200,7 +199,6 @@ app.post('/leads', async (req, res) => {
         return res.status(500).json({ success: false, message: err.message });
     }
 
-    // ── Resolve team: trust frontend if provided, otherwise compute here ───
     let teamId = assigned_team_id;
     if (!teamId) {
         const interestsList = Array.isArray(selected_interests) ? selected_interests : [];
@@ -347,12 +345,12 @@ app.get('/manager/dashboard', authenticateToken, authorizeRoles('admin', 'manage
         res.json({
             success: true,
             data: {
-                total_leads: +totalLeads.rows[0].count,
-                qualified:   +qualified.rows[0].count,
-                contacted:   +contacted.rows[0].count,
-                new_leads:   +newLeads.rows[0].count,
+                total_leads:    +totalLeads.rows[0].count,
+                qualified:      +qualified.rows[0].count,
+                contacted:      +contacted.rows[0].count,
+                new_leads:      +newLeads.rows[0].count,
                 followups_done: +followups.rows[0].count,
-                emails_sent: +emails.rows[0].count,
+                emails_sent:    +emails.rows[0].count,
             }
         });
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
@@ -372,8 +370,8 @@ app.get('/manager/leads', authenticateToken, authorizeRoles('admin', 'manager'),
 
 app.get('/manager/emails', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
-        const sent   = await pool.query("SELECT * FROM lead_activity_logs WHERE activity_type = 'EMAIL_SENT' ORDER BY created_at DESC");
-        const weekly = await pool.query("SELECT COUNT(*) FROM lead_activity_logs WHERE activity_type = 'EMAIL_SENT' AND created_at >= NOW() - INTERVAL '7 days'");
+        const sent    = await pool.query("SELECT * FROM lead_activity_logs WHERE activity_type = 'EMAIL_SENT' ORDER BY created_at DESC");
+        const weekly  = await pool.query("SELECT COUNT(*) FROM lead_activity_logs WHERE activity_type = 'EMAIL_SENT' AND created_at >= NOW() - INTERVAL '7 days'");
         const overdue = await pool.query("SELECT COUNT(*) FROM lead_followups WHERE followup_status = 'pending' AND due_date < CURRENT_DATE");
         res.json({ success: true, data: { sent: sent.rows, sentThisWeek: weekly.rows[0].count, overdue: overdue.rows[0].count } });
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
@@ -386,39 +384,30 @@ app.get('/manager/export/leads', authenticateToken, authorizeRoles('admin', 'man
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-// ── EXCEL EXPORT ROUTE ──────────────────────────────────────────────────
-const ExcelJS = require('exceljs');
-
 app.get('/export/leads/excel', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM leads ORDER BY created_at DESC');
-
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Leads');
-
         worksheet.columns = [
-            { header: 'Lead ID', key: 'lead_id', width: 10 },
-            { header: 'Name', key: 'name', width: 20 },
-            { header: 'Company', key: 'company', width: 20 },
-            { header: 'Title', key: 'title', width: 20 },
-            { header: 'Email', key: 'email', width: 25 },
-            { header: 'Phone', key: 'phone_number', width: 15 },
-            { header: 'Status', key: 'status', width: 15 },
-            { header: 'Created At', key: 'created_at', width: 20 },
+            { header: 'Lead ID',    key: 'lead_id',      width: 10 },
+            { header: 'Name',       key: 'name',          width: 20 },
+            { header: 'Company',    key: 'company',       width: 20 },
+            { header: 'Title',      key: 'title',         width: 20 },
+            { header: 'Email',      key: 'email',         width: 25 },
+            { header: 'Phone',      key: 'phone_number',  width: 15 },
+            { header: 'Status',     key: 'status',        width: 15 },
+            { header: 'Created At', key: 'created_at',    width: 20 },
         ];
-
         result.rows.forEach(row => worksheet.addRow(row));
-
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         res.setHeader('Content-Disposition', 'attachment; filename=leads.xlsx');
-
         await workbook.xlsx.write(res);
         res.end();
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
 });
-
 
 app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
@@ -533,7 +522,6 @@ app.post('/analyze-lead/:id', async (req, res) => {
         );
         const interests = interestsResult.rows.map(r => r.category_name).join(', ') || 'Not specified';
 
-        // Build full interest string — includes any "Others" text from interest field
         const othersInterestText = lead.customer_intent?.includes('Others:')
             ? lead.customer_intent.split('Others:')[1]?.trim()
             : null;
@@ -543,7 +531,6 @@ app.post('/analyze-lead/:id', async (req, res) => {
             othersInterestText || '',
         ].filter(Boolean).join(', ') || 'Not specified';
 
-        // ── Also resolve/confirm team assignment during AI analysis ──────────
         if (!lead.assigned_team_id) {
             const resolvedTeam = resolveTeamId(null, interests.split(', '));
             await pool.query('UPDATE leads SET assigned_team_id=$1 WHERE lead_id=$2', [resolvedTeam, lead.lead_id]);
@@ -551,14 +538,8 @@ app.post('/analyze-lead/:id', async (req, res) => {
             console.log(`🔧 Fixed missing team assignment: lead ${lead.lead_id} → team ${resolvedTeam}`);
         }
 
-        // lead.ai_notes at this point = rep's additional notes (saved on creation)
-        // After analysis it will be overwritten with AI-generated notes
+        // ai_notes at creation = rep's additional notes, AI will overwrite after analysis
         const repNotes = lead.ai_notes || null;
-
-        // Extract "Others" intent text if present
-        const othersIntent = lead.customer_intent?.toLowerCase().startsWith('others')
-            ? lead.customer_intent
-            : null;
 
         const prompt = `
 You are a sales analyst for Dell Technologies at a booth event.
@@ -569,19 +550,18 @@ Lead Details:
 - Company: ${lead.company}
 - Title: ${lead.title}
 - Customer Intent: ${lead.customer_intent || 'Not specified'}
-${othersIntent ? `- Custom Intent (rep described): ${othersIntent}` : ''}
 - Primary Interests: ${interests}
 ${allInterests !== interests && allInterests !== 'Not specified' ? `- Other Interests Mentioned: ${allInterests}` : ''}
 ${repNotes ? `- Rep's Additional Notes: ${repNotes}` : ''}
 
-Use ALL of the above — the customer intent level, any custom intent description, all interests including others, and the rep's notes — to give a personalised and accurate follow-up suggestion.
+Use ALL of the above to give a personalised and accurate follow-up suggestion.
 
 Return ONLY valid JSON in this exact format, no extra text:
 {
   "intent": "Low" or "Medium" or "High",
   "confidence": a number between 0 and 1,
   "follow_up_required": true or false,
-  "notes": "a short 1-2 sentence personalised follow-up suggestion referencing their specific interests and notes"
+  "notes": "a short 1-2 sentence personalised follow-up suggestion referencing their specific interests"
 }
 `;
 
@@ -638,9 +618,7 @@ Return ONLY valid JSON in this exact format, no extra text:
     }
 });
 
-// ── FOLLOW-UP EMAIL ROUTE ───────────────────────────────────────────────
-const nodemailer = require('nodemailer'); // already imported above
-
+// ── FOLLOW-UP EMAIL ROUTE ─────────────────────────────────────────────────────
 const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
@@ -656,22 +634,21 @@ app.post('/send-followup/:id', async (req, res) => {
 
         const lead = leadResult.rows[0];
 
-        // Schedule email after 24h
         setTimeout(async () => {
             const emailBody = `Hi ${lead.name},
 
 Thank you for visiting our booth. Here are the details you asked for.
 
-We’d also like to invite you to our upcoming webinar on **June 25th at 3:00 PM (SGT)**, where we’ll showcase solutions related to your interests.
+We'd also like to invite you to our upcoming webinar on June 25th at 3:00 PM (SGT), where we'll showcase solutions related to your interests.
 
 Best regards,
 Dell Boothflow Team`;
 
             await transporter.sendMail({
-                from: `"Boothflow" <${process.env.EMAIL_USER}>`,
-                to: lead.email,
+                from:    `"Boothflow" <${process.env.EMAIL_USER}>`,
+                to:      lead.email,
                 subject: "Follow-up & Upcoming Webinar",
-                text: emailBody
+                text:    emailBody
             });
 
             await pool.query(
@@ -680,7 +657,7 @@ Dell Boothflow Team`;
             );
 
             console.log(`📧 Follow-up email sent to ${lead.email}`);
-        }, 24 * 60 * 60 * 1000); // 24 hours
+        }, 24 * 60 * 60 * 1000);
 
         res.json({ success: true, message: 'Follow-up scheduled for 24h later' });
     } catch (err) {
