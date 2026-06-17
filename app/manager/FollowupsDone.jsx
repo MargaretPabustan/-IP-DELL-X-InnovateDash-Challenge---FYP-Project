@@ -12,7 +12,7 @@ import {
   RefreshControl,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
+import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";// For icons
 import { useAppTheme } from '../../src/constants/useAppTheme';
 
 const API_URL  = process.env.EXPO_PUBLIC_API_URL || '';

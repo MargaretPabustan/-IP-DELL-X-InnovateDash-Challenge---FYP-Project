@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
-const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';// This environment variable should be defined in your .env file. It is the base URL for your backend API, which is used for making API requests to fetch teams and perform other admin actions.
 
 export default function TeamsPage() {
   const [teams, setTeams] = useState([]);

@@ -1,13 +1,17 @@
-import { Stack } from 'expo-router';
+import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, AppState } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { Ionicons } from '@expo/vector-icons';
+import * as SecureStore from 'expo-secure-store';
+import * as ScreenCapture from 'expo-screen-capture';
 import { syncOfflineLeads } from '../src/hooks/Offlinesync';
 
 const API_URL     = process.env.EXPO_PUBLIC_API_URL || '';
 const ANON_KEY    = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+
+const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes in ms
 
 const SUPABASE_HEADERS = {
   'apikey':        ANON_KEY,
@@ -48,17 +52,19 @@ function NoInternetScreen({ onRetry }: { onRetry: () => void }) {
 }
 
 export default function RootLayout() {
-  const [isConnected, setIsConnected] = useState(true);
+  const [isConnected, setIsConnected]           = useState(true);
   const [wasPreviouslyOffline, setWasPreviouslyOffline] = useState(false);
+  const [authChecked, setAuthChecked]           = useState(false);
 
-<<<<<<< HEAD
-=======
+  const router   = useRouter();
+  const segments = useSegments();
+
   // ── Prevent screenshots & screen recording app-wide ──────────────────────
   useEffect(() => {
-    //ScreenCapture.preventScreenCaptureAsync();
-    //return () => {
-      //ScreenCapture.allowScreenCaptureAsync();
-    //};
+    ScreenCapture.preventScreenCaptureAsync();
+    return () => {
+      ScreenCapture.allowScreenCaptureAsync();
+    };
   }, []);
 
   // ── Auth guard — check token on app load ──────────────────────────────────
@@ -66,11 +72,10 @@ export default function RootLayout() {
     const checkAuth = async () => {
       try {
         const token = await SecureStore.getItemAsync('token');
-        const inAuthGroup = segments[0] === 'auth';
+        const inAuthGroup   = segments[0] === 'auth';
         const inPublicGroup = segments[0] === 'lets-get-started' || segments[0] === 'index' || segments[0] === undefined;
 
         if (!token && !inAuthGroup && !inPublicGroup) {
-          // No token — redirect to login
           router.replace('/auth/login' as any);
         }
       } catch {
@@ -88,10 +93,8 @@ export default function RootLayout() {
 
     const subscription = AppState.addEventListener('change', async (nextState) => {
       if (nextState === 'background') {
-        // App went to background — record time
         backgroundTime = Date.now();
       } else if (nextState === 'active' && backgroundTime) {
-        // App came back — check how long it was in background
         const elapsed = Date.now() - backgroundTime;
         if (elapsed >= SESSION_TIMEOUT) {
           console.log('⏰ Session expired — logging out');
@@ -107,7 +110,6 @@ export default function RootLayout() {
   }, []);
 
   // ── Offline sync ──────────────────────────────────────────────────────────
->>>>>>> 34a05c71b7ef22ccf991f91b52e796da5243a6c9
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(async state => {
       const connected = !!state.isConnected;

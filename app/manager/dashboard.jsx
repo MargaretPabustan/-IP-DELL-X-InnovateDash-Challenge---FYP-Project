@@ -13,7 +13,7 @@ import {
   Alert,
 } from "react-native";
 
-import * as SecureStore from "expo-secure-store";
+import * as SecureStore from "expo-secure-store";// For secure token storage
 
 const screenWidth = Dimensions.get("window").width;
 const { width: SCREEN_WIDTH } = Dimensions.get("window");

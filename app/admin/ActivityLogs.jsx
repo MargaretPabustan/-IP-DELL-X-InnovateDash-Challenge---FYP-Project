@@ -7,7 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView } from "react-native-safe-area-context";// For secure token storage
 
 const BACKEND_URL =
   process.env.EXPO_PUBLIC_BACKEND_URL || '';

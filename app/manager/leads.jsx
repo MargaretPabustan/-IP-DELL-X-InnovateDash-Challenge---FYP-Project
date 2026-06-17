@@ -14,7 +14,7 @@ const COLORS = { new: '#5DCAA5', contacted: '#378ADD', qualified: '#7F77DD', ove
 
 
 const API_URL      = process.env.EXPO_PUBLIC_API_URL || '';
-const ANON_KEY     = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const ANON_KEY     = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';// These environment variables should be defined in your .env file. The API_URL is the base URL for your backend API, and the ANON_KEY is the public anonymous key for Supabase, which is used for authentication when making API requests.
 const BACKEND_URL  = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 const SUPABASE_BASE = API_URL.replace(/\/[^/]+$/, '');
 

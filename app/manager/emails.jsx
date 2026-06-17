@@ -12,7 +12,7 @@ const API_URL = process.env.EXPO_PUBLIC_API_URL || '';
 const ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const BACKEND_URL =process.env.EXPO_PUBLIC_BACKEND_URL ||'';
 
-const SUPABASE_BASE = API_URL.replace(/\/[^/]+$/, '');
+const SUPABASE_BASE = API_URL.replace(/\/[^/]+$/, '');// Extract base URL from API URL
 
 const SUPABASE_HEADERS = {
   'apikey':        ANON_KEY,
