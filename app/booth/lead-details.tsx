@@ -23,10 +23,7 @@ const API_URL     = process.env.EXPO_PUBLIC_API_URL || '';
 const ANON_KEY    = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 const BASE_URL    = API_URL.replace('/leads', '');
-
-console.log('API_URL:', API_URL ? '✅ loaded' : '❌ MISSING');
-console.log('ANON_KEY:', ANON_KEY ? '✅ loaded' : '❌ MISSING');
-console.log('BACKEND_URL:', BACKEND_URL ? BACKEND_URL : '❌ MISSING');
+const SUPABASE_BASE = API_URL.replace(/\/[^/]+$/, '');
 
 const SUPABASE_HEADERS = {
   'apikey':        ANON_KEY,
@@ -64,8 +61,6 @@ const INTENT_COLORS = {
   low:    '#CF222E',
 };
 
-<<<<<<< HEAD
-=======
 function maskEmail(email: string): string {
   if (!email || !email.includes('@')) return email;
   const [local, domain] = email.split('@');
@@ -94,29 +89,28 @@ function parseJwt(token: string): any {
   } catch { return null; }
 }
 
-async function getScannedBy(): Promise<string | null> {
+async function getScannedBy(): Promise<{ id: string | null; name: string | null }> {
   try {
     const token = await SecureStore.getItemAsync('token');
-    if (!token) return null;
+    if (!token) return { id: null, name: null };
     const me = parseJwt(token);
     const userId = me?.sub || me?.id || me?.user_id;
-    if (!userId) return null;
+    if (!userId) return { id: null, name: null };
 
-    // Fetch full_name from Supabase
     const res = await fetch(
-      `${process.env.EXPO_PUBLIC_API_URL?.replace(/\/[^/]+$/, '')}/users?user_id=eq.${userId}&select=full_name`,
+      `${SUPABASE_BASE}/users?user_id=eq.${userId}&select=full_name`,
       {
         headers: {
-          'apikey':        process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
-          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ''}`,
+          'apikey':        ANON_KEY,
+          'Authorization': `Bearer ${ANON_KEY}`,
           'Content-Type':  'application/json',
         },
       }
     );
     const users = await res.json();
-    const fullName = Array.isArray(users) && users[0]?.full_name;
-    return fullName || String(userId);
-  } catch { return null; }
+    const fullName = Array.isArray(users) && users[0]?.full_name ? users[0].full_name : null;
+    return { id: String(userId), name: fullName };
+  } catch { return { id: null, name: null }; }
 }
 
 function resolveTeamId(primaryInterest: string, selectedInterests: string[]): number {
@@ -129,7 +123,6 @@ function resolveTeamId(primaryInterest: string, selectedInterests: string[]): nu
   return OTHERS_TEAM_ID;
 }
 
->>>>>>> 34a05c71b7ef22ccf991f91b52e796da5243a6c9
 const AutofillField = ({ label, value }: { label: string; value: string }) => (
   <View style={styles.autofillRow}>
     <Text style={styles.autofillLabel}>{label}:</Text>
@@ -176,7 +169,6 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
     interest && !INTEREST_OPTIONS.includes(interest) ? interest : ''
   );
   const [selectedIntent,  setSelectedIntent]  = useState<string | null>(null);
-  const [intentOthers,    setIntentOthers]    = useState('');
   const [additionalNotes, setAdditionalNotes] = useState('');
   const [consentGiven,    setConsentGiven]    = useState(false);
   const [loading,         setLoading]         = useState(false);
@@ -199,58 +191,31 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
     if (onSubmit) onSubmit({ leadName, companyName, title, phone, email, allInterests, intent, additionalNotes });
 
     try {
-<<<<<<< HEAD
-      // Step 1: Create the lead
-=======
-      const scannedBy    = await getScannedBy();
-      const teamId       = resolveTeamId(interest, selectedInterests);
+      const { id: scannedBy, name: scannedByName } = await getScannedBy();
+      console.log('👤 scannedBy:', scannedBy, '| scannedByName:', scannedByName);
+      const teamId = resolveTeamId(interest, selectedInterests);
 
-      // Also get the rep's full name to store alongside the ID
-      let scannedByName: string | null = null;
-      try {
-        const token = await SecureStore.getItemAsync('token');
-        const me = token ? parseJwt(token) : null;
-        const userId = me?.sub || me?.id || me?.user_id;
-        if (userId) {
-          const userRes = await fetch(
-            `${process.env.EXPO_PUBLIC_API_URL?.replace(/\/[^/]+$/, '')}/users?user_id=eq.${userId}&select=full_name`,
-            {
-              headers: {
-                'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
-                'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ''}`,
-                'Content-Type': 'application/json',
-              },
-            }
-          );
-          const users = await userRes.json();
-          scannedByName = Array.isArray(users) && users[0]?.full_name ? users[0].full_name : null;
-        }
-      } catch {}
-
->>>>>>> 34a05c71b7ef22ccf991f91b52e796da5243a6c9
-      const response = await fetch(API_URL, {
+      // ── Post through backend (JWT auth, bypasses RLS) ─────────────────────
+      const token = await SecureStore.getItemAsync('token');
+      const response = await fetch(`${BACKEND_URL}/leads`, {
         method: 'POST',
-        headers: { ...SUPABASE_HEADERS, 'Prefer': 'return=representation' },
+        headers: {
+          'Content-Type':  'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
         body: JSON.stringify({
-<<<<<<< HEAD
-          name:            leadName,
-          email:           email,
-          company:         companyName,
-          title:           title,
-          phone_number:    phone,
-          customer_intent: intent,
-=======
-          name:             leadName,
+          name:               leadName,
           email,
-          company:          companyName,
+          company:            companyName,
           title,
-          phone_number:     phone,
-          customer_intent:  intent,
-          assigned_team_id: teamId,
-          ai_notes:         additionalNotes || null,
-          scanned_by:       scannedBy,
-          scanned_by_name:  scannedByName,
->>>>>>> 34a05c71b7ef22ccf991f91b52e796da5243a6c9
+          phone_number:       phone,
+          customer_intent:    intent,
+          assigned_team_id:   teamId,
+          primary_interest:   interest || null,
+          selected_interests: selectedInterests,
+          additional_notes:   additionalNotes || null,
+          scanned_by:         scannedBy,
+          scanned_by_name:    scannedByName,
         }),
       });
 
@@ -258,7 +223,7 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
       if (!response.ok) throw new Error('Server error');
 
       const result = await response.json();
-      const leadId = result[0]?.lead_id;
+      const leadId = result.lead_id;
 
       // Save interests
       if (leadId) {
@@ -274,13 +239,10 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
         }
       }
 
-<<<<<<< HEAD
-      // Step 4: Groq AI analysis
-=======
-      // AI analysis
->>>>>>> 34a05c71b7ef22ccf991f91b52e796da5243a6c9
+      // AI analysis — required, don't navigate if it fails
       let assignedTeam = 'Pending Assignment';
-      let aiNotes      = additionalNotes || 'Pending AI analysis.';
+      let aiNotes      = 'Pending AI analysis.';
+      let aiSuccess    = false;
 
       if (leadId && BACKEND_URL) {
         try {
@@ -288,13 +250,27 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
           });
+          console.log('🤖 AI analysis response status:', analyzeRes.status);
           const analyzeData = await analyzeRes.json();
+          console.log('🤖 AI analysis data:', JSON.stringify(analyzeData));
           if (analyzeData.success) {
+            console.log('✅ AI notes:', analyzeData.ai_analysis?.notes);
+            console.log('✅ Used fallback:', analyzeData.used_fallback);
             aiNotes      = analyzeData.ai_analysis?.notes            || aiNotes;
             assignedTeam = analyzeData.ai_analysis?.follow_up_status || assignedTeam;
+            aiSuccess    = true;
+          } else {
+            throw new Error('AI analysis returned failure');
           }
         } catch (aiError) {
           console.warn('AI analysis failed:', aiError);
+          Alert.alert(
+            'Analysis Failed',
+            'Lead was saved but AI analysis failed. Please try again or check your connection.',
+            [{ text: 'OK' }]
+          );
+          setLoading(false);
+          return;
         }
       }
 
@@ -305,27 +281,23 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
 
     } catch (error) {
       console.warn('Submit error:', error);
-      router.push({
-        pathname: '/booth/successfullysubmitted',
-        params: {
-          assignedTeam: 'Pending Assignment',
-          intent,
-          interests:    allInterests,
-          aiNotes:      additionalNotes || 'Pending AI analysis.',
-        },
-      });
+      Alert.alert('Submission Failed', 'Failed to submit lead. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
   };
 
   const handleSubmit = async () => {
+    console.log('🚀 handleSubmit called');
+    console.log('📋 selectedInterests:', selectedInterests);
+    console.log('📋 selectedIntent:', selectedIntent);
+    console.log('📋 consentGiven:', consentGiven);
     const allInterests = [
       ...selectedInterests,
       ...(interestOthers.trim() ? [interestOthers.trim()] : []),
     ].join(', ') || 'None';
 
-    const intent = selectedIntent || intentOthers.trim() || '';
+    const intent = selectedIntent || '';
 
     if (selectedInterests.length === 0 && !interestOthers.trim()) {
       Alert.alert('Missing Interest', 'Please select at least one customer interest.');
@@ -375,16 +347,13 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-<<<<<<< HEAD
-=======
           {/* Lead Details */}
->>>>>>> 34a05c71b7ef22ccf991f91b52e796da5243a6c9
           <SectionCard title="Details:">
             <AutofillField label="Name"    value={leadName} />
-            <AutofillField label="Company" value={companyName} />
+            <AutofillField label="Company" value={maskCompany(companyName)} />
             <AutofillField label="Title"   value={title} />
-            <AutofillField label="Phone"   value={phone} />
-            <AutofillField label="Email"   value={email} />
+            <AutofillField label="Phone"   value={maskPhone(phone)} />
+            <AutofillField label="Email"   value={maskEmail(email)} />
           </SectionCard>
 
           {/* Interest chips */}
@@ -432,10 +401,9 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
                 </TouchableOpacity>
               );
             })}
-            <OthersInput value={intentOthers} onChangeText={setIntentOthers} />
           </SectionCard>
 
-          {/* Additional notes */}
+          {/* Additional notes — fed to AI as context, not saved to DB directly */}
           <SectionCard title="Additional notes">
             <TextInput
               style={styles.notesInput}
@@ -503,18 +471,18 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
       </KeyboardAvoidingView>
 
       <View style={[styles.bottomNav, { backgroundColor: theme.navBg, borderTopColor: theme.subText + '22', paddingBottom: Platform.OS === 'ios' ? 28 : 12 }]}>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/booth/recent-leads' as any)}>
-          <Ionicons name="person-outline" size={26} color={theme.subText} />
-          <Text style={{ fontSize: 10, fontWeight: '600', color: theme.subText, marginTop: 3 }}>Leads</Text>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/booth/dashboardscreen' as any)}>
+          <FontAwesome5 name="home" size={22} color={theme.subText} />
+          <Text style={{ fontSize: 10, fontWeight: '600', color: theme.subText, marginTop: 3 }}>Home</Text>
         </TouchableOpacity>
         <TouchableOpacity style={{ alignItems: 'center', marginTop: -20 }} onPress={() => router.push('/booth/qr-scanner' as any)}>
           <View style={{ width: 58, height: 58, borderRadius: 18, backgroundColor: theme.navy, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 6 }}>
             <MaterialIcons name="qr-code-scanner" size={28} color="#fff" />
           </View>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/booth/dashboardscreen' as any)}>
-          <FontAwesome5 name="home" size={22} color={theme.accent} />
-          <Text style={{ fontSize: 10, fontWeight: '600', color: theme.accent, marginTop: 3 }}>Home</Text>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/booth/recent-leads' as any)}>
+          <Ionicons name="person-outline" size={26} color={theme.accent} />
+          <Text style={{ fontSize: 10, fontWeight: '600', color: theme.accent, marginTop: 3 }}>Leads</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
