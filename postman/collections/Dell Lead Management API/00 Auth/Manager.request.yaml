@@ -1,0 +1,32 @@
+$kind: http-request
+name: Login - Manager
+method: POST
+url: '{{baseUrl}}/auth/login'
+order: 145
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "email": "{{managerEmail}}",
+      "password": "{{managerPassword}}"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 200", () => pm.response.to.have.status(200));
+      pm.test("Response has token", () => {
+          const json = pm.response.json();
+          pm.expect(json).to.have.property("token");
+          pm.environment.set("managerToken", json.token);
+          console.log("managerToken saved");
+      });
+      pm.test("Role is manager", () => {
+          pm.expect(pm.response.json().role).to.equal("manager");
+      });
+      pm.test("Response time is under 3000ms", () => {
+          pm.expect(pm.response.responseTime).to.be.below(3000);
+      });

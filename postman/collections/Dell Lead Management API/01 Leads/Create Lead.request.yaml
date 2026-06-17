@@ -6,6 +6,8 @@ order: 100
 headers:
   - key: Content-Type
     value: application/json
+  - key: Authorization
+    value: 'Bearer {{authToken}}'
 body:
   type: json
   content: |-
@@ -29,14 +31,21 @@ scripts:
     language: text/javascript
     code: |-
       pm.test("Status is 201", () => pm.response.to.have.status(201));
-      pm.test("Response has success true", () => {
+      pm.test("Response has success true and correct message", () => {
           const json = pm.response.json();
           pm.expect(json.success).to.be.true;
           pm.expect(json.message).to.equal('Lead created successfully');
       });
-      pm.test("Response contains lead_id", () => {
+      pm.test("Response contains numeric lead_id", () => {
           const json = pm.response.json();
-          pm.expect(Number(json.lead_id)).to.be.a('number');
+          pm.expect(Number(json.lead_id)).to.be.a('number').and.to.be.above(0);
           pm.environment.set("createdLeadId", String(json.lead_id));
           console.log("createdLeadId set to:", json.lead_id);
+      });
+      pm.test("Response contains assigned_team_id", () => {
+          const json = pm.response.json();
+          pm.expect(json.assigned_team_id).to.be.a('number').and.to.be.within(1, 5);
+      });
+      pm.test("Response time is under 3000ms", () => {
+          pm.expect(pm.response.responseTime).to.be.below(3000);
       });

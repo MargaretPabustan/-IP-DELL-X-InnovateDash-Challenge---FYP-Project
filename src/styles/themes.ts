@@ -26,7 +26,7 @@ export const THEMES: Theme[] = [
     scanColor: '#333333',
   },
   {
-    name: 'Midnight',
+    name: 'Dark',
     navy: '#1a1a2e',
     accent: '#e94560',
     bg: '#16213e',

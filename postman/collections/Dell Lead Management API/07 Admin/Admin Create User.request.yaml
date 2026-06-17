@@ -1,0 +1,40 @@
+$kind: http-request
+name: Admin Create User
+method: POST
+url: '{{baseUrl}}/admin/users'
+order: 200
+headers:
+  - key: Authorization
+    value: 'Bearer {{adminToken}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "full_name": "Test Rep User",
+      "email": "testrep.{{$timestamp}}@boothflow.com",
+      "password": "TestPassword123",
+      "role": "rep",
+      "team_id": null
+    }
+scripts:
+  - type: beforeRequest
+    language: text/javascript
+    code: |-
+      const timestamp = Date.now();
+      const email = `testrep.${timestamp}@boothflow.com`;
+      pm.environment.set("repEmail", email);
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 201", () => pm.response.to.have.status(201));
+      pm.test("Response has user_id", () => {
+          const json = pm.response.json();
+          pm.expect(json).to.have.property("user_id");
+          pm.environment.set("createdUserId", String(json.user_id));
+          console.log("createdUserId set to:", json.user_id);
+      });
+      pm.test("Response time is under 3000ms", () => {
+          pm.expect(pm.response.responseTime).to.be.below(3000);
+      });

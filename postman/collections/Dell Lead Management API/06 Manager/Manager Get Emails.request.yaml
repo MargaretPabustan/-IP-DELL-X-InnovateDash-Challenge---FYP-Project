@@ -1,0 +1,26 @@
+$kind: http-request
+name: Manager Get Emails
+method: GET
+url: '{{baseUrl}}/manager/emails'
+order: 400
+headers:
+  - key: Authorization
+    value: 'Bearer {{managerToken}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 200", () => pm.response.to.have.status(200));
+      pm.test("Response has sent array", () => {
+          pm.expect(pm.response.json().data).to.have.property("sent");
+          pm.expect(pm.response.json().data.sent).to.be.an("array");
+      });
+      pm.test("Response has sentThisWeek", () => {
+          pm.expect(pm.response.json().data).to.have.property("sentThisWeek");
+      });
+      pm.test("Response has overdue", () => {
+          pm.expect(pm.response.json().data).to.have.property("overdue");
+      });
+      pm.test("Response time is under 3000ms", () => {
+          pm.expect(pm.response.responseTime).to.be.below(3000);
+      });

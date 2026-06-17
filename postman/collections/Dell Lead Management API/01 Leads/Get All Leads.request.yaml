@@ -3,6 +3,9 @@ name: Get All Leads
 method: GET
 url: '{{baseUrl}}/leads'
 order: 200
+headers:
+  - key: Authorization
+    value: 'Bearer {{authToken}}'
 scripts:
   - type: afterResponse
     language: text/javascript
@@ -15,4 +18,18 @@ scripts:
       pm.test("Data is an array", () => {
           const json = pm.response.json();
           pm.expect(json.data).to.be.an('array');
+      });
+      pm.test("Each lead has required fields", () => {
+          const leads = pm.response.json().data;
+          if (leads.length > 0) {
+              const lead = leads[0];
+              pm.expect(lead).to.have.property('lead_id');
+              pm.expect(lead).to.have.property('name');
+              pm.expect(lead).to.have.property('email');
+              pm.expect(lead).to.have.property('company');
+              pm.expect(lead).to.have.property('status');
+          }
+      });
+      pm.test("Response time is under 3000ms", () => {
+          pm.expect(pm.response.responseTime).to.be.below(3000);
       });

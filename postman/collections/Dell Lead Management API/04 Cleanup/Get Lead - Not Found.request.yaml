@@ -3,6 +3,9 @@ name: Get Lead - Not Found
 method: GET
 url: '{{baseUrl}}/leads/99999'
 order: 1600
+headers:
+  - key: Authorization
+    value: 'Bearer {{authToken}}'
 scripts:
   - type: afterResponse
     language: text/javascript

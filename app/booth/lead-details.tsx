@@ -17,6 +17,7 @@ import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useAppTheme } from '../../src/constants/useAppTheme';
 import { styles } from '../../src/styles/leadDetailsStyles';
 import { saveLeadOffline } from '../../src/hooks/Offlinesync';
+import * as SecureStore from 'expo-secure-store';
 
 const API_URL     = process.env.EXPO_PUBLIC_API_URL || '';
 const ANON_KEY    = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -40,13 +41,21 @@ const CATEGORY_MAP: Record<string, number> = {
   'Service':     4,
 };
 
+const INTEREST_TEAM_MAP: Record<string, number> = {
+  'AI PCs':      1,
+  'Multi-cloud': 2,
+  'Storage':     3,
+  'Service':     4,
+};
+const OTHERS_TEAM_ID = 5;
+
 const INTEREST_OPTIONS = ['AI PCs', 'Multi-cloud', 'Storage', 'Service'];
 
 const INTENT_OPTIONS = [
-  { label: 'High - Ready for follow-up', level: 'high' },
-  { label: 'Medium - Pricing Inquiry',   level: 'medium' },
-  { label: 'Medium - Interested in Demo',level: 'medium' },
-  { label: 'Low - Browsing',             level: 'low' },
+  { label: 'High - Ready for follow-up',  level: 'high'   },
+  { label: 'Medium - Pricing Inquiry',    level: 'medium' },
+  { label: 'Medium - Interested in Demo', level: 'medium' },
+  { label: 'Low - Browsing',              level: 'low'    },
 ];
 
 const INTENT_COLORS = {
@@ -55,6 +64,72 @@ const INTENT_COLORS = {
   low:    '#CF222E',
 };
 
+<<<<<<< HEAD
+=======
+function maskEmail(email: string): string {
+  if (!email || !email.includes('@')) return email;
+  const [local, domain] = email.split('@');
+  const domainParts = domain.split('.');
+  const tld = domainParts[domainParts.length - 1];
+  return `${local}@***.${tld}`;
+}
+
+function maskPhone(phone: string): string {
+  if (!phone || phone.length < 4) return phone;
+  return phone.slice(0, 2) + '****' + phone.slice(-2);
+}
+
+function maskCompany(company: string): string {
+  if (!company || company.length <= 2) return company;
+  return `${company.slice(0, 2)}${'*'.repeat(Math.min(company.length - 2, 5))}`;
+}
+
+function parseJwt(token: string): any {
+  try {
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = decodeURIComponent(
+      atob(base64).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
+    );
+    return JSON.parse(json);
+  } catch { return null; }
+}
+
+async function getScannedBy(): Promise<string | null> {
+  try {
+    const token = await SecureStore.getItemAsync('token');
+    if (!token) return null;
+    const me = parseJwt(token);
+    const userId = me?.sub || me?.id || me?.user_id;
+    if (!userId) return null;
+
+    // Fetch full_name from Supabase
+    const res = await fetch(
+      `${process.env.EXPO_PUBLIC_API_URL?.replace(/\/[^/]+$/, '')}/users?user_id=eq.${userId}&select=full_name`,
+      {
+        headers: {
+          'apikey':        process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
+          'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ''}`,
+          'Content-Type':  'application/json',
+        },
+      }
+    );
+    const users = await res.json();
+    const fullName = Array.isArray(users) && users[0]?.full_name;
+    return fullName || String(userId);
+  } catch { return null; }
+}
+
+function resolveTeamId(primaryInterest: string, selectedInterests: string[]): number {
+  if (primaryInterest && INTEREST_TEAM_MAP[primaryInterest]) {
+    return INTEREST_TEAM_MAP[primaryInterest];
+  }
+  for (const i of selectedInterests) {
+    if (INTEREST_TEAM_MAP[i]) return INTEREST_TEAM_MAP[i];
+  }
+  return OTHERS_TEAM_ID;
+}
+
+>>>>>>> 34a05c71b7ef22ccf991f91b52e796da5243a6c9
 const AutofillField = ({ label, value }: { label: string; value: string }) => (
   <View style={styles.autofillRow}>
     <Text style={styles.autofillLabel}>{label}:</Text>
@@ -69,15 +144,7 @@ const SectionCard = ({ title, children }: { title?: string; children: React.Reac
   </View>
 );
 
-const OthersInput = ({
-  value,
-  onChangeText,
-  placeholder = 'Others',
-}: {
-  value: string;
-  onChangeText: (text: string) => void;
-  placeholder?: string;
-}) => (
+const OthersInput = ({ value, onChangeText, placeholder = 'Others' }: { value: string; onChangeText: (t: string) => void; placeholder?: string }) => (
   <View style={styles.othersRow}>
     <Text style={styles.othersLabel}>Others:</Text>
     <TextInput
@@ -90,18 +157,14 @@ const OthersInput = ({
   </View>
 );
 
-const LeadDetailsScreen = ({
-  onSubmit,
-}: {
-  onSubmit?: (formData: any) => void;
-}) => {
+const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void }) => {
   const router = useRouter();
   const { theme } = useAppTheme();
   const params = useLocalSearchParams();
 
-  const leadName    = (params.leadName    as string) || 'John Tan';
-  const companyName = (params.companyName as string) || 'DBS';
-  const title       = (params.title       as string) || 'IT Specialist';
+  const leadName    = (params.leadName    as string) || '';
+  const companyName = (params.companyName as string) || '';
+  const title       = (params.title       as string) || '';
   const phone       = (params.phone       as string) || '';
   const email       = (params.email       as string) || '';
   const interest    = (params.interest    as string) || '';
@@ -109,21 +172,21 @@ const LeadDetailsScreen = ({
   const [selectedInterests, setSelectedInterests] = useState<string[]>(
     interest && INTEREST_OPTIONS.includes(interest) ? [interest] : []
   );
-  const [interestOthers, setInterestOthers] = useState(
+  const [interestOthers,  setInterestOthers]  = useState(
     interest && !INTEREST_OPTIONS.includes(interest) ? interest : ''
   );
-  const [selectedIntent, setSelectedIntent] = useState<string | null>(null);
-  const [intentOthers, setIntentOthers]     = useState('');
+  const [selectedIntent,  setSelectedIntent]  = useState<string | null>(null);
+  const [intentOthers,    setIntentOthers]    = useState('');
   const [additionalNotes, setAdditionalNotes] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [consentGiven,    setConsentGiven]    = useState(false);
+  const [loading,         setLoading]         = useState(false);
 
   const toggleInterest = (option: string) => {
-    setSelectedInterests((prev: string[]) =>
-      prev.includes(option) ? prev.filter((o: string) => o !== option) : [...prev, option]
+    setSelectedInterests(prev =>
+      prev.includes(option) ? prev.filter(o => o !== option) : [...prev, option]
     );
   };
 
-  // ── Duplicate route helper ─────────────────────────────────────────────────
   const routeToDuplicate = () => {
     router.push({
       pathname: '/booth/ScannedBefore',
@@ -131,43 +194,73 @@ const LeadDetailsScreen = ({
     });
   };
 
-  // ── Core submit logic ─────────────────────────────────────────────────────
   const proceedWithSubmit = async (intent: string, allInterests: string) => {
     setLoading(true);
     if (onSubmit) onSubmit({ leadName, companyName, title, phone, email, allInterests, intent, additionalNotes });
 
     try {
+<<<<<<< HEAD
       // Step 1: Create the lead
+=======
+      const scannedBy    = await getScannedBy();
+      const teamId       = resolveTeamId(interest, selectedInterests);
+
+      // Also get the rep's full name to store alongside the ID
+      let scannedByName: string | null = null;
+      try {
+        const token = await SecureStore.getItemAsync('token');
+        const me = token ? parseJwt(token) : null;
+        const userId = me?.sub || me?.id || me?.user_id;
+        if (userId) {
+          const userRes = await fetch(
+            `${process.env.EXPO_PUBLIC_API_URL?.replace(/\/[^/]+$/, '')}/users?user_id=eq.${userId}&select=full_name`,
+            {
+              headers: {
+                'apikey': process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '',
+                'Authorization': `Bearer ${process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || ''}`,
+                'Content-Type': 'application/json',
+              },
+            }
+          );
+          const users = await userRes.json();
+          scannedByName = Array.isArray(users) && users[0]?.full_name ? users[0].full_name : null;
+        }
+      } catch {}
+
+>>>>>>> 34a05c71b7ef22ccf991f91b52e796da5243a6c9
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: { ...SUPABASE_HEADERS, 'Prefer': 'return=representation' },
         body: JSON.stringify({
+<<<<<<< HEAD
           name:            leadName,
           email:           email,
           company:         companyName,
           title:           title,
           phone_number:    phone,
           customer_intent: intent,
+=======
+          name:             leadName,
+          email,
+          company:          companyName,
+          title,
+          phone_number:     phone,
+          customer_intent:  intent,
+          assigned_team_id: teamId,
+          ai_notes:         additionalNotes || null,
+          scanned_by:       scannedBy,
+          scanned_by_name:  scannedByName,
+>>>>>>> 34a05c71b7ef22ccf991f91b52e796da5243a6c9
         }),
       });
 
-      // Step 2: Check for duplicate from backend
-      if (response.status === 409) {
-        routeToDuplicate();
-        return;
-      }
-
-      if (!response.ok) {
-        const err = await response.text();
-        console.warn('POST /leads error:', err);
-        throw new Error('Server error');
-      }
+      if (response.status === 409) { routeToDuplicate(); return; }
+      if (!response.ok) throw new Error('Server error');
 
       const result = await response.json();
       const leadId = result[0]?.lead_id;
-      console.log('Lead created, leadId:', leadId);
 
-      // Step 3: Save interests
+      // Save interests
       if (leadId) {
         for (const chip of selectedInterests) {
           const categoryId = CATEGORY_MAP[chip];
@@ -181,20 +274,21 @@ const LeadDetailsScreen = ({
         }
       }
 
+<<<<<<< HEAD
       // Step 4: Groq AI analysis
+=======
+      // AI analysis
+>>>>>>> 34a05c71b7ef22ccf991f91b52e796da5243a6c9
       let assignedTeam = 'Pending Assignment';
       let aiNotes      = additionalNotes || 'Pending AI analysis.';
 
       if (leadId && BACKEND_URL) {
         try {
-          console.log('Calling AI at:', `${BACKEND_URL}/analyze-lead/${leadId}`);
-          const analyzeRes = await fetch(`${BACKEND_URL}/analyze-lead/${leadId}`, {
+          const analyzeRes  = await fetch(`${BACKEND_URL}/analyze-lead/${leadId}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
           });
           const analyzeData = await analyzeRes.json();
-          console.log('AI response:', JSON.stringify(analyzeData));
-
           if (analyzeData.success) {
             aiNotes      = analyzeData.ai_analysis?.notes            || aiNotes;
             assignedTeam = analyzeData.ai_analysis?.follow_up_status || assignedTeam;
@@ -202,18 +296,15 @@ const LeadDetailsScreen = ({
         } catch (aiError) {
           console.warn('AI analysis failed:', aiError);
         }
-      } else {
-        console.warn('BACKEND_URL missing or no leadId — skipping AI');
       }
 
-      // Step 5: Navigate to success
       router.push({
         pathname: '/booth/successfullysubmitted',
         params: { assignedTeam, intent, interests: allInterests, aiNotes },
       });
 
     } catch (error) {
-      console.warn('Submit error, using fallback:', error);
+      console.warn('Submit error:', error);
       router.push({
         pathname: '/booth/successfullysubmitted',
         params: {
@@ -228,7 +319,6 @@ const LeadDetailsScreen = ({
     }
   };
 
-  // ── Handle submit with validation + duplicate check ───────────────────────
   const handleSubmit = async () => {
     const allInterests = [
       ...selectedInterests,
@@ -245,8 +335,12 @@ const LeadDetailsScreen = ({
       Alert.alert('Missing Intent', 'Please select a customer intent before submitting.');
       return;
     }
+    if (!consentGiven) {
+      Alert.alert('Consent Required', 'Please confirm the customer has given consent before submitting.');
+      return;
+    }
 
-    // ── Duplicate check before submit ─────────────────────────────────────
+    // Duplicate check
     try {
       const checkRes = await fetch(
         `${API_URL}?email=eq.${encodeURIComponent(email)}&select=lead_id`,
@@ -257,9 +351,7 @@ const LeadDetailsScreen = ({
         routeToDuplicate();
         return;
       }
-    } catch {
-      // proceed if check fails
-    }
+    } catch {}
 
     proceedWithSubmit(intent, allInterests);
   };
@@ -283,6 +375,10 @@ const LeadDetailsScreen = ({
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
+<<<<<<< HEAD
+=======
+          {/* Lead Details */}
+>>>>>>> 34a05c71b7ef22ccf991f91b52e796da5243a6c9
           <SectionCard title="Details:">
             <AutofillField label="Name"    value={leadName} />
             <AutofillField label="Company" value={companyName} />
@@ -291,6 +387,7 @@ const LeadDetailsScreen = ({
             <AutofillField label="Email"   value={email} />
           </SectionCard>
 
+          {/* Interest chips */}
           <SectionCard title="Customer Interest:">
             <View style={styles.chipsContainer}>
               {INTEREST_OPTIONS.map((option) => {
@@ -298,7 +395,10 @@ const LeadDetailsScreen = ({
                 return (
                   <TouchableOpacity
                     key={option}
-                    style={[styles.chip, active && { ...styles.chipActive, backgroundColor: theme.navy, borderColor: theme.navy }]}
+                    style={[
+                      styles.chip,
+                      active && { ...styles.chipActive, backgroundColor: theme.navy, borderColor: theme.navy },
+                    ]}
                     onPress={() => toggleInterest(option)}
                     activeOpacity={0.7}
                   >
@@ -310,10 +410,11 @@ const LeadDetailsScreen = ({
             <OthersInput value={interestOthers} onChangeText={setInterestOthers} />
           </SectionCard>
 
+          {/* Intent */}
           <SectionCard title="Customer Intent:">
             {INTENT_OPTIONS.map((option) => {
-              const active = selectedIntent === option.label;
-              const dotColor = INTENT_COLORS[option.level as keyof typeof INTENT_COLORS];
+              const active    = selectedIntent === option.label;
+              const dotColor  = INTENT_COLORS[option.level as keyof typeof INTENT_COLORS];
               return (
                 <TouchableOpacity
                   key={option.label}
@@ -334,6 +435,7 @@ const LeadDetailsScreen = ({
             <OthersInput value={intentOthers} onChangeText={setIntentOthers} />
           </SectionCard>
 
+          {/* Additional notes */}
           <SectionCard title="Additional notes">
             <TextInput
               style={styles.notesInput}
@@ -347,11 +449,44 @@ const LeadDetailsScreen = ({
             />
           </SectionCard>
 
+          {/* Consent checkbox */}
+          <SectionCard>
+            <TouchableOpacity
+              style={[
+                localStyles.consentRow,
+                {
+                  borderColor:     consentGiven ? theme.navy : '#e2e8f0',
+                  backgroundColor: consentGiven ? theme.navy + '08' : '#fafafa',
+                },
+              ]}
+              onPress={() => setConsentGiven(!consentGiven)}
+              activeOpacity={0.8}
+            >
+              <View style={[
+                localStyles.checkbox,
+                {
+                  borderColor:     consentGiven ? theme.navy : '#cbd5e1',
+                  backgroundColor: consentGiven ? theme.navy : '#fff',
+                },
+              ]}>
+                {consentGiven && <Ionicons name="checkmark" size={14} color="#fff" />}
+              </View>
+              <Text style={[localStyles.consentText, { color: consentGiven ? theme.navy : '#64748b' }]}>
+                The customer has verbally consented to their contact details being collected and shared with Dell Technologies for follow-up purposes.
+              </Text>
+            </TouchableOpacity>
+          </SectionCard>
+
+          {/* Submit */}
           <TouchableOpacity
-            style={[styles.submitButton, { backgroundColor: theme.navy }, loading && { opacity: 0.7 }]}
+            style={[
+              styles.submitButton,
+              { backgroundColor: consentGiven ? theme.navy : '#94a3b8' },
+              loading && { opacity: 0.7 },
+            ]}
             onPress={handleSubmit}
             activeOpacity={0.85}
-            disabled={loading}
+            disabled={loading || !consentGiven}
           >
             {loading ? (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -359,7 +494,9 @@ const LeadDetailsScreen = ({
                 <Text style={styles.submitText}>Analysing with AI...</Text>
               </View>
             ) : (
-              <Text style={styles.submitText}>SUBMIT</Text>
+              <Text style={styles.submitText}>
+                {consentGiven ? 'SUBMIT' : 'CONFIRM CONSENT TO SUBMIT'}
+              </Text>
             )}
           </TouchableOpacity>
         </ScrollView>
@@ -370,13 +507,11 @@ const LeadDetailsScreen = ({
           <Ionicons name="person-outline" size={26} color={theme.subText} />
           <Text style={{ fontSize: 10, fontWeight: '600', color: theme.subText, marginTop: 3 }}>Leads</Text>
         </TouchableOpacity>
-
         <TouchableOpacity style={{ alignItems: 'center', marginTop: -20 }} onPress={() => router.push('/booth/qr-scanner' as any)}>
           <View style={{ width: 58, height: 58, borderRadius: 18, backgroundColor: theme.navy, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 6 }}>
             <MaterialIcons name="qr-code-scanner" size={28} color="#fff" />
           </View>
         </TouchableOpacity>
-
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/booth/dashboardscreen' as any)}>
           <FontAwesome5 name="home" size={22} color={theme.accent} />
           <Text style={{ fontSize: 10, fontWeight: '600', color: theme.accent, marginTop: 3 }}>Home</Text>
@@ -384,6 +519,28 @@ const LeadDetailsScreen = ({
       </View>
     </SafeAreaView>
   );
+};
+
+const localStyles = {
+  consentRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'flex-start' as const,
+    gap: 12,
+    borderWidth: 1.5,
+    borderRadius: 12,
+    padding: 14,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginTop: 1,
+    flexShrink: 0 as const,
+  },
+  consentText: { flex: 1, fontSize: 13, lineHeight: 20 },
 };
 
 export default LeadDetailsScreen;

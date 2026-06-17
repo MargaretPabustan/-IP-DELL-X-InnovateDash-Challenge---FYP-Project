@@ -46,3 +46,9 @@ app-example
 .env
 .env.*
 backend/.env
+
+# Postman/Bruno environment files — contain sensitive credentials
+postman/environments/FYP Local.environment.yaml
+postman/environments/*.environment.yaml
+environments/*.environment.yaml
+*.environment.yaml

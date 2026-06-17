@@ -6,6 +6,8 @@ order: 600
 headers:
   - key: Content-Type
     value: application/json
+  - key: Authorization
+    value: 'Bearer {{authToken}}'
 body:
   type: json
   content: |-

@@ -1,0 +1,17 @@
+$kind: http-request
+name: Get Me - No Token
+method: GET
+url: '{{baseUrl}}/auth/me'
+order: 500
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 401", () => pm.response.to.have.status(401));
+      pm.test("Returns no token message", () => {
+          const json = pm.response.json();
+          pm.expect(json.message).to.equal("No token provided");
+      });
+      pm.test("Response time is under 3000ms", () => {
+          pm.expect(pm.response.responseTime).to.be.below(3000);
+      });
