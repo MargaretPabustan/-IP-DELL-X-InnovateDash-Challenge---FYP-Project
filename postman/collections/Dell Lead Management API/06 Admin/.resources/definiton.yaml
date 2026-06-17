@@ -1,0 +1,22 @@
+$kind: collection
+order: 6000
+prerequest:
+  - type: text/javascript
+    script: |-
+      const baseUrl = pm.environment.get("baseUrl");
+      const adminEmail = pm.environment.get("adminEmail");
+      const adminPassword = pm.environment.get("adminPassword");
+      
+      pm.sendRequest({
+          url: baseUrl + "/auth/login",
+          method: "POST",
+          header: { "Content-Type": "application/json" },
+          body: {
+              mode: "raw",
+              raw: JSON.stringify({ email: adminEmail, password: adminPassword })
+          }
+      }, function(err, res) {
+          const token = res.json().token;
+          pm.environment.set("adminToken", token);
+          console.log("adminToken pre-fetched for Admin folder:", token ? "YES" : "NO");
+      });

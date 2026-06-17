@@ -1,0 +1,21 @@
+$kind: collection
+order: 5000
+prerequest:
+  - type: text/javascript
+    script: |-
+      const baseUrl = pm.environment.get("baseUrl");
+      pm.sendRequest({
+          url: baseUrl + "/auth/login",
+          method: "POST",
+          header: { "Content-Type": "application/json" },
+          body: {
+              mode: "raw",
+              raw: JSON.stringify({ 
+                  email: pm.environment.get("managerEmail"), 
+                  password: pm.environment.get("managerPassword") 
+              })
+          }
+      }, function(err, res) {
+          pm.environment.set("managerToken", res.json().token);
+          console.log("managerToken pre-fetched:", res.json().token ? "YES" : "NO");
+      });
