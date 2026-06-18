@@ -13,7 +13,7 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
-import { useAppTheme } from '../../src/constants/useAppTheme';
+import { useAppTheme } from '../src/constants/useAppTheme';
 
 const API_URL  = process.env.EXPO_PUBLIC_API_URL || '';
 const ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
