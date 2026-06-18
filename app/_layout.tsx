@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
 import * as ScreenCapture from 'expo-screen-capture';
 import { syncOfflineLeads } from '../src/hooks/Offlinesync';
-import * as SecureStore from 'expo-secure-store';
+
 
 const API_URL     = process.env.EXPO_PUBLIC_API_URL || '';
 const ANON_KEY    = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
@@ -20,7 +20,6 @@ const SUPABASE_HEADERS = {
   'Content-Type':  'application/json',
 };
 
-const SESSION_TIMEOUT = 30 * 60 * 1000;
 
 function NoInternetScreen({ onRetry }: { onRetry: () => void }) {
   const [checking, setChecking] = useState(false);
@@ -49,7 +48,6 @@ function NoInternetScreen({ onRetry }: { onRetry: () => void }) {
 }
 
 export default function RootLayout() {
-<<<<<<< HEAD
   const [isConnected, setIsConnected]           = useState(true);
   const [wasPreviouslyOffline, setWasPreviouslyOffline] = useState(false);
   const [authChecked, setAuthChecked]           = useState(false);
@@ -63,18 +61,6 @@ export default function RootLayout() {
     return () => {
       ScreenCapture.allowScreenCaptureAsync();
     };
-=======
-  const router                                          = useRouter();
-  const segments                                        = useSegments();
-  const [isConnected, setIsConnected]                   = useState(true);
-  const [wasPreviouslyOffline, setWasPreviouslyOffline] = useState(false);
-  const [authChecked, setAuthChecked]                   = useState(false);
-
-  // ── Prevent screenshots & screen recording app-wide ──────────────────────
-  useEffect(() => {
-    // ScreenCapture.preventScreenCaptureAsync();
-    // return () => { ScreenCapture.allowScreenCaptureAsync(); };
->>>>>>> 6b3157cebbbb95e7359ad12415a9dc9bdca929fc
   }, []);
 
   // ── Auth guard ────────────────────────────────────────────────────────────
