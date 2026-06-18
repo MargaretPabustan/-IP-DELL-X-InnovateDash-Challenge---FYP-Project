@@ -15,35 +15,58 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import * as SecureStore from 'expo-secure-store';
+
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
 export default function LoginScreen() {
   const router = useRouter();
 
-  const [employeeId, setEmployeeId]     = useState('');
-  const [password, setPassword]         = useState('');
+  const [email,        setEmail]        = useState('');
+  const [password,     setPassword]     = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading]           = useState(false);
+  const [loading,      setLoading]      = useState(false);
 
   const handleLogin = async () => {
-    if (!employeeId.trim() || !password.trim()) {
-      Alert.alert('Missing Fields', 'Please enter your Employee ID and password.');
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('Missing Fields', 'Please enter your email and password.');
       return;
     }
 
     setLoading(true);
 
-    // ── TEMP: hardcoded for testing ──────────────────────────────────────
-    setTimeout(() => {
-      setLoading(false);
-      if (employeeId === 'admin') {
-        router.replace('/admin/Admin_Dashboard');
-      } else if (employeeId === 'manager') {
+    try {
+      const response = await fetch(`${BACKEND_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password: password.trim() }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        Alert.alert('Login Failed', data.message || 'Invalid credentials.');
+        return;
+      }
+
+      await SecureStore.setItemAsync('token', data.token);
+      await SecureStore.setItemAsync('role', data.role);
+
+      console.log('✅ Token stored, role:', data.role);
+
+      if (data.role === 'admin') {
+        router.replace('/admin/Admin_Dashboard' as any);
+      } else if (data.role === 'manager') {
         router.replace('/manager/Managerfinaldashboard' as any);
       } else {
         router.replace('/booth/dashboardscreen' as any);
       }
-    }, 1000);
-    // ── Remove above and replace with real login when backend is ready ───
+
+    } catch (err) {
+      Alert.alert('Error', 'Could not connect to server. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -78,18 +101,19 @@ export default function LoginScreen() {
           {/* Form Card */}
           <View style={styles.formCard}>
 
-            {/* Employee ID */}
-            <Text style={styles.fieldLabel}>EMPLOYEE ID</Text>
+            {/* Email */}
+            <Text style={styles.fieldLabel}>EMAIL</Text>
             <View style={styles.inputWrapper}>
-              <Ionicons name="id-card-outline" size={18} color="#94a3b8" style={styles.inputIcon} />
+              <Ionicons name="mail-outline" size={18} color="#94a3b8" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                value={employeeId}
-                onChangeText={setEmployeeId}
-                placeholder="Enter your employee ID"
+                value={email}
+                onChangeText={setEmail}
+                placeholder="Enter your email"
                 placeholderTextColor="#94a3b8"
                 autoCapitalize="none"
                 autoCorrect={false}
+                keyboardType="email-address"
                 returnKeyType="next"
               />
             </View>
@@ -110,15 +134,8 @@ export default function LoginScreen() {
                 returnKeyType="done"
                 onSubmitEditing={handleLogin}
               />
-              <TouchableOpacity
-                onPress={() => setShowPassword(!showPassword)}
-                style={styles.eyeBtn}
-              >
-                <Ionicons
-                  name={showPassword ? 'eye-outline' : 'eye-off-outline'}
-                  size={18}
-                  color="#94a3b8"
-                />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+                <Ionicons name={showPassword ? 'eye-outline' : 'eye-off-outline'} size={18} color="#94a3b8" />
               </TouchableOpacity>
             </View>
 
