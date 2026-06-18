@@ -13,7 +13,11 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons, MaterialIcons, FontAwesome5 } from "@expo/vector-icons";
+<<<<<<< HEAD:app/manager/Followups-not-done.jsx
 import { useAppTheme } from '../../src/constants/useAppTheme';// For icons and theming
+=======
+import { useAppTheme } from '../src/constants/useAppTheme';
+>>>>>>> 239cc7b486e2ac7e8dfbbd5339eb10ba21c4f7f0:manager/Followups-not-done.jsx
 
 const API_URL  = process.env.EXPO_PUBLIC_API_URL || '';
 const ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
