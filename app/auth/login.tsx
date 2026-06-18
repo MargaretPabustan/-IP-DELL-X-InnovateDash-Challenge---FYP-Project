@@ -55,9 +55,9 @@ export default function LoginScreen() {
       console.log('✅ Token stored, role:', data.role);
 
       if (data.role === 'admin') {
-        router.replace('/admin/Admin_Dashboard' as any);
+        router.replace('/admin/dashboard' as any);
       } else if (data.role === 'manager') {
-        router.replace('/manager/Managerfinaldashboard' as any);
+        router.replace('/manager' as any);
       } else {
         router.replace('/booth/dashboardscreen' as any);
       }
