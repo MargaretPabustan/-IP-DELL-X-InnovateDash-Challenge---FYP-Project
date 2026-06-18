@@ -7,19 +7,17 @@ import * as SecureStore from 'expo-secure-store';
 import * as ScreenCapture from 'expo-screen-capture';
 import { syncOfflineLeads } from '../src/hooks/Offlinesync';
 
-
 const API_URL     = process.env.EXPO_PUBLIC_API_URL || '';
 const ANON_KEY    = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
-const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes in ms
+const SESSION_TIMEOUT = 30 * 60 * 1000;
 
 const SUPABASE_HEADERS = {
   'apikey':        ANON_KEY,
   'Authorization': `Bearer ${ANON_KEY}`,
   'Content-Type':  'application/json',
 };
-
 
 function NoInternetScreen({ onRetry }: { onRetry: () => void }) {
   const [checking, setChecking] = useState(false);
@@ -48,19 +46,16 @@ function NoInternetScreen({ onRetry }: { onRetry: () => void }) {
 }
 
 export default function RootLayout() {
-  const [isConnected, setIsConnected]           = useState(true);
+  const router                                          = useRouter();
+  const segments                                        = useSegments();
+  const [isConnected, setIsConnected]                   = useState(true);
   const [wasPreviouslyOffline, setWasPreviouslyOffline] = useState(false);
-  const [authChecked, setAuthChecked]           = useState(false);
-
-  const router   = useRouter();
-  const segments = useSegments();
+  const [authChecked, setAuthChecked]                   = useState(false);
 
   // ── Prevent screenshots & screen recording app-wide ──────────────────────
   useEffect(() => {
-    ScreenCapture.preventScreenCaptureAsync();
-    return () => {
-      ScreenCapture.allowScreenCaptureAsync();
-    };
+    // ScreenCapture.preventScreenCaptureAsync();
+    // return () => { ScreenCapture.allowScreenCaptureAsync(); };
   }, []);
 
   // ── Auth guard ────────────────────────────────────────────────────────────
