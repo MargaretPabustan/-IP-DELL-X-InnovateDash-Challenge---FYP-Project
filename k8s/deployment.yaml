@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: dell-backend
+  namespace: boothflow
+
+spec:
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: dell-backend
+
+  template:
+    metadata:
+      labels:
+        app: dell-backend
+
+    spec:
+      containers:
+      - name: dell-backend
+        image: dell-backend:latest
+        imagePullPolicy: IfNotPresent
+
+        ports:
+        - containerPort: 3000
+
+        env:
+        - name: DATABASE_URL
+          value: postgresql://postgres.yuznjmtalqulbjneupux:d3lld%40t%40b3se@aws-1-ap-southeast-1.pooler.supabase.com:5432/postgres
+
+        - name: JWT_SECRET
+          value: boothflow_secret_2026
+
+        - name: GEMINI_API_KEY
+          value: AQ.Ab8RN6KT5Kxsf8J9cWvgnHh8jHLLiUdlC7_i16LZNq2U9T8gXQ
+
+
+        - name: EMAIL_USER
+          value: dellfypproject@gmail.com
+
+        - name: EMAIL_PASS
+          value: dellfypproject123
