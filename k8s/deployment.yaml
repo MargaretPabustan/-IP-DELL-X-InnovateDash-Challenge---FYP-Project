@@ -34,7 +34,10 @@ spec:
           value: boothflow_secret_2026
 
         - name: GEMINI_API_KEY
-          value: AQ.Ab8RN6KT5Kxsf8J9cWvgnHh8jHLLiUdlC7_i16LZNq2U9T8gXQ
+  valueFrom:
+    secretKeyRef:
+      name: app-secrets
+      key: GEMINI_API_KEY
 
 
         - name: EMAIL_USER
