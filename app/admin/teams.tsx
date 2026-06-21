@@ -212,7 +212,7 @@ const styles = StyleSheet.create({
   teamName: { fontSize: 15, fontWeight: '700' },
   teamTerritory: { fontSize: 12, marginTop: 2 },
   teamDesc: { fontSize: 12, marginTop: 2 },
-  actions: { gap: 6 },
+  actions: { flexDirection: 'row', gap: 6 },
   actionBtn: { width: 30, height: 30, borderRadius: 8, borderWidth: 1.5, alignItems: 'center', justifyContent: 'center' },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   modalSheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24 },
