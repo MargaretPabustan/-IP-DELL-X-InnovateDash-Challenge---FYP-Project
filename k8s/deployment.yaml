@@ -18,6 +18,8 @@ spec:
         app: dell-backend
 
     spec:
+      serviceAccountName: dell-backend-sa
+
       containers:
         - name: dell-backend
           image: dell-backend:latest
@@ -30,6 +32,10 @@ spec:
             runAsNonRoot: true
             runAsUser: 1000
             allowPrivilegeEscalation: false
+
+            capabilities:
+              drop:
+                - ALL
 
           resources:
             requests:
