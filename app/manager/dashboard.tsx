@@ -7,26 +7,51 @@ const API = process.env.EXPO_PUBLIC_API_URL;
 
 export default function Dashboard() {
   const router = useRouter();
+
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
-    const token = await AsyncStorage.getItem('token');
+    try {
+      const token = await AsyncStorage.getItem('token');
 
-    const res = await fetch(`${API}/manager/dashboard`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+      const res = await fetch(`${API}/manager/dashboard`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
 
-    const json = await res.json();
-    setData(json.data);
-    setLoading(false);
+      const json = await res.json();
+
+      if (json?.success && json?.data) {
+        setData(json.data);
+      } else {
+        setData(null);
+      }
+    } catch (err) {
+      setData(null);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
     load();
   }, []);
 
-  if (loading) return <ActivityIndicator />;
+  if (loading) {
+    return <ActivityIndicator size="large" />;
+  }
+
+  if (!data) {
+    return (
+      <View style={{ padding: 20 }}>
+        <Text style={{ color: 'red' }}>
+          Failed to load dashboard data.
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={{ padding: 20 }}>
@@ -34,10 +59,10 @@ export default function Dashboard() {
         Manager Dashboard
       </Text>
 
-      <Text>Total: {data.total_leads}</Text>
-      <Text>Qualified: {data.qualified}</Text>
-      <Text>Contacted: {data.contacted}</Text>
-      <Text>New: {data.new_leads}</Text>
+      <Text>Total: {data?.total_leads ?? 0}</Text>
+      <Text>Qualified: {data?.qualified ?? 0}</Text>
+      <Text>Contacted: {data?.contacted ?? 0}</Text>
+      <Text>New: {data?.new_leads ?? 0}</Text>
 
       <Pressable onPress={() => router.push('/manager/leads')}>
         <Text style={{ color: 'blue', marginTop: 20 }}>
@@ -46,7 +71,9 @@ export default function Dashboard() {
       </Pressable>
 
       <Pressable onPress={() => router.push('/manager/export')}>
-        <Text style={{ color: 'blue' }}>Export Excel</Text>
+        <Text style={{ color: 'blue', marginTop: 10 }}>
+          Export Excel
+        </Text>
       </Pressable>
     </View>
   );
