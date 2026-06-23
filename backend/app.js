@@ -627,52 +627,61 @@ const transporter = nodemailer.createTransport({
     }
 });
 
-app.post('/send-followup/:id', async (req, res) => {
-    try {
-        const leadResult = await pool.query('SELECT * FROM leads WHERE lead_id=$1', [req.params.id]);
-        if (leadResult.rows.length === 0) return res.status(404).json({ success: false, message: 'Lead not found' });
+// ── Schedule Follow-up Email (24h after scan) ───────────────────────────────
+const nodemailer = require('nodemailer');
 
-        const lead = leadResult.rows[0];
-
-        setTimeout(async () => {
-            const emailBody = `Hi ${lead.name},
-
-Thank you for visiting our booth. Here are the details you asked for.
-
-We'd also like to invite you to our upcoming webinar on June 25th at 3:00 PM (SGT), where we'll showcase solutions related to your interests.
-
-Best regards,
-Dell Boothflow Team`;
-
-            await transporter.sendMail({
-                from:    `"Boothflow" <${process.env.EMAIL_USER}>`,
-                to:      lead.email,
-                subject: "Follow-up & Upcoming Webinar",
-                text:    emailBody
-            });
-
-            await pool.query(
-                `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'EMAIL_SENT', 'Follow-up email sent after 1 day')`,
-                [lead.lead_id]
-            );
-
-            console.log(`📧 Follow-up email sent to ${lead.email}`);
-        }, 24 * 60 * 60 * 1000);
-
-        res.json({ success: true, message: 'Follow-up scheduled for 24h later' });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
     }
 });
 
-// ── START SERVER ──────────────────────────────────────────────────────────────
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, async () => {
-    console.log(`🚀 Server running on port ${PORT}`);
-    try {
-        const result = await pool.query('SELECT NOW()');
-        console.log('✅ Supabase connected:', result.rows[0].now);
-    } catch (err) {
-        console.log('❌ DB check failed:', err.message);
+function buildFollowUpEmail(lead, aiData, interests) {
+    let body = `Hi ${lead.name},\n\n`;
+
+    if (aiData.intent === 'High' || lead.status === 'QUALIFIED') {
+        body += `We noticed your strong interest in ${interests}. ${aiData.notes}\n\n`;
+        body += `We’d love to schedule a call with you to discuss solutions in detail.`;
+    } else if (aiData.intent === 'Medium' || lead.status === 'CONTACTED') {
+        if (lead.customer_intent?.toLowerCase().includes('pricing')) {
+            body += `You mentioned pricing for ${interests}. ${aiData.notes}\n\n`;
+            body += `We’ll send you tailored pricing information and can arrange a demo if you’d like.`;
+        } else if (lead.customer_intent?.toLowerCase().includes('demo')) {
+            body += `You expressed interest in a demo for ${interests}. ${aiData.notes}\n\n`;
+            body += `We’d be happy to schedule a demonstration session.`;
+        } else {
+            body += `${aiData.notes}\n\nWe’ll follow up with more details soon.`;
+        }
+    } else {
+        body += `We’re glad you stopped by to explore ${interests}. ${aiData.notes}\n\n`;
+        body += `Here are some resources and newsletters you may find useful — no pressure, just insights.`;
     }
-});
+
+    body += `\n\n📢 Don’t miss our upcoming webinar on **June 25th at 3:00 PM (SGT)**, where we’ll showcase solutions related to your interests.\n\nBest regards,\nDell Boothflow Team`;
+
+    return body;
+}
+
+setTimeout(async () => {
+    try {
+        const emailBody = buildFollowUpEmail(lead, aiData, interests);
+
+        await transporter.sendMail({
+            from: `"Boothflow" <${process.env.EMAIL_USER}>`,
+            to: lead.email,
+            subject: "Personalised Follow-up & Webinar Invite",
+            text: emailBody
+        });
+
+        await pool.query(
+            `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'EMAIL_SENT', 'Automated personalised follow-up after 24h')`,
+            [lead.lead_id]
+        );
+
+        console.log(`📧 24h follow-up email sent to ${lead.email}`);
+    } catch (err) {
+        console.error('❌ Follow-up email error:', err);
+    }
+}, 24 * 60 * 60 * 1000);
