@@ -13,6 +13,12 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+// ── REQUEST LOGGER ────────────────────────────────────────────────────────────
+app.use((req, res, next) => {
+    console.log(`📥 ${req.method} ${req.path}`, JSON.stringify(req.body || {}).substring(0, 200));
+    next();
+});
+
 app.post('/debug-bcrypt', async (req, res) => {
     const { password, hash } = req.body;
     const result = await bcrypt.compare(password, hash);
@@ -167,21 +173,30 @@ app.get('/', (req, res) => {
 });
 
 // ── AUTH ──────────────────────────────────────────────────────────────────────
-app.post('/auth/login', async (req, res) => {
+app.post("/auth/login", async (req, res) => {
     const { email, password } = req.body;
+    console.log("🔐 Login attempt for:", email);
     try {
+        console.log('🔍 Querying user from DB...');
         const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
+        console.log('👤 User found:', result.rows.length > 0 ? 'YES' : 'NO');
         if (result.rows.length === 0) return res.status(401).json({ message: 'Invalid credentials' });
         const user = result.rows[0];
+        console.log('🔑 Comparing password for user_id:', user.user_id, 'role:', user.role);
         const validPassword = await bcrypt.compare(password, user.password_hash);
+        console.log('🔑 Password valid:', validPassword);
         if (!validPassword) return res.status(401).json({ message: 'Invalid credentials' });
+        console.log('🔏 Signing JWT, JWT_SECRET present:', !!process.env.JWT_SECRET);
         const token = jwt.sign(
             { id: user.user_id, role: user.role, team_id: user.team_id },
             process.env.JWT_SECRET,
             { expiresIn: '8h' }
         );
+        console.log('✅ Login successful for:', email, 'role:', user.role);
         res.json({ token, role: user.role });
     } catch (err) {
+        console.error('❌ Login error:', err.message);
+        console.error('Stack:', err.stack);
         res.status(500).json({ message: err.message });
     }
 });
@@ -715,6 +730,13 @@ app.post('/send-followup/:id', async (req, res) => {
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
+});
+
+// ── GLOBAL ERROR HANDLER ──────────────────────────────────────────────────────
+app.use((err, req, res, next) => {
+    console.error('❌ Unhandled error:', err.message);
+    console.error('Stack:', err.stack);
+    res.status(500).json({ success: false, message: err.message });
 });
 
 // ── START SERVER ──────────────────────────────────────────────────────────────
