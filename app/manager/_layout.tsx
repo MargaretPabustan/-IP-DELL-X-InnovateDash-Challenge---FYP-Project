@@ -8,6 +8,7 @@ export default function ManagerLayout() {
       <Stack.Screen name="teams" />
       <Stack.Screen name="activity" />
       <Stack.Screen name="export" />
+      <Stack.Screen name="dashboard" />
     </Stack>
   );
 }
