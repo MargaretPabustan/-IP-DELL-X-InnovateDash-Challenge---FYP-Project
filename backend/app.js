@@ -52,6 +52,44 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 console.log('GEMINI_API_KEY loaded:', process.env.GEMINI_API_KEY ? '✅ ' + process.env.GEMINI_API_KEY.substring(0, 8) + '...' : '❌ MISSING');
 
+// ── EMAIL TRANSPORTER ─────────────────────────────────────────────────────────
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS
+    }
+});
+
+// ── PERSONALISED EMAIL BUILDER ────────────────────────────────────────────────
+function buildFollowUpEmail(lead, aiData, interests) {
+    let body = `Hi ${lead.name},\n\n`;
+
+    if (aiData.intent === 'High' || lead.status === 'QUALIFIED') {
+        body += `We noticed your strong interest in ${interests}. ${aiData.notes}\n\n`;
+        body += `We'd love to schedule a call with you this week to discuss Dell solutions in detail. Please reply to this email or contact your assigned Dell representative to arrange a time.\n`;
+    } else if (aiData.intent === 'Medium' || lead.status === 'CONTACTED') {
+        if (lead.customer_intent?.toLowerCase().includes('pricing')) {
+            body += `You mentioned pricing for ${interests}. ${aiData.notes}\n\n`;
+            body += `We'll send you tailored pricing information shortly. In the meantime, feel free to reply if you'd like to arrange a personalised demo.\n`;
+        } else if (lead.customer_intent?.toLowerCase().includes('demo')) {
+            body += `You expressed interest in a demo for ${interests}. ${aiData.notes}\n\n`;
+            body += `We'd be happy to schedule a demonstration session at your convenience. Please reply to this email to confirm a time.\n`;
+        } else {
+            body += `${aiData.notes}\n\n`;
+            body += `We'll follow up with more details on ${interests} soon. Feel free to reach out if you have any questions in the meantime.\n`;
+        }
+    } else {
+        body += `We're glad you stopped by to explore ${interests}. ${aiData.notes}\n\n`;
+        body += `Here are some resources you may find useful — no pressure, just insights into how Dell can support your organisation's technology needs.\n`;
+    }
+
+    body += `\n📢 Don't miss our upcoming webinar on June 25th at 3:00 PM (SGT), where we'll showcase solutions related to your interests.\n`;
+    body += `\nBest regards,\nDell Boothflow Team`;
+
+    return body;
+}
+
 // ── INTEREST → TEAM MAPPING ───────────────────────────────────────────────────
 const INTEREST_TEAM_MAP = {
     'AI PCs':      1,
@@ -182,7 +220,7 @@ app.post('/leads', async (req, res) => {
         assigned_team_id,
         primary_interest,
         selected_interests,
-        additional_notes,   // rep's notes — stored temporarily, fed to AI
+        additional_notes,
         scanned_by,
         scanned_by_name,
     } = req.body;
@@ -538,7 +576,6 @@ app.post('/analyze-lead/:id', async (req, res) => {
             console.log(`🔧 Fixed missing team assignment: lead ${lead.lead_id} → team ${resolvedTeam}`);
         }
 
-        // ai_notes at creation = rep's additional notes, AI will overwrite after analysis
         const repNotes = lead.ai_notes || null;
 
         const prompt = `
@@ -593,10 +630,34 @@ Return ONLY valid JSON in this exact format, no extra text:
 
         const statusDisplay = { 'QUALIFIED': 'Ready for Follow-up', 'CONTACTED': 'Review for Follow-up', 'NEW': 'No Follow-up Needed' };
 
+        // Update lead with AI results
         await pool.query(
             'UPDATE leads SET ai_notes=$1, status=$2, confidence_score=$3, follow_up_required=$4 WHERE lead_id=$5',
             [aiData.notes || null, status, aiData.confidence, aiData.follow_up_required, parseInt(lead.lead_id)]
         );
+
+        // Update lead status for email builder
+        lead.status = status;
+
+        // ── Auto schedule 24h personalised follow-up email ────────────────────
+        setTimeout(async () => {
+            try {
+                const emailBody = buildFollowUpEmail(lead, aiData, interests);
+                await transporter.sendMail({
+                    from:    `"Boothflow" <${process.env.EMAIL_USER}>`,
+                    to:      lead.email,
+                    subject: `Your Dell Technologies Follow-up — ${interests}`,
+                    text:    emailBody
+                });
+                await pool.query(
+                    `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'EMAIL_SENT', 'Automated personalised follow-up after 24h')`,
+                    [lead.lead_id]
+                );
+                console.log(`📧 24h follow-up email sent to ${lead.email} (intent: ${aiData.intent})`);
+            } catch (err) {
+                console.error('❌ Follow-up email error:', err.message);
+            }
+        }, 24 * 60 * 60 * 1000);
 
         res.json({
             success: true,
@@ -618,70 +679,52 @@ Return ONLY valid JSON in this exact format, no extra text:
     }
 });
 
-// ── FOLLOW-UP EMAIL ROUTE ─────────────────────────────────────────────────────
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-    }
-});
-
-// ── Schedule Follow-up Email (24h after scan) ───────────────────────────────
-const nodemailer = require('nodemailer');
-
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-    }
-});
-
-function buildFollowUpEmail(lead, aiData, interests) {
-    let body = `Hi ${lead.name},\n\n`;
-
-    if (aiData.intent === 'High' || lead.status === 'QUALIFIED') {
-        body += `We noticed your strong interest in ${interests}. ${aiData.notes}\n\n`;
-        body += `We’d love to schedule a call with you to discuss solutions in detail.`;
-    } else if (aiData.intent === 'Medium' || lead.status === 'CONTACTED') {
-        if (lead.customer_intent?.toLowerCase().includes('pricing')) {
-            body += `You mentioned pricing for ${interests}. ${aiData.notes}\n\n`;
-            body += `We’ll send you tailored pricing information and can arrange a demo if you’d like.`;
-        } else if (lead.customer_intent?.toLowerCase().includes('demo')) {
-            body += `You expressed interest in a demo for ${interests}. ${aiData.notes}\n\n`;
-            body += `We’d be happy to schedule a demonstration session.`;
-        } else {
-            body += `${aiData.notes}\n\nWe’ll follow up with more details soon.`;
-        }
-    } else {
-        body += `We’re glad you stopped by to explore ${interests}. ${aiData.notes}\n\n`;
-        body += `Here are some resources and newsletters you may find useful — no pressure, just insights.`;
-    }
-
-    body += `\n\n📢 Don’t miss our upcoming webinar on **June 25th at 3:00 PM (SGT)**, where we’ll showcase solutions related to your interests.\n\nBest regards,\nDell Boothflow Team`;
-
-    return body;
-}
-
-setTimeout(async () => {
+// ── MANUAL FOLLOW-UP EMAIL ROUTE (kept for manual triggers) ──────────────────
+app.post('/send-followup/:id', async (req, res) => {
     try {
-        const emailBody = buildFollowUpEmail(lead, aiData, interests);
+        const leadResult = await pool.query('SELECT * FROM leads WHERE lead_id=$1', [req.params.id]);
+        if (leadResult.rows.length === 0) return res.status(404).json({ success: false, message: 'Lead not found' });
 
-        await transporter.sendMail({
-            from: `"Boothflow" <${process.env.EMAIL_USER}>`,
-            to: lead.email,
-            subject: "Personalised Follow-up & Webinar Invite",
-            text: emailBody
-        });
+        const lead = leadResult.rows[0];
+        const aiData = {
+            intent: lead.status === 'QUALIFIED' ? 'High' : lead.status === 'CONTACTED' ? 'Medium' : 'Low',
+            notes:  lead.ai_notes || 'Thank you for visiting our booth.',
+        };
+        const interests = 'Dell Technologies solutions';
 
-        await pool.query(
-            `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'EMAIL_SENT', 'Automated personalised follow-up after 24h')`,
-            [lead.lead_id]
-        );
+        setTimeout(async () => {
+            try {
+                const emailBody = buildFollowUpEmail(lead, aiData, interests);
+                await transporter.sendMail({
+                    from:    `"Boothflow" <${process.env.EMAIL_USER}>`,
+                    to:      lead.email,
+                    subject: `Your Dell Technologies Follow-up`,
+                    text:    emailBody
+                });
+                await pool.query(
+                    `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'EMAIL_SENT', 'Manual follow-up email scheduled')`,
+                    [lead.lead_id]
+                );
+                console.log(`📧 Manual follow-up email sent to ${lead.email}`);
+            } catch (err) {
+                console.error('❌ Manual follow-up email error:', err.message);
+            }
+        }, 24 * 60 * 60 * 1000);
 
-        console.log(`📧 24h follow-up email sent to ${lead.email}`);
+        res.json({ success: true, message: 'Follow-up scheduled for 24h later' });
     } catch (err) {
-        console.error('❌ Follow-up email error:', err);
+        res.status(500).json({ success: false, message: err.message });
     }
-}, 24 * 60 * 60 * 1000);
+});
+
+// ── START SERVER ──────────────────────────────────────────────────────────────
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, async () => {
+    console.log(`🚀 Server running on port ${PORT}`);
+    try {
+        const result = await pool.query('SELECT NOW()');
+        console.log('✅ Supabase connected:', result.rows[0].now);
+    } catch (err) {
+        console.log('❌ DB check failed:', err.message);
+    }
+});
