@@ -31,12 +31,17 @@ jobs:
         run: npx tsc --noEmit
         continue-on-error: true  # warn but don't fail CI
 
-      # Lint check (only if lint script exists)
+      # Lint check
       - name: Run ESLint
         run: npm run lint --if-present
-        continue-on-error: true  # warn but don't fail CI
+        continue-on-error: true
 
-      # Check Expo config is valid
+      # Run tests (Jest/Detox if defined)
+      - name: Run tests
+        run: npm test --if-present
+        continue-on-error: true
+
+      # Validate Expo config
       - name: Validate Expo config
         run: npx expo config --type public
         env:

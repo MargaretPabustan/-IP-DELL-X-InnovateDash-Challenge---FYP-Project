@@ -24,11 +24,13 @@ jobs:
         run: npm install
 
       - name: Run ESLint
-        run: npm run lint || echo "No lint script defined"
+        run: npm run lint --if-present
+        continue-on-error: true
 
       - name: Run tests
-        run: npm test || echo "No tests yet"
+        run: npm test --if-present
+        continue-on-error: true
 
       - name: TypeScript build
-        run: npx tsc --noEmit || echo "No TypeScript config"
-        
+        run: npx tsc --noEmit
+        continue-on-error: true
