@@ -302,35 +302,67 @@ return (
 >
    
 
-    <View style={styles.totalCard}>
-      <View style={styles.totalCardRow}>
-        <View>
-          <Text style={styles.totalCardLabel}>
-            Total Team Leads
-          </Text>
+    
+<View style={styles.totalCard}>
+  <View style={styles.totalCardRow}>
+    <View>
+      <Text style={styles.totalCardLabel}>
+        Total Team Leads
+      </Text>
 
-          <Text style={styles.totalNumber}>
-            {total}
-          </Text>
-        </View>
-
-        <View style={styles.totalBadge}>
-          <Text
-            style={{
-              fontSize: 30,
-              fontWeight: "800",
-              color: "#1a1acc",
-            }}
-          >
-            👥
-          </Text>
-        </View>
-      </View>
+      <Text style={styles.totalNumber}>
+        {total}
+      </Text>
     </View>
 
-    <Text style={styles.sectionLabel}>
-      LEAD STATUS
-    </Text>
+    <View style={styles.totalBadge}>
+      <Text
+        style={{
+          fontSize: 30,
+          fontWeight: "800",
+          color: "#1a1acc",
+        }}
+      >
+        👥
+      </Text>
+    </View>
+  </View>
+</View>
+
+<Text style={styles.sectionLabel}>
+  Performance Chart
+</Text>
+
+  <View style={styles.card}>
+    <CustomBarChart
+      labels={["New", "Contacted", "Qualified"]}
+      maxVal={Math.max(
+        newLeads,
+        contacted,
+        qualified,
+        1
+      )}
+      datasets={[
+        {
+          data: [newLeads],
+          color: COLORS.new,
+        },
+        {
+          data: [contacted],
+          color: COLORS.contacted,
+        },
+        {
+          data: [qualified],
+          color: COLORS.qualified,
+        },
+      ]}
+    />
+  </View>
+
+<Text style={styles.sectionLabel}>
+  Lead Status
+</Text>
+
 
     <View style={styles.statsRow}>
       <View style={styles.statCard}>
@@ -409,38 +441,10 @@ return (
       </Text>
     </View>
 
-    <Text style={styles.sectionLabel}>
-      PERFORMANCE CHART
-    </Text>
-
-    <View style={styles.card}>
-      <CustomBarChart
-        labels={["Status"]}
-        maxVal={Math.max(
-          newLeads,
-          contacted,
-          qualified,
-          1
-        )}
-        datasets={[
-          {
-            data: [newLeads],
-            color: COLORS.new,
-          },
-          {
-            data: [contacted],
-            color: COLORS.contacted,
-          },
-          {
-            data: [qualified],
-            color: COLORS.qualified,
-          },
-        ]}
-      />
-    </View>
+    
 
     <Text style={styles.sectionLabel}>
-      FOLLOW UPS
+      Follow-Ups
     </Text>
 
     <View style={styles.totalCard}>
