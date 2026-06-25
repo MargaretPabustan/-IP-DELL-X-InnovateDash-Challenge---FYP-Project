@@ -42,13 +42,19 @@ export default function AdminUsers() {
   const [refreshing, setRefreshing] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [editUser,   setEditUser]   = useState<User | null>(null);
+  const [viewUser,   setViewUser]   = useState<User | null>(null);
+  const [saving,     setSaving]     = useState(false);
 
   // Create form
   const [newName,     setNewName]     = useState('');
   const [newEmail,    setNewEmail]    = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newRole,     setNewRole]     = useState('rep');
-  const [saving,      setSaving]      = useState(false);
+
+  // Edit form
+  const [editName,   setEditName]   = useState('');
+  const [editEmail,  setEditEmail]  = useState('');
+  const [editRole,   setEditRole]   = useState('rep');
 
   const fetchUsers = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -63,6 +69,13 @@ export default function AdminUsers() {
   }, []);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
+
+  const openEdit = (user: User) => {
+    setEditUser(user);
+    setEditName(user.full_name);
+    setEditEmail(user.email);
+    setEditRole(user.role);
+  };
 
   const handleCreate = async () => {
     if (!newName.trim() || !newEmail.trim() || !newPassword.trim()) {
@@ -84,6 +97,38 @@ export default function AdminUsers() {
       fetchUsers();
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to create user.');
+    } finally { setSaving(false); }
+  };
+
+  const handleEdit = async () => {
+    if (!editName.trim() || !editEmail.trim()) {
+      Alert.alert('Missing Fields', 'Name and email are required.');
+      return;
+    }
+    if (!editUser) return;
+    setSaving(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${BACKEND_URL}/admin/users/${editUser.user_id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          full_name: editName,
+          email: editEmail,
+          role: editRole,
+          team_id: editUser.team_id,
+          is_active: editUser.is_active,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to update user');
+      setUsers(prev => prev.map(u => u.user_id === editUser.user_id
+        ? { ...u, full_name: editName, email: editEmail, role: editRole }
+        : u
+      ));
+      setEditUser(null);
+      Alert.alert('Success', 'User updated successfully.');
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to update user.');
     } finally { setSaving(false); }
   };
 
@@ -170,11 +215,14 @@ export default function AdminUsers() {
                 </View>
               </View>
               <View style={styles.actions}>
-                <TouchableOpacity style={[styles.actionBtn, { borderColor: user.is_active ? '#ef4444' : '#22c55e' }]} onPress={() => handleToggleActive(user)}>
-                  <Ionicons name={user.is_active ? 'pause' : 'play'} size={14} color={user.is_active ? '#ef4444' : '#22c55e'} />
+                <TouchableOpacity style={[styles.actionBtn, { borderColor: theme.navy }]} onPress={() => openEdit(user)}>
+                  <Ionicons name="pencil" size={13} color={theme.navy} />
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionBtn, { borderColor: theme.accent }]} onPress={() => setViewUser(user)}>
+                  <Ionicons name="eye-outline" size={13} color={theme.accent} />
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.actionBtn, { borderColor: '#ef4444' }]} onPress={() => handleDelete(user)}>
-                  <Ionicons name="trash-outline" size={14} color="#ef4444" />
+                  <Ionicons name="trash-outline" size={13} color="#ef4444" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -233,6 +281,44 @@ export default function AdminUsers() {
               </TouchableOpacity>
               <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.navy, opacity: saving ? 0.7 : 1 }]} onPress={handleCreate} disabled={saving}>
                 {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveBtnText}>Create</Text>}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* EDIT MODAL */}
+      <Modal visible={!!editUser} transparent animationType="slide">
+        <Pressable style={styles.modalBackdrop} onPress={() => setEditUser(null)}>
+          <Pressable style={[styles.modalSheet, { backgroundColor: theme.card }]} onPress={() => {}}>
+            <View style={styles.modalHandle} />
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Edit User</Text>
+
+            <Text style={styles.fieldLabel}>FULL NAME</Text>
+            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={editName} onChangeText={setEditName} placeholder="Full name" placeholderTextColor={theme.subText} />
+
+            <Text style={styles.fieldLabel}>EMAIL</Text>
+            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={editEmail} onChangeText={setEditEmail} placeholder="Email address" placeholderTextColor={theme.subText} autoCapitalize="none" keyboardType="email-address" />
+
+            <Text style={styles.fieldLabel}>ROLE</Text>
+            <View style={styles.roleRow}>
+              {['rep', 'manager', 'admin'].map(r => (
+                <TouchableOpacity
+                  key={r}
+                  style={[styles.roleChip, { backgroundColor: editRole === r ? theme.navy : theme.bg, borderColor: theme.navy }]}
+                  onPress={() => setEditRole(r)}
+                >
+                  <Text style={[styles.roleChipText, { color: editRole === r ? '#fff' : theme.navy }]}>{r.toUpperCase()}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.modalBtns}>
+              <TouchableOpacity style={[styles.cancelBtn, { borderColor: theme.navy }]} onPress={() => setEditUser(null)}>
+                <Text style={[styles.cancelText, { color: theme.navy }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.navy, opacity: saving ? 0.7 : 1 }]} onPress={handleEdit} disabled={saving}>
+                {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveBtnText}>Save</Text>}
               </TouchableOpacity>
             </View>
           </Pressable>

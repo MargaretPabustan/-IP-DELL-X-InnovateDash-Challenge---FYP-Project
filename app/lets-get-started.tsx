@@ -54,11 +54,11 @@ export default function LetsGetStarted() {
             { paddingBottom: Platform.OS === 'ios' ? 40 : 28 },
           ]}
         >
-          <Text style={styles.ctaText}>Let's Get{"\n"}Started!</Text>
+          <Text style={styles.ctaText}>{"Let's Get"}{"\n"}Started!</Text>
 
           <TouchableOpacity
             style={styles.arrowButton}
-            onPress={() => router.push("/auth/login")}
+            onPress={() => router.push("/auth/login" as any)}
             activeOpacity={0.85}
           >
             <Ionicons name="arrow-forward" size={28} color="#fff" />

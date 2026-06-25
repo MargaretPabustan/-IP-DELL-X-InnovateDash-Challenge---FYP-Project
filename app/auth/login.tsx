@@ -28,6 +28,10 @@ export default function LoginScreen() {
   const [loading,      setLoading]      = useState(false);
 
   const handleLogin = async () => {
+    console.log('🔴 handleLogin called');
+    console.log('📧 email:', email.trim());
+    console.log('🔗 BACKEND_URL:', BACKEND_URL);
+
     if (!email.trim() || !password.trim()) {
       Alert.alert('Missing Fields', 'Please enter your email and password.');
       return;
@@ -36,13 +40,16 @@ export default function LoginScreen() {
     setLoading(true);
 
     try {
+      console.log('📡 Fetching:', `${BACKEND_URL}/auth/login`);
       const response = await fetch(`${BACKEND_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim(), password: password.trim() }),
       });
 
+      console.log('📡 Response status:', response.status);
       const data = await response.json();
+      console.log('📡 Response data:', JSON.stringify(data));
 
       if (!response.ok) {
         Alert.alert('Login Failed', data.message || 'Invalid credentials.');
@@ -63,6 +70,7 @@ export default function LoginScreen() {
       }
 
     } catch (err) {
+      console.error('❌ Login fetch error:', err);
       Alert.alert('Error', 'Could not connect to server. Please try again.');
     } finally {
       setLoading(false);
@@ -142,7 +150,7 @@ export default function LoginScreen() {
             {/* Login Button */}
             <TouchableOpacity
               style={[styles.loginBtn, loading && { opacity: 0.7 }]}
-              onPress={handleLogin}
+              onPress={() => { console.log('🔴 SIGN IN BUTTON PRESSED'); handleLogin(); }}
               activeOpacity={0.85}
               disabled={loading}
             >

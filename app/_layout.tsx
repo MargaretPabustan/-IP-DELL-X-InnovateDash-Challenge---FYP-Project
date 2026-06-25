@@ -4,7 +4,6 @@ import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, AppState } from
 import NetInfo from '@react-native-community/netinfo';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
-import * as ScreenCapture from 'expo-screen-capture';
 import { syncOfflineLeads } from '../src/hooks/Offlinesync';
 
 const API_URL     = process.env.EXPO_PUBLIC_API_URL || '';
@@ -35,7 +34,7 @@ function NoInternetScreen({ onRetry }: { onRetry: () => void }) {
         <Ionicons name="wifi-outline" size={72} color="#94a3b8" />
         <Text style={styles.title}>No Internet Connection</Text>
         <Text style={styles.subtitle}>
-          Don't worry — leads you capture will be saved and synced automatically when you're back online.
+          {'Don\'t worry — leads you capture will be saved and synced automatically when you\'re back online.'}
         </Text>
         <TouchableOpacity style={styles.retryBtn} onPress={handleRetry} activeOpacity={0.8}>
           <Text style={styles.retryText}>{checking ? 'Checking...' : 'Retry'}</Text>
@@ -48,9 +47,7 @@ function NoInternetScreen({ onRetry }: { onRetry: () => void }) {
 export default function RootLayout() {
   const router                                          = useRouter();
   const segments                                        = useSegments();
-  const [isConnected, setIsConnected]                   = useState(true);
   const [wasPreviouslyOffline, setWasPreviouslyOffline] = useState(false);
-  const [authChecked, setAuthChecked]                   = useState(false);
 
   // ── Prevent screenshots & screen recording app-wide ──────────────────────
   useEffect(() => {
@@ -71,12 +68,10 @@ export default function RootLayout() {
         }
       } catch {
         router.replace('/auth/login' as any);
-      } finally {
-        setAuthChecked(true);
       }
     };
     checkAuth();
-  }, [segments]);
+  }, [segments, router]);
 
   // ── Session timeout — auto logout after 30 mins in background ────────────
   useEffect(() => {
@@ -98,13 +93,12 @@ export default function RootLayout() {
     });
 
     return () => subscription.remove();
-  }, []);
+  }, [router]);
 
   // ── Offline sync ──────────────────────────────────────────────────────────
   useEffect(() => {
     const unsubscribe = NetInfo.addEventListener(async state => {
       const connected = !!state.isConnected;
-      setIsConnected(connected);
 
       if (connected && wasPreviouslyOffline) {
         console.log('🌐 Internet restored — syncing offline leads...');
@@ -117,10 +111,6 @@ export default function RootLayout() {
 
     return () => unsubscribe();
   }, [wasPreviouslyOffline]);
-
-  // if (!isConnected) {
-  //   return <NoInternetScreen onRetry={() => NetInfo.fetch()} />;
-  // }
 
   return (
     <Stack screenOptions={{ headerShown: false }}>
