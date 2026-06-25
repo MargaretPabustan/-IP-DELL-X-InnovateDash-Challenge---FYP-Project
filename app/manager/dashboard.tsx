@@ -277,90 +277,184 @@ function DashboardScreen({ token }) {
       />
     );
   }
+  const total = data?.total_leads ?? 0;
+const newLeads = data?.new_leads ?? 0;
+const contacted = data?.contacted ?? 0;
+const qualified = data?.qualified ?? 0;
+const followups = data?.followups_done ?? 0;
 
-  return (
-    <ScrollView contentContainerStyle={{ padding: 14 }}>
-      <Text style={styles.sectionTitle}>
-        Manager Dashboard
-      </Text>
+const newPct =
+  total > 0 ? ((newLeads / total) * 100).toFixed(1) : "0";
 
-      <View style={styles.metricGrid}>
-        <View style={styles.metricCard}>
-         <Text style={styles.metricLabel}>
-          Total Leads
+const contactedPct =
+  total > 0 ? ((contacted / total) * 100).toFixed(1) : "0";
+
+const qualifiedPct =
+  total > 0 ? ((qualified / total) * 100).toFixed(1) : "0";
+
+return (
+  <ScrollView
+  contentContainerStyle={{
+    paddingHorizontal: 18,
+    paddingTop: 20,
+    paddingBottom: 24,
+  }}
+>
+   
+
+    <View style={styles.totalCard}>
+      <View style={styles.totalCardRow}>
+        <View>
+          <Text style={styles.totalCardLabel}>
+            Total Team Leads
           </Text>
 
-          <Text style={styles.metricValue}>
-            {data?.total_leads ?? 0}
+          <Text style={styles.totalNumber}>
+            {total}
           </Text>
         </View>
 
-      <View style={styles.metricCard}>
-        <Text style={styles.metricValue}>
-          {data?.new_leads ?? 0}
+        <View style={styles.totalBadge}>
+          <Text
+            style={{
+              fontSize: 30,
+              fontWeight: "800",
+              color: "#1a1acc",
+            }}
+          >
+            👥
+          </Text>
+        </View>
+      </View>
+    </View>
+
+    <Text style={styles.sectionLabel}>
+      LEAD STATUS
+    </Text>
+
+    <View style={styles.statsRow}>
+      <View style={styles.statCard}>
+        <Text style={styles.statNumber}>
+          {newLeads}
         </Text>
-        <Text style={styles.metricLabel}>
+
+        <Text style={styles.statLabel}>
           New Leads
         </Text>
       </View>
 
-      <View style={styles.metricCard}>
-        <Text style={styles.metricValue}>
-          {data?.contacted ?? 0}
+      <View style={styles.statCard}>
+        <Text style={styles.statNumber}>
+          {contacted}
         </Text>
-        <Text style={styles.metricLabel}>
+
+        <Text style={styles.statLabel}>
           Contacted
         </Text>
       </View>
+    </View>
 
-      <View style={styles.metricCard}>
-        <Text style={styles.metricValue}>
-          {data?.qualified ?? 0}
+    <View style={styles.statsRow}>
+      <View style={styles.statCard}>
+        <Text style={styles.statNumber}>
+          {qualified}
         </Text>
-        <Text style={styles.metricLabel}>
+
+        <Text style={styles.statLabel}>
           Qualified
         </Text>
-     </View>
+      </View>
 
-      <View style={styles.metricCard}>
-        <Text style={styles.metricValue}>
-          {data?.followups_done ?? 0}
+      <View style={styles.statCard}>
+        <Text style={styles.statNumber}>
+          {followups}
         </Text>
-        <Text style={styles.metricLabel}>
+
+        <Text style={styles.statLabel}>
           Follow-Ups
         </Text>
       </View>
-  </View>
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>
-          Lead Status Overview
-        </Text>
+    </View>
 
-        <Text style={{ marginTop: 8 }}>
-          New Leads: {data?.new_leads ?? 0}
-        </Text>
+    <Text style={styles.sectionLabel}>
+      LEAD STATUS BREAKDOWN
+    </Text>
 
-        <Text>
-          Contacted Leads: {data?.contacted ?? 0}
-        </Text>
+    <View style={styles.card}>
+      <Text
+        style={[
+          styles.breakdownText,
+          { color: COLORS.new },
+        ]}
+      >
+        New Leads: {newLeads} ({newPct}%)
+      </Text>
 
-        <Text>
-          Qualified Leads: {data?.qualified ?? 0}
-        </Text>
-      </View>
+      <Text
+        style={[
+          styles.breakdownText,
+          { color: COLORS.contacted },
+        ]}
+      >
+        Contacted: {contacted} ({contactedPct}%)
+      </Text>
 
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>
-          Follow-Up Summary
-        </Text>
+      <Text
+        style={[
+          styles.breakdownText,
+          { color: COLORS.qualified },
+        ]}
+      >
+        Qualified: {qualified} ({qualifiedPct}%)
+      </Text>
+    </View>
 
-        <Text style={{ marginTop: 8 }}>
-          Follow-Ups Completed:{" "}
-          {data?.followups_done ?? 0}
-        </Text>
-      </View>
-    </ScrollView>
-  );
+    <Text style={styles.sectionLabel}>
+      PERFORMANCE CHART
+    </Text>
+
+    <View style={styles.card}>
+      <CustomBarChart
+        labels={["Status"]}
+        maxVal={Math.max(
+          newLeads,
+          contacted,
+          qualified,
+          1
+        )}
+        datasets={[
+          {
+            data: [newLeads],
+            color: COLORS.new,
+          },
+          {
+            data: [contacted],
+            color: COLORS.contacted,
+          },
+          {
+            data: [qualified],
+            color: COLORS.qualified,
+          },
+        ]}
+      />
+    </View>
+
+    <Text style={styles.sectionLabel}>
+      FOLLOW UPS
+    </Text>
+
+    <View style={styles.totalCard}>
+      <Text style={styles.totalCardLabel}>
+        Completed Follow-Ups
+      </Text>
+
+      <Text style={styles.totalNumber}>
+        {followups}
+      </Text>
+    </View>
+  </ScrollView>
+);
+  
 }
 
 function LeadsScreen({ token }) {
@@ -571,19 +665,19 @@ const renderScreen = () => {
   }
 };
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
-  <View>
-    <Text style={styles.logoSub}>
-      Manager Dashboard
-    </Text>
+        <View>
+          <Text style={styles.logoSub}>
+            Manager Dashboard
+          </Text>
 
-    <Text style={styles.logo}>
-      Boothflow
-    </Text>
-  </View>
-</View>
-      <View style={{ flex: 1 }}>{renderScreen()}</View>
+        <Text style={styles.logo}>
+          BoothFlow
+        </Text>
+      </View>
+    </View>
+      <View style={styles.body}>{renderScreen()}</View>
       <View style={styles.bottomNav}>
         {[
   "Dashboard",
@@ -604,69 +698,288 @@ const renderScreen = () => {
 /* ───────────────────────── STYLES ───────────────────────── */
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F5F6FA" },
-  header: { backgroundColor: "#1a1acc", padding: 14 },
-  logoSub: { color: "#fff", fontSize: 14, fontWeight: "600" },
-  logo: { color: "#fff", fontSize: 20, fontWeight: "700" },
+  container: {
+    flex: 1,
+    backgroundColor: "#F5F6FA",
+  },
 
-  sectionTitle: { fontSize: 18, fontWeight: "700", marginVertical: 10 },
+  safeArea: {
+    flex: 1,
+    backgroundColor: "#F5F6FA",
+  },
 
-  metricGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 4 },
-  metricCard: { flex: 1, minWidth: "45%", backgroundColor: "#fff", padding: 12, borderRadius: 12 },
-  metricLabel: { fontSize: 11, color: "#888" },
-  metricValue: { fontSize: 22, fontWeight: "700" },
-  metricSub: { fontSize: 11, color: "#aaa" },
+  body: {
+    flex: 1,
+  },
 
-  card: { backgroundColor: "#fff", padding: 12, borderRadius: 12, marginVertical: 8 },
+  header: {
+    paddingHorizontal: 22,
+    paddingBottom: 18,
+    paddingTop: 14,
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    backgroundColor: "#1a1acc",
+  },
 
-  pill: { paddingHorizontal: 12, paddingVertical: 8, backgroundColor: "#eee", borderRadius: 20 },
-  pillActive: { backgroundColor: "#1a1acc" },
-  pillText: { fontSize: 12, color: "#333" },
+  // rest of styles...
 
-  cardTitle: { fontSize: 14, fontWeight: "600" },
-  cardSub: { fontSize: 12, color: "#777" },
 
-  exportBtn: { backgroundColor: "#1a1acc", padding: 12, borderRadius: 10, marginTop: 10, alignItems: "center" },
+  logoSub: {
+    color: "rgba(255,255,255,0.5)",
+    fontSize: 10,
+    fontWeight: "600",
+    letterSpacing: 2,
+    marginBottom: 2,
+  },
 
-  bottomNav: { flexDirection: "row", backgroundColor: "#fff", padding: 10, borderTopWidth: 1, borderTopColor: "#eee" },
-  navItem: { flex: 1, alignItems: "center" },
-  navText: { color: "#999", fontSize: 12 },
-  navTextActive: { color: "#1a1acc", fontWeight: "700" },
+  logo: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "800",
+    letterSpacing: -0.5,
+  },
 
-  actionBtn: { flex: 1, backgroundColor: "#1a1acc", padding: 10, borderRadius: 8, alignItems: "center" },
-  emailBtn: { flex: 1, backgroundColor: "#5DCAA5", padding: 10, borderRadius: 8, alignItems: "center" },
-  actionText: { color: "#fff", fontWeight: "600" },
+  sectionTitle: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#0f172a",
+    marginBottom: 20,
+  },
 
-  teamBanner: { backgroundColor: "#fff", padding: 15, borderRadius: 12, marginBottom: 12 },
-  teamTitle: { fontSize: 20, fontWeight: "700" },
-  teamSub: { color: "#666", marginTop: 4 },
-  activityItem: { fontSize: 14, marginVertical: 8 },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1.5,
+    color: "#64748b",
+    marginBottom: 10,
+    marginTop: 20,
+  },
 
-  dotIndicator: { width: 8, height: 8, borderRadius: 4, backgroundColor: "#ddd" },
+  totalCard: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 18,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+
+  totalCardRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  totalCardLabel: {
+    fontSize: 12,
+    fontWeight: "600",
+    letterSpacing: 0.3,
+    color: "#64748b",
+    marginBottom: 4,
+  },
+
+  totalNumber: {
+    fontSize: 42,
+    fontWeight: "800",
+    letterSpacing: -1,
+    color: "#0f172a",
+  },
+
+  totalBadge: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
+    backgroundColor: "#eef2ff",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  breakdownText: {
+    fontSize: 14,
+    fontWeight: "600",
+    marginVertical: 6,
+  },
+
   statsRow: {
-  flexDirection: "row",
-  justifyContent: "space-between",
-  marginBottom: 12,
-},
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 12,
+  },
 
   statCard: {
     flex: 1,
     backgroundColor: "#fff",
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
-    marginHorizontal: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 3,
   },
 
   statNumber: {
-    fontSize: 24,
-    fontWeight: "700",
+    fontSize: 28,
+    fontWeight: "800",
+    letterSpacing: -0.5,
     color: "#1a1acc",
   },
 
   statLabel: {
     fontSize: 12,
-    color: "#666",
+    marginTop: 4,
+    color: "#64748b",
+    lineHeight: 17,
+  },
+
+  card: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 18,
+    marginTop: 14,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.07,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    marginBottom: 12,
+    color: "#0f172a",
+  },
+
+  cardSub: {
+    fontSize: 13,
+    color: "#64748b",
+  },
+
+  exportBtn: {
+    backgroundColor: "#1a1acc",
+    padding: 12,
+    borderRadius: 10,
+    marginTop: 10,
+    alignItems: "center",
+  },
+
+  bottomNav: {
+    flexDirection: "row",
+    backgroundColor: "#fff",
+    borderTopWidth: 1,
+    borderTopColor: "#eee",
+    paddingTop: 10,
+    paddingHorizontal: 24,
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+
+  navItem: {
+    flex: 1,
+    alignItems: "center",
+  },
+
+  navText: {
+    color: "#999",
+    fontSize: 12,
+  },
+
+  navTextActive: {
+    color: "#1a1acc",
+    fontWeight: "700",
+  },
+
+  actionBtn: {
+    flex: 1,
+    backgroundColor: "#1a1acc",
+    padding: 10,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+
+  emailBtn: {
+    flex: 1,
+    backgroundColor: "#5DCAA5",
+    padding: 10,
+    borderRadius: 8,
+    alignItems: "center",
+  },
+
+  actionText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+
+  teamBanner: {
+    backgroundColor: "#fff",
+    padding: 15,
+    borderRadius: 16,
+  },
+
+  teamTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+  },
+
+  teamSub: {
+    color: "#64748b",
     marginTop: 4,
   },
-  
+
+  activityItem: {
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+
+  dotIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#ddd",
+  },
+
+  pill: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: "#eee",
+    borderRadius: 20,
+  },
+
+  pillActive: {
+    backgroundColor: "#1a1acc",
+  },
+
+  pillText: {
+    fontSize: 12,
+    color: "#333",
+  },
+
+  metricGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+
+  metricCard: {
+    flex: 1,
+    minWidth: "45%",
+  },
+
+  metricLabel: {
+    fontSize: 12,
+    color: "#64748b",
+  },
+
+  metricValue: {
+    fontSize: 24,
+    fontWeight: "800",
+    color: "#1a1acc",
+  },
 });
+  
+  
