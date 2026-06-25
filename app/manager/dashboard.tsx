@@ -15,6 +15,17 @@ import {
 
 import * as SecureStore from "expo-secure-store";// For secure token storage
 
+const API_URL      = process.env.EXPO_PUBLIC_API_URL || '';
+const ANON_KEY     = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const BACKEND_URL  = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+const SUPABASE_BASE = API_URL.replace(/\/[^/]+$/, '');
+
+const SUPABASE_HEADERS = {
+  'apikey':        ANON_KEY,
+  'Authorization': `Bearer ${ANON_KEY}`,
+  'Content-Type':  'application/json',
+};
+
 const screenWidth = Dimensions.get("window").width;
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -25,8 +36,7 @@ const COLORS = {
   overdue: "#E24B4A",
   purple: "#7F77DD",
 };
-const BACKEND_URL =
-  process.env.EXPO_PUBLIC_BACKEND_URL || '';
+
 
 
 async function apiFetch(
