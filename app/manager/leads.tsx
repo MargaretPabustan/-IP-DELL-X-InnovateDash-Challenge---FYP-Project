@@ -1,503 +1,274 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, ActivityIndicator } from 'react-native';
-import { useRouter, usePathname } from 'expo-router';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
+  StatusBar, Platform, ScrollView, ActivityIndicator,
+  RefreshControl, Modal, Pressable, Alert,
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useAppTheme } from '../../src/constants/useAppTheme';
+import * as SecureStore from 'expo-secure-store';
 
-const NAV_TABS = [
-  { label: 'Dashboard', route: '/manager/dashboard' },
-  { label: 'Leads', route: '/manager/leads' },
-  { label: 'Emails', route: '/manager/emails' },
-  { label: 'Activity', route: '/manager/activity' },
-  { label: 'Export', route: '/manager/export' },
-];
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
-const COLORS = { new: '#5DCAA5', contacted: '#378ADD', qualified: '#7F77DD', overdue: '#E24B4A' };
-
-
-const API_URL      = process.env.EXPO_PUBLIC_API_URL || '';
-const ANON_KEY     = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';// These environment variables should be defined in your .env file. The API_URL is the base URL for your backend API, and the ANON_KEY is the public anonymous key for Supabase, which is used for authentication when making API requests.
-const BACKEND_URL  = process.env.EXPO_PUBLIC_BACKEND_URL || '';
-const SUPABASE_BASE = API_URL.replace(/\/[^/]+$/, '');
-
-const SUPABASE_HEADERS = {
-  'apikey':        ANON_KEY,
-  'Authorization': `Bearer ${ANON_KEY}`,
-  'Content-Type':  'application/json',
-};
-
-async function apiFetch(path, token) {
-  const res = await fetch(`${BACKEND_URL}${path}`, {
-    method: "GET",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      apikey: ANON_KEY,
-    },
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    console.error("API Error:", res.status, text);
-    throw new Error(`API error ${res.status}`);
-  }
-
-  return res.json();
+async function getAuthHeaders() {
+  const token = await SecureStore.getItemAsync('token');
+  return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
 }
 
-const STATUS_LABELS = { NEW: 'New', CONTACTED: 'Contacted', QUALIFIED: 'Qualified' };
+function getStatusColor(status: string) {
+  switch (status) {
+    case 'QUALIFIED': return '#22c55e';
+    case 'CONTACTED': return '#f59e0b';
+    case 'CLOSED':    return '#6366f1';
+    default:          return '#ef4444';
+  }
+}
 
-const statusColor = (s) =>
-  s === 'NEW' ? COLORS.new
-  : s === 'CONTACTED' ? COLORS.contacted
-  : s === 'QUALIFIED' ? COLORS.qualified
-  : COLORS.overdue;
+function getStatusLabel(status: string) {
+  switch (status) {
+    case 'QUALIFIED': return 'Ready for Follow-up';
+    case 'CONTACTED': return 'Follow-up in Progress';
+    case 'CLOSED':    return 'Closed';
+    default:          return 'Follow-up Later';
+  }
+}
+
+function formatDate(iso: string) {
+  if (!iso) return '—';
+  const diff = Date.now() - new Date(iso).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
 
 const FILTERS = ['All', 'NEW', 'CONTACTED', 'QUALIFIED'];
 
-export default function LeadsScreen({ token }) {
-  const router = useRouter();
-  const pathname = usePathname();
+type Lead = {
+  lead_id: number;
+  name: string;
+  title: string;
+  company: string;
+  email: string;
+  phone_number: string;
+  customer_intent: string;
+  status: string;
+  ai_notes: string;
+  confidence_score: number | null;
+  follow_up_required: boolean;
+  scanned_by_name: string | null;
+  created_at: string;
+};
 
+function ViewModal({ lead, onClose, theme, onFollowUp }: { lead: Lead; onClose: () => void; theme: any; onFollowUp: (id: number) => void }) {
+  const statusColor = getStatusColor(lead.status);
+  const confidencePct = lead.confidence_score ? `${Math.round(lead.confidence_score * 100)}%` : '—';
+  const [sending, setSending] = useState(false);
 
-const [leads, setLeads] = useState([]);
-const [filter, setFilter] = useState("All");
-const [summary, setSummary] = useState({
-  total: 0,
-  followups: 0,
-});
-const [loading, setLoading] = useState(true);
-const [error, setError] = useState(null);
-const [userInfo, setUserInfo] = useState(null);
-const [followUpLoading, setFollowUpLoading] = useState(false);
-
-useEffect(() => {
-  if (!token) return;
-
-  apiFetch("/auth/me", token)
-    .then((res) => {
-      setUserInfo(res);
-    })
-    .catch((err) => {
-      console.log("User info error:", err);
-    });
-}, [token]);
-  // Fetch leads whenever filter changes
-useEffect(() => {
-  if (!token) return;
-
-  const loadLeads = async () => {
+  const handleFollowUp = async () => {
+    setSending(true);
     try {
-      setLoading(true);
-      setError(null);
-
-      const path =
-        filter === "All"
-          ? "/manager/leads"
-          : `/manager/leads?status=${filter}`;
-
-      const res = await apiFetch(path, token);
-
-      setLeads(res.data || []);
-    } catch (err) {
-      console.error(err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${BACKEND_URL}/send-followup/${lead.lead_id}`, { method: 'POST', headers });
+      if (!res.ok) throw new Error('Failed');
+      Alert.alert('Success', 'Follow-up email scheduled for 24 hours.');
+      onFollowUp(lead.lead_id);
+    } catch {
+      Alert.alert('Error', 'Failed to schedule follow-up.');
+    } finally { setSending(false); }
   };
 
-  loadLeads();
-}, [filter, token]);
-
-  // Fetch summary counts once on mount
-useEffect(() => {
-  if (!token) return;
-
-  apiFetch('/manager/dashboard', token)
-      .then((res) => setSummary({
-        total: res.data.total_leads,
-followups: res.data.followups_done,      }))
-      .catch(() => {}); // silent — subtitle is non-critical
-  }, [token]);
-
-  const formatDate = (iso) => {
-    if (!iso) return '—';
-    const diff = Date.now() - new Date(iso).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    return `${Math.floor(hrs / 24)}d ago`;
-  };
-  const performFollowUp = async (leadId) => {
-  try {
-    setFollowUpLoading(true);
-
-    await fetch(
-      `${BACKEND_URL}/manager/leads/${leadId}/followup`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-
-    alert("Follow-up recorded");
-  } catch (err) {
-    console.error(err);
-  } finally {
-    setFollowUpLoading(false);
-  }
-};
-
-const updateFollowUpStatus = async (
-  leadId,
-  status
-) => {
-  try {
-    await fetch(
-      `${BACKEND_URL}/manager/leads/${leadId}/followup`,
-      {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          status,
-        }),
-      }
-    );
-
-    const path =
-      filter === "All"
-        ? "/manager/leads"
-        : `/manager/leads?status=${filter}`;
-
-    const res = await apiFetch(path, token);
-
-    setLeads(res.data || []);
-  } catch (err) {
-    console.error(err);
-  }
-};
   return (
-    <SafeAreaView style={styles.safe}>
-      <View style={styles.root}>
-
-        {/* Header */}
-        <View style={styles.header}>
-          <View style={styles.avatar}><Text style={styles.avatarText}>RS</Text></View>
-          <View style={styles.headerInfo}>
-<Text style={styles.headerTeam}>
-  Team {userInfo?.team_id ?? "-"} — Manager
-</Text>
-
-<Text style={styles.headerName}>
-  User #{userInfo?.id ?? "-"}
-</Text>
+    <Modal visible animationType="slide" transparent>
+      <Pressable style={modal.backdrop} onPress={onClose}>
+        <Pressable style={[modal.sheet, { backgroundColor: theme.card }]} onPress={() => {}}>
+          <View style={modal.handle} />
+          <View style={modal.leadHeader}>
+            <View style={[modal.avatar, { backgroundColor: statusColor }]}>
+              <Ionicons name="person" size={22} color="#fff" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[modal.leadName, { color: theme.text }]}>{lead.name}</Text>
+              <Text style={[modal.leadSub, { color: theme.subText }]}>{lead.title} · {lead.company}</Text>
+            </View>
+            <View style={[modal.statusBadge, { backgroundColor: statusColor + '22', borderColor: statusColor }]}>
+              <Text style={[modal.statusBadgeText, { color: statusColor }]}>{lead.status}</Text>
+            </View>
           </View>
-          <Text style={styles.logo}>Boothflow</Text>
-        </View>
-
-        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <Text style={styles.pageTitle}>Leads</Text>
-          <Text style={styles.pageSubtitle}>
-            {summary.total} total · {summary.followups} follow-ups due
-          </Text>
-          <View style={styles.statsRow}>
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>
-              {summary.total}
-            </Text>
-
-            <Text style={styles.statLabel}>
-              Team Leads
-            </Text>
-          </View>
-
-          <View style={styles.statCard}>
-            <Text style={styles.statNumber}>
-              {summary.followups}
-            </Text>
-
-            <Text style={styles.statLabel}>
-              Follow-Ups Due
-            </Text>
-          </View>
-        </View>
-          
-
-          {/* Filter pills */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 14 }}>
-            {FILTERS.map((f) => (
-              <TouchableOpacity
-                key={f}
-                onPress={() => setFilter(f)}
-                style={[styles.pill, filter === f && styles.pillActive]}
-              >
-                <Text style={[styles.pillText, filter === f && styles.pillTextActive]}>
-                  {STATUS_LABELS[f] ?? f}
-                </Text>
-              </TouchableOpacity>
-            ))}
+          <View style={[modal.divider, { backgroundColor: theme.bg }]} />
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <Text style={modal.fieldLabel}>Email</Text>
+            <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.email}</Text>
+            <Text style={modal.fieldLabel}>Phone</Text>
+            <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.phone_number}</Text>
+            <Text style={modal.fieldLabel}>Intent</Text>
+            <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.customer_intent || '—'}</Text>
+            <Text style={modal.fieldLabel}>Follow-up Status</Text>
+            <Text style={[modal.fieldValue, { color: statusColor, fontWeight: '700' }]}>{getStatusLabel(lead.status)}</Text>
+            <Text style={modal.fieldLabel}>AI Confidence</Text>
+            <Text style={[modal.fieldValue, { color: theme.text }]}>{confidencePct}</Text>
+            <Text style={modal.fieldLabel}>Scanned By</Text>
+            <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.scanned_by_name || '—'}</Text>
+            <Text style={modal.fieldLabel}>AI Notes</Text>
+            <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.ai_notes || 'Pending AI analysis.'}</Text>
+            <Text style={modal.fieldLabel}>Captured At</Text>
+            <Text style={[modal.fieldValue, { color: theme.text }]}>{new Date(lead.created_at).toLocaleString('en-SG')}</Text>
           </ScrollView>
-          {followUpLoading && (
-            <ActivityIndicator
-              color="#1a1acc"
-              style={{ marginBottom: 10 }}
-            />
-          )}
+          <View style={modal.modalBtns}>
+            <TouchableOpacity style={[modal.followUpBtn, { backgroundColor: theme.accent, opacity: sending ? 0.7 : 1 }]} onPress={handleFollowUp} disabled={sending}>
+              {sending
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <><Ionicons name="mail-outline" size={16} color="#fff" /><Text style={modal.followUpBtnText}>Send Follow-up</Text></>
+              }
+            </TouchableOpacity>
+            <TouchableOpacity style={[modal.closeBtn, { backgroundColor: theme.navy }]} onPress={onClose}>
+              <Text style={modal.closeBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
 
-                    {/* States */}
-          {loading && <ActivityIndicator color="#1a1acc" style={{ marginTop: 20 }} />}
-          {error && <Text style={styles.errorText}>Failed to load leads: {error}</Text>}
-          {!loading && !error && leads.length === 0 && (
-            <Text style={styles.emptyText}>No leads found</Text>
-          )}
+export default function ManagerLeads() {
+  const router  = useRouter();
+  const { theme } = useAppTheme();
 
-{!loading && leads.map((lead) => {
-  const color = statusColor(lead.status);
+  const [leads,      setLeads]      = useState<Lead[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [filter,     setFilter]     = useState('All');
+  const [viewing,    setViewing]    = useState<Lead | null>(null);
+
+  const fetchLeads = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    try {
+      const headers = await getAuthHeaders();
+      const path = filter === 'All' ? '/manager/leads' : `/manager/leads?status=${filter}`;
+      const res  = await fetch(`${BACKEND_URL}${path}`, { headers });
+      const data = await res.json();
+      if (data.success) setLeads(data.data);
+    } catch {} finally { setLoading(false); setRefreshing(false); }
+  }, [filter]);
+
+  useEffect(() => { fetchLeads(); }, [fetchLeads]);
 
   return (
-    <TouchableOpacity
-      key={lead.lead_id}
-      style={styles.card}
-      activeOpacity={0.8}
-      onPress={() => {
-      if (
-        lead.team_id &&
-        userInfo?.team_id &&
-        lead.team_id !== userInfo.team_id
-      ) {
-        alert(
-          "You can only view leads assigned to your team."
-        );
-        return;
-      }
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      router.push({
-        pathname: "/manager/lead-details",
-        params: { id: lead.lead_id }
-      });
-    }}
-    >
-      <View style={styles.cardTop}>
-        <View style={{ flex: 1, marginRight: 8 }}>
-          <Text style={styles.company}>
-            {lead.company}
-          </Text>
-
-          <Text style={styles.contact}>
-            {lead.name} · {lead.title}
-          </Text>
-        </View>
-
-        <View
-          style={[
-            styles.badge,
-            { backgroundColor: color + "22" }
-          ]}
-        >
-          <Text
-            style={[
-              styles.badgeText,
-              { color }
-            ]}
-          >
-            {STATUS_LABELS[lead.status] ?? lead.status}
-          </Text>
+      {/* HEADER */}
+      <View style={[styles.header, { backgroundColor: theme.navy, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12 }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={22} color="#fff" />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle}>Team Leads</Text>
+          <Text style={styles.headerSub}>{leads.length} leads</Text>
         </View>
       </View>
 
-      <View style={styles.cardBottom}>
-        <Text style={styles.rep}>
-          {lead.email}
-        </Text>
-
-        <Text style={styles.time}>
-          {formatDate(lead.created_at)}
-        </Text>
-      </View>
-      <View style={styles.cardBottom}>
-        <Text style={styles.rep}>
-          {lead.email}
-        </Text>
-
-        <Text style={styles.time}>
-          {formatDate(lead.created_at)}
-        </Text>
+      {/* FILTER PILLS */}
+      <View style={[styles.filterRow, { backgroundColor: theme.card }]}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 16, paddingVertical: 10 }}>
+          {FILTERS.map(f => (
+            <TouchableOpacity
+              key={f}
+              style={[styles.pill, { backgroundColor: filter === f ? theme.navy : theme.bg, borderColor: theme.navy }]}
+              onPress={() => setFilter(f)}
+            >
+              <Text style={[styles.pillText, { color: filter === f ? '#fff' : theme.navy }]}>{f === 'All' ? 'All' : f}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
       </View>
 
-<View
-  style={{
-    flexDirection: "row",
-    marginTop: 12,
-    gap: 8,
-  }}
->
-  <TouchableOpacity
-    style={styles.actionBtn}
-    onPress={() =>
-      performFollowUp(lead.lead_id)
-    }
-  >
-    <Text style={styles.actionText}>
-      Follow Up
-    </Text>
-  </TouchableOpacity>
+      {/* LEADS LIST */}
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: 24 }]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchLeads(true)} tintColor={theme.navy} />}
+      >
+        {loading ? (
+          <View style={styles.centered}><ActivityIndicator size="large" color={theme.navy} /></View>
+        ) : leads.length === 0 ? (
+          <View style={styles.centered}>
+            <Ionicons name="document-text-outline" size={48} color={theme.subText} />
+            <Text style={[styles.emptyText, { color: theme.subText }]}>No leads found</Text>
+          </View>
+        ) : leads.map(lead => (
+          <TouchableOpacity key={lead.lead_id} style={[styles.card, { backgroundColor: theme.card }]} onPress={() => setViewing(lead)} activeOpacity={0.8}>
+            <View style={[styles.statusDot, { backgroundColor: getStatusColor(lead.status) }]} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.leadName, { color: theme.text }]} numberOfLines={1}>{lead.name}</Text>
+              <Text style={[styles.leadSub, { color: theme.subText }]} numberOfLines={1}>{lead.title} · {lead.company}</Text>
+              <Text style={[styles.leadEmail, { color: theme.subText }]} numberOfLines={1}>{lead.email}</Text>
+              <Text style={[styles.leadTime, { color: theme.subText }]}>{formatDate(lead.created_at)}</Text>
+            </View>
+            <View style={{ alignItems: 'flex-end', gap: 6 }}>
+              <View style={[styles.statusPill, { backgroundColor: getStatusColor(lead.status) + '18' }]}>
+                <Text style={[styles.statusPillText, { color: getStatusColor(lead.status) }]}>{lead.status}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={theme.subText} />
+            </View>
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
 
-  <TouchableOpacity
-    style={styles.emailBtn}
-    onPress={() =>
-      updateFollowUpStatus(
-        lead.lead_id,
-        "COMPLETED"
-      )
-    }
-  >
-    <Text style={styles.actionText}>
-      Complete
-    </Text>
-  </TouchableOpacity>
-</View>
-      <View
-  style={{
-    flexDirection: "row",
-    marginTop: 12,
-    gap: 8,
-  }}
->
-  <TouchableOpacity
-    style={styles.actionBtn}
-    onPress={() =>
-      performFollowUp(lead.lead_id)
-    }
-  >
-      <Text style={styles.actionText}>
-        Follow Up
-      </Text>
-    </TouchableOpacity>
-
-    <TouchableOpacity
-      style={styles.emailBtn}
-      onPress={() =>
-        updateFollowUpStatus(
-          lead.lead_id,
-          "COMPLETED"
-        )
-      }
-    >
-      <Text style={styles.actionText}>
-        Complete
-      </Text>
-    </TouchableOpacity>
-  </View>
-</TouchableOpacity>
-      
-    );
-})} 
-</ScrollView>
-        {/* Bottom nav */}
-        <View style={styles.bottomNav}>
-          {NAV_TABS.map((tab) => {
-            const isActive = pathname === tab.route;
-            return (
-              <TouchableOpacity key={tab.label} style={styles.navItem} onPress={() => router.push(tab.route)}>
-                <Text style={[styles.navText, isActive && styles.navTextActive]}>{tab.label}</Text>
-                {isActive && <View style={styles.navIndicator} />}
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-
-      </View>
+      {viewing && (
+        <ViewModal
+          lead={viewing}
+          onClose={() => setViewing(null)}
+          theme={theme}
+          onFollowUp={() => setViewing(null)}
+        />
+      )}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#1a1acc' },
-  root: { flex: 1, backgroundColor: '#f5f5f7' },
-  header: { backgroundColor: '#1a1acc', paddingHorizontal: 16, paddingVertical: 14, flexDirection: 'row', alignItems: 'center', gap: 10 },
-  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
-  avatarText: { color: '#fff', fontWeight: '600', fontSize: 13 },
-  headerInfo: { flex: 1 },
-  headerTeam: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  headerName: { color: 'rgba(255,255,255,0.7)', fontSize: 11 },
-  logo: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: -0.5 },
-  scroll: { flex: 1 },
-  scrollContent: { padding: 14, paddingBottom: 80 },
-  pageTitle: { fontSize: 22, fontWeight: '700', color: '#111', marginBottom: 4 },
-  pageSubtitle: { fontSize: 13, color: '#888', marginBottom: 14 },
+  safeArea: { flex: 1 },
+  header: { paddingHorizontal: 16, paddingBottom: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  backBtn: { padding: 4 },
+  headerTitle: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  headerSub: { color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 1 },
+  filterRow: { borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  pill: { borderRadius: 20, borderWidth: 1.5, paddingHorizontal: 14, paddingVertical: 6 },
+  pillText: { fontSize: 12, fontWeight: '600' },
+  content: { padding: 16, gap: 10 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12 },
+  emptyText: { fontSize: 15, fontWeight: '600' },
+  card: { borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
+  statusDot: { width: 8, height: 8, borderRadius: 4 },
+  leadName: { fontSize: 14, fontWeight: '700' },
+  leadSub: { fontSize: 12, marginTop: 2 },
+  leadEmail: { fontSize: 11, marginTop: 2 },
+  leadTime: { fontSize: 11, marginTop: 4 },
+  statusPill: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
+  statusPillText: { fontSize: 10, fontWeight: '700' },
+});
 
-  pill: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.05)', marginRight: 8 },
-  pillActive: { backgroundColor: '#1a1acc' },
-  pillText: { fontSize: 12, fontWeight: '600', color: '#777' },
-  pillTextActive: { color: '#fff' },
-
-  card: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 0.5, borderColor: 'rgba(0,0,0,0.08)', padding: 14, marginBottom: 10 },
-  cardTop: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10 },
-  company: { fontSize: 14, fontWeight: '600', color: '#111' },
-  contact: { fontSize: 12, color: '#888', marginTop: 2 },
-  badge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, alignSelf: 'flex-start' },
-  badgeText: { fontSize: 11, fontWeight: '600' },
-  cardBottom: { flexDirection: 'row', justifyContent: 'space-between' },
-  rep: { fontSize: 12, color: '#555' },
-  time: { fontSize: 12, color: '#aaa' },
-
-  errorText: { fontSize: 13, color: '#E24B4A', textAlign: 'center', marginTop: 20 },
-  emptyText: { fontSize: 13, color: '#aaa', textAlign: 'center', marginTop: 20 },
-
-  bottomNav: { backgroundColor: '#fff', borderTopWidth: 0.5, borderTopColor: 'rgba(0,0,0,0.08)', flexDirection: 'row', paddingTop: 10, paddingBottom: 16 },
-  navItem: { flex: 1, alignItems: 'center', paddingVertical: 4 },
-  navText: { fontSize: 11, color: '#999', fontWeight: '400' },
-  navTextActive: { color: '#1a1acc', fontWeight: '600' },
-  navIndicator: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#1a1acc', marginTop: 3 },
-  statsRow: {
-  flexDirection: "row",
-  marginBottom: 14,
-},
-
-  statCard: {
-    flex: 1,
-    backgroundColor: "#fff",
-    borderRadius: 14,
-    padding: 14,
-    marginHorizontal: 4,
-  },
-
-  statNumber: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#1a1acc",
-  },
-
-  statLabel: {
-    fontSize: 12,
-    color: "#666",
-    marginTop: 4,
-  },
-
-  actionBtn: {
-    flex: 1,
-    backgroundColor: "#1a1acc",
-    padding: 10,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-
-  emailBtn: {
-    flex: 1,
-    backgroundColor: "#5DCAA5",
-    padding: 10,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-
-  actionText: {
-    color: "#fff",
-    fontWeight: "600",
-},
+const modal = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24, maxHeight: '85%' },
+  handle: { width: 40, height: 4, backgroundColor: '#cbd5e1', borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
+  leadHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
+  avatar: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
+  leadName: { fontSize: 16, fontWeight: '700' },
+  leadSub: { fontSize: 13, marginTop: 2 },
+  divider: { height: 1, marginBottom: 14 },
+  statusBadge: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  statusBadgeText: { fontSize: 11, fontWeight: '700' },
+  fieldLabel: { fontSize: 11, fontWeight: '700', color: '#999', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 10, marginBottom: 3 },
+  fieldValue: { fontSize: 13, fontWeight: '500', lineHeight: 20 },
+  modalBtns: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  followUpBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 10, paddingVertical: 13 },
+  followUpBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  closeBtn: { flex: 1, borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
+  closeBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 });

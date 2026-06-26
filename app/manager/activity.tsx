@@ -1,52 +1,123 @@
-import { View, Text, FlatList } from 'react-native';
-import { useEffect, useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
+  StatusBar, Platform, ScrollView, ActivityIndicator,
+  RefreshControl,
+} from 'react-native';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useAppTheme } from '../../src/constants/useAppTheme';
+import * as SecureStore from 'expo-secure-store';
 
-const API = process.env.EXPO_PUBLIC_API_URL;
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+
+async function getAuthHeaders() {
+  const token = await SecureStore.getItemAsync('token');
+  return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+}
 
 export default function ManagerActivity() {
-  const [logs, setLogs] = useState([]);
+  const router    = useRouter();
+  const { theme } = useAppTheme();
 
-  useEffect(() => {
-    const fetchLogs = async () => {
-      try {
-        const token = 'YOUR_TOKEN_HERE';
+  const [logs,       setLogs]       = useState<any[]>([]);
+  const [loading,    setLoading]    = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-        const res = await fetch(`${API}/manager/activity`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        const json = await res.json();
-        setLogs(json.data);
-      } catch (err) {
-        console.error(err);
-      }
-    };
-
-    fetchLogs();
+  const fetchLogs = useCallback(async (isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res  = await fetch(`${BACKEND_URL}/manager/activity`, { headers });
+      const data = await res.json();
+      if (data.success) setLogs(data.data);
+    } catch {} finally { setLoading(false); setRefreshing(false); }
   }, []);
 
-  return (
-    <View style={{ padding: 20 }}>
-      <Text style={{ fontSize: 22, fontWeight: 'bold' }}>
-        Activity Logs
-      </Text>
+  useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
-      <FlatList
-        data={logs}
-        keyExtractor={(item: any) => item.activity_id.toString()}
-        renderItem={({ item }) => (
-          <View style={{ padding: 10, borderBottomWidth: 1 }}>
-            <Text style={{ fontWeight: 'bold' }}>
-              {item.activity_type}
-            </Text>
-            <Text>{item.lead_name} ({item.company})</Text>
-            <Text>{item.activity_description}</Text>
-            <Text>{item.created_at}</Text>
+  const getActivityIcon = (type: string) => {
+    switch (type) {
+      case 'EMAIL_SENT':    return 'mail-outline';
+      case 'FOLLOWUP_SENT': return 'checkmark-circle-outline';
+      default:              return 'pulse-outline';
+    }
+  };
+
+  const getActivityColor = (type: string) => {
+    switch (type) {
+      case 'EMAIL_SENT':    return '#3b82f6';
+      case 'FOLLOWUP_SENT': return '#22c55e';
+      default:              return '#f59e0b';
+    }
+  };
+
+  return (
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+
+      {/* HEADER */}
+      <View style={[styles.header, { backgroundColor: theme.navy, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12 }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={22} color="#fff" />
+        </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle}>Activity Logs</Text>
+          <Text style={styles.headerSub}>{logs.length} activities</Text>
+        </View>
+      </View>
+
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: 24 }]}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchLogs(true)} tintColor={theme.navy} />}
+      >
+        {loading ? (
+          <View style={styles.centered}><ActivityIndicator size="large" color={theme.navy} /></View>
+        ) : logs.length === 0 ? (
+          <View style={styles.centered}>
+            <Ionicons name="pulse-outline" size={48} color={theme.subText} />
+            <Text style={[styles.emptyText, { color: theme.subText }]}>No activity yet</Text>
           </View>
-        )}
-      />
-    </View>
+        ) : logs.map(log => {
+          const color = getActivityColor(log.activity_type);
+          return (
+            <View key={log.activity_id} style={[styles.card, { backgroundColor: theme.card }]}>
+              <View style={[styles.iconBox, { backgroundColor: color + '18' }]}>
+                <Ionicons name={getActivityIcon(log.activity_type) as any} size={20} color={color} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.activityType, { color: theme.text }]}>{log.activity_type}</Text>
+                <Text style={[styles.activityLead, { color: theme.subText }]}>
+                  {log.lead_name || 'N/A'} {log.company ? `· ${log.company}` : ''}
+                </Text>
+                <Text style={[styles.activityDesc, { color: theme.subText }]}>{log.activity_description}</Text>
+                <Text style={[styles.activityTime, { color: theme.subText }]}>
+                  {new Date(log.created_at).toLocaleString('en-SG')}
+                </Text>
+              </View>
+            </View>
+          );
+        })}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  safeArea: { flex: 1 },
+  header: { paddingHorizontal: 16, paddingBottom: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  backBtn: { padding: 4 },
+  headerTitle: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  headerSub: { color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 1 },
+  content: { padding: 16, gap: 10 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12 },
+  emptyText: { fontSize: 15, fontWeight: '600' },
+  card: { borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'flex-start', gap: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
+  iconBox: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  activityType: { fontSize: 13, fontWeight: '700' },
+  activityLead: { fontSize: 12, marginTop: 2 },
+  activityDesc: { fontSize: 12, marginTop: 2 },
+  activityTime: { fontSize: 11, marginTop: 4 },
+});
