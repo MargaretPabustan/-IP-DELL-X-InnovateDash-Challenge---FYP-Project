@@ -523,6 +523,35 @@ app.delete('/admin/users/:id', authenticateToken, authorizeRoles('admin'), async
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
+app.get('/admin/dashboard', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+    try {
+        const totalLeads = await pool.query('SELECT COUNT(*) FROM leads');
+        const qualified  = await pool.query("SELECT COUNT(*) FROM leads WHERE status='QUALIFIED'");
+        const contacted  = await pool.query("SELECT COUNT(*) FROM leads WHERE status='CONTACTED'");
+        const newLeads   = await pool.query("SELECT COUNT(*) FROM leads WHERE status='NEW'");
+        const followups  = await pool.query("SELECT COUNT(*) FROM lead_activity_logs WHERE activity_type = 'FOLLOWUP_SENT'");
+        const emails     = await pool.query("SELECT COUNT(*) FROM lead_activity_logs WHERE activity_type = 'EMAIL_SENT'");
+        res.json({
+            success: true,
+            data: {
+                total_leads:    +totalLeads.rows[0].count,
+                qualified:      +qualified.rows[0].count,
+                contacted:      +contacted.rows[0].count,
+                new_leads:      +newLeads.rows[0].count,
+                followups_done: +followups.rows[0].count,
+                emails_sent:    +emails.rows[0].count,
+            }
+        });
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+});
+
+app.get('/admin/leads', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+    try {
+        const result = await pool.query('SELECT * FROM leads ORDER BY created_at DESC');
+        res.json({ success: true, data: result.rows });
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+});
+
 app.get('/admin/teams', authenticateToken, authorizeRoles('admin'), async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM teams ORDER BY team_id DESC');

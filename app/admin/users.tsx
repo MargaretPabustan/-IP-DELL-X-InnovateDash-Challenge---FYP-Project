@@ -148,20 +148,6 @@ export default function AdminUsers() {
     ]);
   };
 
-  const handleToggleActive = async (user: User) => {
-    try {
-      const headers = await getAuthHeaders();
-      await fetch(`${BACKEND_URL}/admin/users/${user.user_id}`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({ ...user, is_active: !user.is_active }),
-      });
-      setUsers(prev => prev.map(u => u.user_id === user.user_id ? { ...u, is_active: !u.is_active } : u));
-    } catch {
-      Alert.alert('Error', 'Failed to update user.');
-    }
-  };
-
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
@@ -324,6 +310,43 @@ export default function AdminUsers() {
           </Pressable>
         </Pressable>
       </Modal>
+      {/* VIEW MODAL */}
+      <Modal visible={!!viewUser} transparent animationType="slide">
+        <Pressable style={styles.modalBackdrop} onPress={() => setViewUser(null)}>
+          <Pressable style={[styles.modalSheet, { backgroundColor: theme.card }]} onPress={() => {}}>
+            <View style={styles.modalHandle} />
+            <Text style={[styles.modalTitle, { color: theme.text }]}>User Details</Text>
+            {viewUser && (
+              <>
+                <View style={[styles.viewAvatar, { backgroundColor: getRoleColor(viewUser.role) + '20' }]}>
+                  <Text style={[styles.viewAvatarText, { color: getRoleColor(viewUser.role) }]}>
+                    {viewUser.full_name.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+                <Text style={styles.fieldLabel}>FULL NAME</Text>
+                <Text style={[styles.viewValue, { color: theme.text }]}>{viewUser.full_name}</Text>
+                <Text style={styles.fieldLabel}>EMAIL</Text>
+                <Text style={[styles.viewValue, { color: theme.text }]}>{viewUser.email}</Text>
+                <Text style={styles.fieldLabel}>ROLE</Text>
+                <View style={[styles.roleBadge, { backgroundColor: getRoleColor(viewUser.role) + '20', alignSelf: 'flex-start' }]}>
+                  <Text style={[styles.roleText, { color: getRoleColor(viewUser.role) }]}>{viewUser.role.toUpperCase()}</Text>
+                </View>
+                <Text style={styles.fieldLabel}>STATUS</Text>
+                <View style={[styles.statusBadge, { backgroundColor: viewUser.is_active ? '#22c55e20' : '#ef444420' }]}>
+                  <Text style={[styles.statusText, { color: viewUser.is_active ? '#22c55e' : '#ef4444' }]}>
+                    {viewUser.is_active ? 'Active' : 'Inactive'}
+                  </Text>
+                </View>
+                <Text style={styles.fieldLabel}>USER ID</Text>
+                <Text style={[styles.viewValue, { color: theme.subText }]}>#{viewUser.user_id}</Text>
+              </>
+            )}
+            <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.navy, marginTop: 20 }]} onPress={() => setViewUser(null)}>
+              <Text style={styles.saveBtnText}>Close</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -367,4 +390,7 @@ const styles = StyleSheet.create({
   bottomNav: { flexDirection: 'row', borderTopWidth: 1, paddingTop: 10, paddingHorizontal: 24, justifyContent: 'space-around', alignItems: 'center' },
   navItem: { alignItems: 'center', gap: 3, flex: 1 },
   navLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 0.3 },
+  viewAvatar: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: 16 },
+  viewAvatarText: { fontSize: 26, fontWeight: '800' },
+  viewValue: { fontSize: 14, fontWeight: '500', marginBottom: 4 },
 });
