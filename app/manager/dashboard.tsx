@@ -407,10 +407,17 @@ export default function ManagerDashboard() {
   const fetchProfile = useCallback(async () => {
     setLoadingProfile(true);
     try {
-      const token = await SecureStore.getItemAsync('token');
-      if (!token) return;
-      const me = parseJwt(token);
-      setProfile({ full_name: me?.full_name || me?.name || '—', email: me?.email || '—', role: me?.role || 'manager' });
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${BACKEND_URL}/manager/me`, { headers });
+      const data = await res.json();
+      if (data.success) {
+        setProfile({
+          full_name: data.data.full_name || '—',
+          email:     data.data.email    || '—',
+          role:      data.data.role     || 'manager',
+          team_id:   data.data.team_id,
+        });
+      }
     } catch {} finally { setLoadingProfile(false); }
   }, []);
 
@@ -525,6 +532,11 @@ export default function ManagerDashboard() {
                   <Ionicons name="shield-checkmark-outline" size={14} color="#94a3b8" />
                   <Text style={styles.dropdownRowLabel}>Role</Text>
                   <Text style={styles.dropdownRowValue}>{profile.role}</Text>
+                </View>
+                <View style={styles.dropdownRow}>
+                  <Ionicons name="people-outline" size={14} color="#94a3b8" />
+                  <Text style={styles.dropdownRowLabel}>Team</Text>
+                  <Text style={styles.dropdownRowValue}>{profile.team_id ? `Team ${profile.team_id}` : '—'}</Text>
                 </View>
               </>
             ) : (
