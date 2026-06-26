@@ -292,7 +292,39 @@ const newLeads = data?.new_leads ?? 0;
 const contacted = data?.contacted ?? 0;
 const qualified = data?.qualified ?? 0;
 const followups = data?.followups_done ?? 0;
-
+const chartData = [
+  {
+    id: "bar",
+    title: "Leads Overview (Bar)",
+    component: (
+      <CustomBarChart
+        labels={["New", "Contacted", "Qualified"]}
+        maxVal={Math.max(newLeads, contacted, qualified, 1)}
+        datasets={[
+          { data: [newLeads], color: COLORS.new },
+          { data: [contacted], color: COLORS.contacted },
+          { data: [qualified], color: COLORS.qualified },
+        ]}
+      />
+    ),
+  },
+  {
+    id: "line",
+    title: "Leads Trend (Line)",
+    component: (
+      <CustomLineChart
+        labels={["New", "Contacted", "Qualified"]}
+        maxVal={Math.max(newLeads, contacted, qualified, 1)}
+        datasets={[
+          {
+            data: [newLeads, contacted, qualified],
+            color: "#1a1acc",
+          },
+        ]}
+      />
+    ),
+  },
+];
 const newPct =
   total > 0 ? ((newLeads / total) * 100).toFixed(1) : "0";
 
@@ -340,35 +372,35 @@ return (
 </View>
 
 <Text style={styles.sectionLabel}>
-  Performance Chart
+  PERFORMANCE CHART
 </Text>
+<View style={styles.card}>
+  <FlatList
+    data={chartData}
+    horizontal
+    pagingEnabled
+    showsHorizontalScrollIndicator={false}
+    keyExtractor={(item) => item.id}
+    renderItem={({ item }) => (
+      <View style={{ width: SCREEN_WIDTH - 70 }}>
+        <Text
+          style={{
+            fontSize: 14,
+            fontWeight: "700",
+            marginBottom: 10,
+            color: "#0f172a",
+          }}
+        >
+          {item.title}
+        </Text>
 
-  <View style={styles.card}>
-    <CustomBarChart
-      labels={["New", "Contacted", "Qualified"]}
-      maxVal={Math.max(
-        newLeads,
-        contacted,
-        qualified,
-        1
-      )}
-      datasets={[
-        {
-          data: [newLeads],
-          color: COLORS.new,
-        },
-        {
-          data: [contacted],
-          color: COLORS.contacted,
-        },
-        {
-          data: [qualified],
-          color: COLORS.qualified,
-        },
-      ]}
-    />
-  </View>
-
+        {item.component}
+      </View>
+    )}
+  />
+</View>
+  
+    
 <Text style={styles.sectionLabel}>
   Lead Status
 </Text>
@@ -683,7 +715,7 @@ const renderScreen = () => {
       <View style={styles.header}>
         <View>
           <Text style={styles.logoSub}>
-            Manager Dashboard
+            MANAGER DASHBOARD
           </Text>
 
         <Text style={styles.logo}>
