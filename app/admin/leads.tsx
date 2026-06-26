@@ -170,7 +170,7 @@ export default function AdminLeads() {
     else setLoading(true);
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch(`${BACKEND_URL}/manager/leads`, { headers });
+      const res = await fetch(`${BACKEND_URL}/admin/leads`, { headers });
       const data = await res.json();
       if (data.success) setLeads(data.data);
     } catch {} finally { setLoading(false); setRefreshing(false); }
