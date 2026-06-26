@@ -401,10 +401,12 @@ app.get('/manager/me', authenticateToken, authorizeRoles('admin', 'manager'), as
 // ── MANAGER ROUTES ────────────────────────────────────────────────────────────
 app.get('/manager/dashboard', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
-        const totalLeads = await pool.query('SELECT COUNT(*) FROM leads');
-        const qualified  = await pool.query("SELECT COUNT(*) FROM leads WHERE status='QUALIFIED'");
-        const contacted  = await pool.query("SELECT COUNT(*) FROM leads WHERE status='CONTACTED'");
-        const newLeads   = await pool.query("SELECT COUNT(*) FROM leads WHERE status='NEW'");
+        const teamId = req.user.team_id;
+        console.log('👤 Manager dashboard — user:', req.user.id, 'team_id:', teamId);
+        const totalLeads = await pool.query('SELECT COUNT(*) FROM leads WHERE assigned_team_id = $1', [teamId]);
+        const qualified  = await pool.query("SELECT COUNT(*) FROM leads WHERE assigned_team_id = $1 AND status='QUALIFIED'", [teamId]);
+        const contacted  = await pool.query("SELECT COUNT(*) FROM leads WHERE assigned_team_id = $1 AND status='CONTACTED'", [teamId]);
+        const newLeads   = await pool.query("SELECT COUNT(*) FROM leads WHERE assigned_team_id = $1 AND status='NEW'", [teamId]);
         const followups  = await pool.query("SELECT COUNT(*) FROM lead_activity_logs WHERE activity_type = 'FOLLOWUP_SENT'");
         const emails     = await pool.query("SELECT COUNT(*) FROM lead_activity_logs WHERE activity_type = 'EMAIL_SENT'");
         res.json({
@@ -424,9 +426,11 @@ app.get('/manager/dashboard', authenticateToken, authorizeRoles('admin', 'manage
 app.get('/manager/leads', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     const { status } = req.query;
     try {
-        let query = 'SELECT * FROM leads';
-        let params = [];
-        if (status) { query += ' WHERE status = $1'; params.push(status); }
+        const teamId = req.user.team_id;
+        console.log('👤 Manager leads — user:', req.user.id, 'team_id:', teamId);
+        let query = 'SELECT * FROM leads WHERE assigned_team_id = $1';
+        let params = [teamId];
+        if (status) { query += ' AND status = $2'; params.push(status); }
         query += ' ORDER BY created_at DESC';
         const result = await pool.query(query, params);
         res.json({ success: true, data: result.rows });
@@ -444,7 +448,8 @@ app.get('/manager/emails', authenticateToken, authorizeRoles('admin', 'manager')
 
 app.get('/manager/export/leads', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
-        const result = await pool.query('SELECT lead_id, name, company, title, email, phone_number, status, created_at FROM leads ORDER BY created_at DESC');
+        const teamId = req.user.team_id;
+        const result = await pool.query('SELECT lead_id, name, company, title, email, phone_number, status, created_at FROM leads WHERE assigned_team_id = $1 ORDER BY created_at DESC', [teamId]);
         res.json({ success: true, data: result.rows });
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
