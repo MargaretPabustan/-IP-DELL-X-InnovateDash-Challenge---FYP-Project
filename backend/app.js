@@ -428,10 +428,21 @@ app.get('/manager/leads', authenticateToken, authorizeRoles('admin', 'manager'),
     try {
         const teamId = req.user.team_id;
         console.log('👤 Manager leads — user:', req.user.id, 'team_id:', teamId);
-        let query = 'SELECT * FROM leads WHERE assigned_team_id = $1';
-        let params = [teamId];
-        if (status) { query += ' AND status = $2'; params.push(status); }
-        query += ' ORDER BY created_at DESC';
+        let query = `
+    SELECT leads.*, lf.followup_status
+    FROM leads
+    LEFT JOIN lead_followups lf ON leads.lead_id = lf.lead_id
+    WHERE assigned_team_id = $1
+    `;
+
+    const params = [teamId];
+
+    if (status && status !== 'All') {
+    params.push(status);
+    query += ` AND leads.status = $${params.length}`;
+    }
+
+    query += ' ORDER BY leads.created_at DESC';
         const result = await pool.query(query, params);
         res.json({ success: true, data: result.rows });
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
@@ -488,6 +499,115 @@ app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager
         `);
         res.json({ success: true, data: result.rows });
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+});
+
+// MANAGER ROUTES TO PERFORM FOLLOWUPS ON LEADS// (For Follow-Up Buttons)
+app.get('/manager/followup/:leadId', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT *
+             FROM lead_followups
+             WHERE lead_id = $1
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [req.params.leadId]
+        );
+
+        if (result.rows.length === 0) {
+            return res.json({
+                success: true,
+                data: null
+            });
+        }
+
+        res.json({
+            success: true,
+            data: result.rows[0]
+        });
+
+    } catch (err) {
+        res.status(500).json({
+            success:false,
+            message:err.message
+        });
+    }
+});
+
+//Update Leads Followup Status//
+app.put('/manager/followup/:leadId', authenticateToken, authorizeRoles('admin','manager'), async (req,res)=>{
+
+    const { followup_status } = req.body;
+
+    try{
+
+        const existing = await pool.query(
+            `SELECT *
+             FROM lead_followups
+             WHERE lead_id=$1`,
+            [req.params.leadId]
+        );
+
+        if(existing.rows.length===0){
+
+            await pool.query(
+
+                `INSERT INTO lead_followups
+                (
+                    lead_id,
+                    followup_status
+                )
+
+                VALUES
+
+                ($1,$2)
+                `,
+
+                [
+                    req.params.leadId,
+                    followup_status
+                ]
+
+            );
+
+        }else{
+
+            await pool.query(
+
+                `UPDATE lead_followups
+
+                SET followup_status=$1
+
+                WHERE lead_id=$2`,
+
+                [
+                    followup_status,
+                    req.params.leadId
+                ]
+
+            );
+
+        }
+
+        res.json({
+
+            success:true,
+            message:"Follow-up updated"
+
+        });
+
+    }
+
+    catch(err){
+
+        res.status(500).json({
+
+            success:false,
+            message:err.message
+
+        });
+
+    }
+
 });
 
 // ── ADMIN ROUTES ──────────────────────────────────────────────────────────────
