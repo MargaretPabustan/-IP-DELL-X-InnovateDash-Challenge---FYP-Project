@@ -9,6 +9,8 @@ export default function ManagerLayout() {
       <Stack.Screen name="activity" />
       <Stack.Screen name="export" />
       <Stack.Screen name="dashboard" />
+       <Stack.Screen name="emails" />
+
     </Stack>
   );
 }

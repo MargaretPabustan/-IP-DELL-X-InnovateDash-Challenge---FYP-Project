@@ -391,6 +391,38 @@ function ExportTab({ theme }: any) {
     </ScrollView>
   );
 }
+// ── EMAILS TAB ────────────────────────────────────────────────────────────────
+  function EmailsTab({ theme }: any) {
+  const router = useRouter();
+
+  return (
+    <ScrollView contentContainerStyle={styles.tabContent}>
+      <View style={[styles.card, { backgroundColor: theme.card }]}>
+        <Ionicons
+          name="mail-outline"
+          size={48}
+          color={theme.navy}
+        />
+
+        <Text style={[styles.chartTitle, { color: theme.text }]}>
+          Email History
+        </Text>
+
+        <Text style={{ color: theme.subText, textAlign: 'center' }}>
+          View all emails that have been sent to leads.
+        </Text>
+
+        <TouchableOpacity
+          style={[styles.exportBtn, { backgroundColor: theme.navy }]}
+          onPress={() => router.push('/manager/emails')}
+        >
+          <Text style={styles.exportBtnText}>View Emails</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
+  );
+}
+
 
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────────
 export default function ManagerDashboard() {
@@ -451,6 +483,7 @@ export default function ManagerDashboard() {
     { key: 'Dashboard', icon: 'grid',         iconOff: 'grid-outline' },
     { key: 'Leads',     icon: 'people',        iconOff: 'people-outline' },
     { key: 'Activity',  icon: 'pulse',         iconOff: 'pulse-outline' },
+    { key: 'Emails',  icon: 'pulse',         iconOff: 'pulse-outline' },
     { key: 'Export',    icon: 'download',      iconOff: 'download-outline' },
   ];
 
@@ -460,6 +493,7 @@ export default function ManagerDashboard() {
       case 'Leads':     return <LeadsTab     theme={theme} refreshing={refreshing} onRefresh={onRefresh} />;
       case 'Activity':  return <ActivityTab  theme={theme} refreshing={refreshing} onRefresh={onRefresh} />;
       case 'Export':    return <ExportTab    theme={theme} />;
+      case 'Emails':    return <EmailsTab theme={theme} refreshing={refreshing} onRefresh={onRefresh} />;
       default:          return <DashboardTab theme={theme} refreshing={refreshing} onRefresh={onRefresh} />;
     }
   };
