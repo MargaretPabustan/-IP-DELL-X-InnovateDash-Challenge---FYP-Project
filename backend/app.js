@@ -534,80 +534,31 @@ app.get('/manager/followup/:leadId', authenticateToken, authorizeRoles('admin', 
 });
 
 //Update Leads Followup Status//
-app.put('/manager/followup/:leadId', authenticateToken, authorizeRoles('admin','manager'), async (req,res)=>{
+app.put('/manager/followup/:leadId', authenticateToken, authorizeRoles('admin','manager'), async (req, res) => {
+  const { followup_status } = req.body;
 
-    const { followup_status } = req.body;
+  try {
+    await pool.query(`
+      INSERT INTO lead_followups (lead_id, followup_status)
+      VALUES ($1, $2)
+      ON CONFLICT (lead_id)
+      DO UPDATE SET followup_status = EXCLUDED.followup_status
+    `, [
+      req.params.leadId,
+      followup_status
+    ]);
 
-    try{
+    res.json({
+      success: true,
+      message: "Follow-up updated"
+    });
 
-        const existing = await pool.query(
-            `SELECT *
-             FROM lead_followups
-             WHERE lead_id=$1`,
-            [req.params.leadId]
-        );
-
-        if(existing.rows.length===0){
-
-            await pool.query(
-
-                `INSERT INTO lead_followups
-                (
-                    lead_id,
-                    followup_status
-                )
-
-                VALUES
-
-                ($1,$2)
-                `,
-
-                [
-                    req.params.leadId,
-                    followup_status
-                ]
-
-            );
-
-        }else{
-
-            await pool.query(
-
-                `UPDATE lead_followups
-
-                SET followup_status=$1
-
-                WHERE lead_id=$2`,
-
-                [
-                    followup_status,
-                    req.params.leadId
-                ]
-
-            );
-
-        }
-
-        res.json({
-
-            success:true,
-            message:"Follow-up updated"
-
-        });
-
-    }
-
-    catch(err){
-
-        res.status(500).json({
-
-            success:false,
-            message:err.message
-
-        });
-
-    }
-
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
 });
 
 // ── ADMIN ROUTES ──────────────────────────────────────────────────────────────

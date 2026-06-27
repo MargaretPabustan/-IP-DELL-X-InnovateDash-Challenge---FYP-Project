@@ -140,14 +140,14 @@ export default function ManagerLeads() {
   const { theme } = useAppTheme();
 
   const [leads,      setLeads]      = useState<Lead[]>([]);
+  const [followups, setFollowups] = useState<any[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter,     setFilter]     = useState('NEW');
   const filteredLeads = leads.filter(l => l.status === filter);
   const [viewing,    setViewing]    = useState<Lead | null>(null);
-  const [editing, setEditing] = useState<Lead | null>(null);
+  const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [statusPickerVisible, setStatusPickerVisible] = useState(false);
-  const [selectedLeadId, setSelectedLeadId] = useState<number | null>(null);
 
   const fetchLeads = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -182,50 +182,57 @@ export default function ManagerLeads() {
   }
 };
 
-  const updateFollowupStatus = async (leadId: number, newStatus: string) => {
-    try {
-      const headers = await getAuthHeaders();
+  
 
-      const res = await fetch(`${BACKEND_URL}/manager/followup/${leadId}`, {
+  const handleSelectStatus = async (status: string) => {
+  if (!editingLead) return;
+
+  try {
+    const leadId = editingLead.lead_id;
+
+    setStatusPickerVisible(false);
+
+    const headers = await getAuthHeaders();
+
+    const res = await fetch(
+      `${BACKEND_URL}/manager/followup/${leadId}`,
+      {
         method: 'PUT',
         headers,
         body: JSON.stringify({
-          followup_status: newStatus,
+          followup_status: status,
         }),
-      });
-
-        const data = await res.json();
-
-        if (data.success) {
-          // refresh list after update
-          fetchLeads();
-          Alert.alert('Success', 'Follow-up status successfully updated');
-        } else {
-          Alert.alert('Error', data.message || 'Update failed');
-        }
-      } catch (err) {
-        Alert.alert('Error', 'Failed to update follow-up status');
       }
-  };
+    );
 
-  const handleSelectStatus = async (status: string) => {
-  if (!selectedLeadId) return;
+    const data = await res.json();
 
-  setStatusPickerVisible(false);
+    if (!data.success) {
+      Alert.alert('Error', data.message || 'Update failed');
+      return;
+    }
 
-  await updateFollowupStatus(selectedLeadId, status);
+    // ✅ instant UI update (no refetch needed)
+    setLeads(prev =>
+      prev.map(l =>
+        l.lead_id === leadId
+          ? { ...l, followup_status: status }
+          : l
+      )
+    );
 
-  setSelectedLeadId(null);
+    Alert.alert('Success', 'Follow-up status updated');
+  } catch (err) {
+    Alert.alert('Error', 'Failed to update follow-up status');
+  } finally {
+    setEditingLead(null);
+  }
 };
 
 
   
-  const handleEditStatus = (id: number) => {
-  setSelectedLeadId(id);
-  setStatusPickerVisible(true);
-  };
 
-  
+
 
 
   return (
@@ -314,7 +321,10 @@ export default function ManagerLeads() {
               <View style={styles.actions}>
                 <TouchableOpacity
                   style={[styles.editBtn, { borderColor: theme.accent }]}
-                  onPress={() => handleEditStatus(lead.lead_id)}
+                 onPress={() => {
+                  setEditingLead(lead);
+                  setStatusPickerVisible(true);
+                }}
                 >
                   <Text style={[styles.editBtnText, { color: theme.accent }]}>
                     Edit Follow-Up Status
