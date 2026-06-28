@@ -20,26 +20,40 @@ jobs:
           node-version: 20
           cache: "npm"
 
-      - name: Install dependencies
+      - name: Install backend dependencies
+        working-directory: ./backend
         run: npm install
 
       - name: Install Postman CLI
-        run: npm install -g @postman/cli
+        run: curl -o- "https://dl-cli.pstmn.io/install/linux64.sh" | sh
 
       - name: Start backend server
         working-directory: ./backend
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
+          PORT: 3000
         run: node app.js &
 
       - name: Wait for server to start
         run: sleep 10
 
+      - name: Health check
+        run: curl -f http://localhost:3000/ || exit 1
+
       - name: Run Postman tests
         shell: pwsh
-        working-directory: ./backend
+        working-directory: ./
+        env:
+          BACKEND_URL: http://localhost:3000
         run: .\scripts\run-tests.ps1
 
       - name: Stop server
-        run: pkill node
+        if: always()
+        run: pkill node || true
 
   deploy:
     runs-on: ubuntu-latest
