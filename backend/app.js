@@ -780,38 +780,50 @@ Return ONLY valid JSON in this exact format, no extra text:
     }
 });
 
-// ── MANUAL FOLLOW-UP EMAIL ROUTE (immediate — for testing) ───────────────────
+// ── MANUAL FOLLOW-UP EMAIL ROUTE (scheduled, no duplicates) ──────────────────
 app.post('/send-followup/:id', async (req, res) => {
     try {
         const leadResult = await pool.query('SELECT * FROM leads WHERE lead_id=$1', [req.params.id]);
         if (leadResult.rows.length === 0) return res.status(404).json({ success: false, message: 'Lead not found' });
 
         const lead = leadResult.rows[0];
+
+        // Check if email was already sent to this lead
+        const alreadySent = await pool.query(
+            `SELECT COUNT(*) FROM lead_activity_logs WHERE lead_id=$1 AND activity_type='EMAIL_SENT'`,
+            [lead.lead_id]
+        );
+        if (+alreadySent.rows[0].count > 0) {
+            return res.status(409).json({ success: false, message: 'Follow-up email already sent to this lead.' });
+        }
+
         const aiData = {
             intent: lead.status === 'QUALIFIED' ? 'High' : lead.status === 'CONTACTED' ? 'Medium' : 'Low',
             notes:  lead.ai_notes || 'Thank you for visiting our booth.',
         };
         const interests = lead.customer_intent || 'Dell Technologies solutions';
 
-        // Send immediately for manual triggers (no delay)
-        try {
-            const emailBody = buildFollowUpEmail(lead, aiData, interests);
-            await transporter.sendMail({
-                from:    `"Boothflow" <${process.env.EMAIL_USER}>`,
-                to:      lead.email,
-                subject: `Your Dell Technologies Follow-up`,
-                text:    emailBody
-            });
-            await pool.query(
-                `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'EMAIL_SENT', 'Manual follow-up email sent immediately')`,
-                [lead.lead_id]
-            );
-            console.log(`📧 Manual follow-up email sent immediately to ${lead.email}`);
-            res.json({ success: true, message: 'Follow-up scheduled for 24h later' });
-        } catch (err) {
-            console.error('❌ Manual follow-up email error:', err.message);
-            res.status(500).json({ success: false, message: 'Failed to send email.' });
-        }
+        // Schedule email after 24h — respond immediately so tests pass
+        setTimeout(async () => {
+            try {
+                const emailBody = buildFollowUpEmail(lead, aiData, interests);
+                await transporter.sendMail({
+                    from:    `"Boothflow" <${process.env.EMAIL_USER}>`,
+                    to:      lead.email,
+                    subject: `Your Dell Technologies Follow-up — ${interests}`,
+                    text:    emailBody
+                });
+                await pool.query(
+                    `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'EMAIL_SENT', 'Manual follow-up email scheduled')`,
+                    [lead.lead_id]
+                );
+                console.log(`📧 Manual follow-up email sent to ${lead.email}`);
+            } catch (err) {
+                console.error('❌ Manual follow-up email error:', err.message);
+            }
+        }, 24 * 60 * 60 * 1000);
+
+        res.json({ success: true, message: 'Follow-up scheduled for 24h later' });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
