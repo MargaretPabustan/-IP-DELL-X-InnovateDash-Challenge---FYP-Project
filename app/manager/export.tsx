@@ -7,6 +7,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../src/constants/useAppTheme';
 import * as SecureStore from 'expo-secure-store';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from "expo-sharing";
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
@@ -40,17 +42,48 @@ export default function ManagerExport() {
   };
 
   const downloadExcel = async () => {
-    setDownloadLoading(true);
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(`${BACKEND_URL}/export/leads/excel`, { headers });
-      if (!res.ok) throw new Error('Download failed');
-      Alert.alert('Success', 'Excel file generated successfully.');
-    } catch (err) {
-      console.error(err);
-      Alert.alert('Error', 'Excel export failed.');
-    } finally { setDownloadLoading(false); }
-  };
+  setDownloadLoading(true);
+
+  try {
+    const token = await SecureStore.getItemAsync("token");
+
+    const fileUri =
+      FileSystem.cacheDirectory + `leads-${Date.now()}.xlsx`;
+
+    const result = await FileSystem.downloadAsync(
+      `${BACKEND_URL}/export/leads/excel`,
+      fileUri,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    const available = await Sharing.isAvailableAsync();
+
+    if (!available) {
+      Alert.alert(
+        "Sharing unavailable",
+        "This device does not support file sharing."
+      );
+      return;
+    }
+
+    await Sharing.shareAsync(result.uri, {
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      dialogTitle: "Export Leads",
+      UTI: "org.openxmlformats.spreadsheetml.sheet",
+    });
+
+  } catch (err) {
+    console.error(err);
+    Alert.alert("Error", "Excel export failed.");
+  } finally {
+    setDownloadLoading(false);
+  }
+};
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
