@@ -2,19 +2,14 @@
 $timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
 $email = "testlead.$timestamp@testcompany.com"
 
-# Login and get fresh token automatically
-$loginResponse = Invoke-RestMethod -Uri "$env:BACKEND_URL/auth/login" `
-    -Method POST `
-    -ContentType "application/json" `
-    -Body '{"email":"sarah.tan@dell.com","password":"admin123"}'
-
-$token = $loginResponse.token
-
-Write-Host "✅ Logged in, token received"
-
-# Run Postman tests with fresh token
+# Run Postman tests passing all credentials as env vars
 postman collection run "postman/collections/Dell Lead Management API" `
     --env-var "baseUrl=$env:BACKEND_URL" `
-    --env-var "token=$token" `
+    --env-var "repEmail=daniel.lee@dell.com" `
+    --env-var "repPassword=rep456" `
+    --env-var "managerEmail=james.lim@dell.com" `
+    --env-var "managerPassword=manager123" `
+    --env-var "adminEmail=sarah.tan@dell.com" `
+    --env-var "adminPassword=admin123" `
     --env-var "email=$email" `
     --reporters cli
