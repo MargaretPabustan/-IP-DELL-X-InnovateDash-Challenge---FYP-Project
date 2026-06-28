@@ -8,31 +8,10 @@ const bcrypt = require('bcrypt');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const ExcelJS = require('exceljs');
 const nodemailer = require('nodemailer');
-const RateLimit = require('express-rate-limit');
 
 const app = express();
 app.use(express.json());
 app.use(cors());
-
-// ── RATE LIMITING ─────────────────────────────────────────────────────────────
-const generalLimiter = RateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100,                  // max 100 requests per window
-    message: { success: false, message: 'Too many requests, please try again later.' },
-    standardHeaders: true,
-    legacyHeaders: false,
-});
-
-const authLimiter = RateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 20,                   // stricter limit for auth routes
-    message: { success: false, message: 'Too many login attempts, please try again later.' },
-    standardHeaders: true,
-    legacyHeaders: false,
-});
-
-app.use(generalLimiter);   // apply to all routes
-app.use('/auth', authLimiter); // stricter on login
 
 // ── REQUEST LOGGER ────────────────────────────────────────────────────────────
 app.use((req, res, next) => {
@@ -449,10 +428,21 @@ app.get('/manager/leads', authenticateToken, authorizeRoles('admin', 'manager'),
     try {
         const teamId = req.user.team_id;
         console.log('👤 Manager leads — user:', req.user.id, 'team_id:', teamId);
-        let query = 'SELECT * FROM leads WHERE assigned_team_id = $1';
-        let params = [teamId];
-        if (status) { query += ' AND status = $2'; params.push(status); }
-        query += ' ORDER BY created_at DESC';
+        let query = `
+    SELECT leads.*, lf.followup_status
+    FROM leads
+    LEFT JOIN lead_followups lf ON leads.lead_id = lf.lead_id
+    WHERE assigned_team_id = $1
+    `;
+
+    const params = [teamId];
+
+    if (status && status !== 'All') {
+    params.push(status);
+    query += ` AND leads.status = $${params.length}`;
+    }
+
+    query += ' ORDER BY leads.created_at DESC';
         const result = await pool.query(query, params);
         res.json({ success: true, data: result.rows });
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
@@ -509,6 +499,66 @@ app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager
         `);
         res.json({ success: true, data: result.rows });
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+});
+
+// MANAGER ROUTES TO PERFORM FOLLOWUPS ON LEADS// (For Follow-Up Buttons)
+app.get('/manager/followup/:leadId', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT *
+             FROM lead_followups
+             WHERE lead_id = $1
+             ORDER BY created_at DESC
+             LIMIT 1`,
+            [req.params.leadId]
+        );
+
+        if (result.rows.length === 0) {
+            return res.json({
+                success: true,
+                data: null
+            });
+        }
+
+        res.json({
+            success: true,
+            data: result.rows[0]
+        });
+
+    } catch (err) {
+        res.status(500).json({
+            success:false,
+            message:err.message
+        });
+    }
+});
+
+//Update Leads Followup Status//
+app.put('/manager/followup/:leadId', authenticateToken, authorizeRoles('admin','manager'), async (req, res) => {
+  const { followup_status } = req.body;
+
+  try {
+    await pool.query(`
+      INSERT INTO lead_followups (lead_id, followup_status)
+      VALUES ($1, $2)
+      ON CONFLICT (lead_id)
+      DO UPDATE SET followup_status = EXCLUDED.followup_status
+    `, [
+      req.params.leadId,
+      followup_status
+    ]);
+
+    res.json({
+      success: true,
+      message: "Follow-up updated"
+    });
+
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
 });
 
 // ── ADMIN ROUTES ──────────────────────────────────────────────────────────────
@@ -570,14 +620,6 @@ app.get('/admin/leads', authenticateToken, authorizeRoles('admin'), async (req, 
     try {
         const result = await pool.query('SELECT * FROM leads ORDER BY created_at DESC');
         res.json({ success: true, data: result.rows });
-    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
-});
-
-app.put('/admin/leads/:id/assign', authenticateToken, authorizeRoles('admin'), async (req, res) => {
-    const { assigned_team_id } = req.body;
-    try {
-        await pool.query('UPDATE leads SET assigned_team_id=$1 WHERE lead_id=$2', [assigned_team_id || null, req.params.id]);
-        res.json({ success: true, message: 'Lead team updated' });
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
@@ -769,7 +811,7 @@ Return ONLY valid JSON in this exact format, no extra text:
     }
 });
 
-// ── MANUAL FOLLOW-UP EMAIL ROUTE (immediate — for testing) ───────────────────
+// ── MANUAL FOLLOW-UP EMAIL ROUTE (kept for manual triggers) ──────────────────
 app.post('/send-followup/:id', async (req, res) => {
     try {
         const leadResult = await pool.query('SELECT * FROM leads WHERE lead_id=$1', [req.params.id]);
@@ -780,27 +822,28 @@ app.post('/send-followup/:id', async (req, res) => {
             intent: lead.status === 'QUALIFIED' ? 'High' : lead.status === 'CONTACTED' ? 'Medium' : 'Low',
             notes:  lead.ai_notes || 'Thank you for visiting our booth.',
         };
-        const interests = lead.customer_intent || 'Dell Technologies solutions';
+        const interests = 'Dell Technologies solutions';
 
-        // Send immediately for manual triggers (no delay)
-        try {
-            const emailBody = buildFollowUpEmail(lead, aiData, interests);
-            await transporter.sendMail({
-                from:    `"Boothflow" <${process.env.EMAIL_USER}>`,
-                to:      lead.email,
-                subject: `Your Dell Technologies Follow-up`,
-                text:    emailBody
-            });
-            await pool.query(
-                `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'EMAIL_SENT', 'Manual follow-up email sent immediately')`,
-                [lead.lead_id]
-            );
-            console.log(`📧 Manual follow-up email sent immediately to ${lead.email}`);
-            res.json({ success: true, message: 'Follow-up email sent immediately.' });
-        } catch (err) {
-            console.error('❌ Manual follow-up email error:', err.message);
-            res.status(500).json({ success: false, message: 'Failed to send email.' });
-        }
+        setTimeout(async () => {
+            try {
+                const emailBody = buildFollowUpEmail(lead, aiData, interests);
+                await transporter.sendMail({
+                    from:    `"Boothflow" <${process.env.EMAIL_USER}>`,
+                    to:      lead.email,
+                    subject: `Your Dell Technologies Follow-up`,
+                    text:    emailBody
+                });
+                await pool.query(
+                    `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'EMAIL_SENT', 'Manual follow-up email scheduled')`,
+                    [lead.lead_id]
+                );
+                console.log(`📧 Manual follow-up email sent to ${lead.email}`);
+            } catch (err) {
+                console.error('❌ Manual follow-up email error:', err.message);
+            }
+        }, 24 * 60 * 60 * 1000);
+
+        res.json({ success: true, message: 'Follow-up scheduled for 24h later' });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });
     }
