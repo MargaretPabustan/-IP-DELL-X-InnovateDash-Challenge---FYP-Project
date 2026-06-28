@@ -379,37 +379,37 @@ export default function ManagerLeads() {
         />
       )}
         <View style={[styles.bottomNav, { backgroundColor: theme.navBg }]}>
-    {tabs.map((tab) => {
-      const isActive = tab.key === 'Leads';
+          {tabs.map((tab) => {
+            const isActive = tab.key === 'Leads';
 
-      return (
-        <TouchableOpacity
-          key={tab.key}
-          style={styles.navItem}
-          onPress={() => {
-            if (tab.key !== 'Leads') {
-              router.replace(`/manager/${tab.key.toLowerCase()}` as any);
-            }
-          }}
-        >
-          <Ionicons
-            name={isActive ? (tab.icon as any) : (tab.iconOff as any)}
-            size={22}
-            color={isActive ? theme.accent : theme.subText}
-          />
-          <Text
-            style={[
-              styles.navLabel,
-              { color: isActive ? theme.accent : theme.subText },
-            ]}
-          >
-            {tab.key}
-          </Text>
+            return (
+              <TouchableOpacity
+                key={tab.key}
+                style={styles.navItem}
+                onPress={() => {
+                  if (tab.key !== 'Leads') {
+                    router.replace(`/manager/${tab.key.toLowerCase()}` as any);
+                  }
+                }}
+              >
+                <Ionicons
+                  name={isActive ? (tab.icon as any) : (tab.iconOff as any)}
+                  size={22}
+                  color={isActive ? theme.accent : theme.subText}
+                />
+                <Text
+                  style={[
+                    styles.navLabel,
+                    { color: isActive ? theme.accent : theme.subText },
+                  ]}
+                >
+                  {tab.key}
+                </Text>
         </TouchableOpacity>
       );
     })}
   </View>
-      </SafeAreaView>
+  </SafeAreaView>
   );
        
 }
