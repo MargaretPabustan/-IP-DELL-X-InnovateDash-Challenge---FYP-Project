@@ -14,6 +14,26 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+// ── RATE LIMITING ─────────────────────────────────────────────────────────────
+const generalLimiter = RateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100,                  // max 100 requests per window
+    message: { success: false, message: 'Too many requests, please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+const authLimiter = RateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 20,                   // stricter limit for auth routes
+    message: { success: false, message: 'Too many login attempts, please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+app.use(generalLimiter);   // apply to all routes
+app.use('/auth', authLimiter); // stricter on login
+
 // ── REQUEST LOGGER ────────────────────────────────────────────────────────────
 app.use((req, res, next) => {
     console.log(`📥 ${req.method} ${req.path}`, JSON.stringify(req.body || {}).substring(0, 200));
@@ -623,6 +643,25 @@ app.get('/admin/leads', authenticateToken, authorizeRoles('admin'), async (req, 
     try {
         const result = await pool.query('SELECT * FROM leads ORDER BY created_at DESC');
         res.json({ success: true, data: result.rows });
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+});
+
+app.put('/admin/leads/:id/assign', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+    const { assigned_team_id } = req.body;
+    try {
+        await pool.query('UPDATE leads SET assigned_team_id=$1 WHERE lead_id=$2', [assigned_team_id || null, req.params.id]);
+        res.json({ success: true, message: 'Lead team updated' });
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+});
+
+app.put('/admin/leads/:id/notes', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+    const { ai_notes, status } = req.body;
+    try {
+        await pool.query(
+            'UPDATE leads SET ai_notes=$1, status=COALESCE($2, status) WHERE lead_id=$3',
+            [ai_notes || null, status || null, req.params.id]
+        );
+        res.json({ success: true, message: 'Lead notes and status updated' });
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 

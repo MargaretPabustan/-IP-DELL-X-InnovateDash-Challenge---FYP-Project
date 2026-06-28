@@ -1,4 +1,0 @@
-New-Item -Path "C:\fyp-project\backend\.dockerignore" -ItemType File
-Set-Content "C:\fyp-project\backend\.dockerignore" "node_modules
-.env
-npm-debug.log"

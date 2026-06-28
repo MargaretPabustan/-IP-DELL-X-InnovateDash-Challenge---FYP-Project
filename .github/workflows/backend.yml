@@ -24,10 +24,7 @@ jobs:
         working-directory: ./backend
         run: npm install
 
-      - name: Install Postman CLI
-        run: curl -o- "https://dl-cli.pstmn.io/install/linux64.sh" | sh
-
-      - name: Start backend server
+      - name: Start backend with Docker Compose
         working-directory: ./backend
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -36,29 +33,38 @@ jobs:
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
           PORT: 3000
-        run: node app.js &
+        run: docker compose up -d
 
       - name: Wait for server to start
-        run: sleep 10
+        run: sleep 15
 
       - name: Health check
         run: curl -f http://localhost:3000/ || exit 1
+
+      - name: Install Postman CLI
+        run: curl -o- "https://dl-cli.pstmn.io/install/linux64.sh" | sh
 
       - name: Run Postman tests
         shell: pwsh
         working-directory: ./
         env:
           BACKEND_URL: http://localhost:3000
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
         run: .\scripts\run-tests.ps1
 
-      - name: Stop server
+      - name: Stop Docker Compose
         if: always()
-        run: pkill node || true
+        working-directory: ./backend
+        run: docker compose down
 
   deploy:
     runs-on: ubuntu-latest
     needs: backend-tests
     if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Checkout code
@@ -83,4 +89,4 @@ jobs:
           tags: ghcr.io/${{ github.repository_owner }}/dell-lead-app-backend:latest
 
       - name: Notify deployment success
-        run: echo "✅ Backend deployed successfully!"
+        run: echo "✅ Docker image built and pushed to GHCR. Deploy manually on Back4App."
