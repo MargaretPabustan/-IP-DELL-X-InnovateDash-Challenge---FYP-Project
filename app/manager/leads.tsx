@@ -17,7 +17,7 @@ async function getAuthHeaders() {
 }
 
 function getStatusColor(status: string) {
-  switch (status) {
+  switch (status?.toUpperCase()) {
     case 'QUALIFIED': return '#22c55e';
     case 'CONTACTED': return '#f59e0b';
     case 'CLOSED':    return '#6366f1';
@@ -25,12 +25,11 @@ function getStatusColor(status: string) {
   }
 }
 
-function getStatusLabel(status: string) {
-  switch (status) {
-    case 'QUALIFIED': return 'Ready for Follow-up';
-    case 'CONTACTED': return 'Follow-up in Progress';
-    case 'CLOSED':    return 'Closed';
-    default:          return 'Follow-up Later';
+function getStatusLabel(status: string | null) {
+  switch (status?.toLowerCase()) {
+    case 'done':      return 'Follow-up Complete';
+    case 'cancelled': return 'Cancelled';
+    default:          return 'Pending Follow-up';
   }
 }
 
@@ -44,7 +43,8 @@ function formatDate(iso: string) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-const FILTERS = ['NEW', 'CONTACTED', 'QUALIFIED', 'CLOSED'];
+// ✅ Added 'ALL' options cleanly to manage list queries effectively
+const FILTERS = ['ALL', 'NEW', 'CONTACTED', 'QUALIFIED', 'CLOSED'];
 const STATUS_OPTIONS = ['pending', 'done', 'cancelled'];
 
 type Lead = {
@@ -95,8 +95,8 @@ function ViewModal({ lead, onClose, theme, onFollowUp }: { lead: Lead; onClose: 
               <Text style={[modal.leadName, { color: theme.text }]}>{lead.name}</Text>
               <Text style={[modal.leadSub, { color: theme.subText }]}>{lead.title} · {lead.company}</Text>
             </View>
-            <View style={[modal.statusBadge, { backgroundColor: statusColor + '22', borderColor: statusColor }]}>
-              <Text style={[modal.statusBadgeText, { color: statusColor }]}>{lead.followup_status || 'pending'}</Text>
+            <View style={[modal.statusBadge, { borderColor: statusColor, backgroundColor: statusColor + '15' }]}>
+              <Text style={[modal.statusBadgeText, { color: statusColor }]}>{lead.status?.toUpperCase()}</Text>
             </View>
           </View>
           <View style={[modal.divider, { backgroundColor: theme.bg }]} />
@@ -107,8 +107,8 @@ function ViewModal({ lead, onClose, theme, onFollowUp }: { lead: Lead; onClose: 
             <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.phone_number}</Text>
             <Text style={modal.fieldLabel}>Intent</Text>
             <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.customer_intent || '—'}</Text>
-            <Text style={modal.fieldLabel}>Follow-up Status</Text>
-            <Text style={[modal.fieldValue, { color: statusColor, fontWeight: '700' }]}>{getStatusLabel(lead.followup_status)}</Text>
+            <Text style={modal.fieldLabel}>Follow-up Progress Status</Text>
+            <Text style={[modal.fieldValue, { color: theme.text, fontWeight: '700' }]}>{getStatusLabel(lead.followup_status)}</Text>
             <Text style={modal.fieldLabel}>AI Confidence</Text>
             <Text style={[modal.fieldValue, { color: theme.text }]}>{confidencePct}</Text>
             <Text style={modal.fieldLabel}>Scanned By</Text>
@@ -125,7 +125,7 @@ function ViewModal({ lead, onClose, theme, onFollowUp }: { lead: Lead; onClose: 
                 : <><Ionicons name="mail-outline" size={16} color="#fff" /><Text style={modal.followUpBtnText}>Send Follow-up</Text></>
               }
             </TouchableOpacity>
-            <TouchableOpacity style={[modal.closeBtn, { backgroundColor: theme.navy }]} onPress={onClose}>
+            <TouchableOpacity style={[modal.closeBtn, { backgroundColor: theme.navy || '#0f172a' }]} onPress={onClose}>
               <Text style={modal.closeBtnText}>Close</Text>
             </TouchableOpacity>
           </View>
@@ -136,117 +136,95 @@ function ViewModal({ lead, onClose, theme, onFollowUp }: { lead: Lead; onClose: 
 }
 
 export default function ManagerLeads() {
-  const router  = useRouter();
+  const router = useRouter();
   const { theme } = useAppTheme();
 
-  const [leads,      setLeads]      = useState<Lead[]>([]);
-  const [followups, setFollowups] = useState<any[]>([]);
-  const [loading,    setLoading]    = useState(true);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter,     setFilter]     = useState('NEW');
-  const filteredLeads = leads.filter(l => l.status === filter);
-  const [viewing,    setViewing]    = useState<Lead | null>(null);
+  const [filter, setFilter] = useState('ALL'); // ✅ Defaulting clean to 'ALL'
+  const [viewing, setViewing] = useState<Lead | null>(null);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [statusPickerVisible, setStatusPickerVisible] = useState(false);
+
+  // ✅ Client-side fallback filter logic safely standardizing cases
+  const filteredLeads = leads.filter(l => {
+    if (filter === 'ALL') return true;
+    return l.status?.toUpperCase() === filter.toUpperCase();
+  });
 
   const fetchLeads = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
     try {
       const headers = await getAuthHeaders();
-      const path = filter === 'All' ? '/manager/leads' : `/manager/leads?status=${filter}`;
-      const res  = await fetch(`${BACKEND_URL}${path}`, { headers });
+      // ✅ Dynamic parameter matching what your server parameters accept
+      const path = filter === 'ALL' ? '/manager/leads' : `/manager/leads?status=${filter.toUpperCase()}`;
+      const res = await fetch(`${BACKEND_URL}${path}`, { headers });
       const data = await res.json();
       if (data.success) setLeads(data.data);
-    } catch {} finally { setLoading(false); setRefreshing(false); }
+    } catch (err) {
+      console.error(err);
+    } finally { setLoading(false); setRefreshing(false); }
   }, [filter]);
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
-  // Connect to View Leads Backend//
+
   const handleViewLead = async (leadId: number) => {
-  try {
-    const headers = await getAuthHeaders();
-
-    const res = await fetch(
-      `${BACKEND_URL}/leads/${leadId}`,
-      { headers }
-    );
-
-    const data = await res.json();
-
-    if (data.success) {
-      setViewing(data.data);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${BACKEND_URL}/leads/${leadId}`, { headers });
+      const data = await res.json();
+      if (data.success) {
+        setViewing(data.data);
+      }
+    } catch (err) {
+      Alert.alert("Error", "Unable to load lead details.");
     }
-  } catch (err) {
-    Alert.alert("Error", "Unable to load lead details.");
-  }
-};
-
-  
+  };
 
   const handleSelectStatus = async (status: string) => {
-  if (!editingLead) return;
+    if (!editingLead) return;
+    try {
+      const leadId = editingLead.lead_id;
+      setStatusPickerVisible(false);
+      const headers = await getAuthHeaders();
 
-  try {
-    const leadId = editingLead.lead_id;
-
-    setStatusPickerVisible(false);
-
-    const headers = await getAuthHeaders();
-
-    const res = await fetch(
-      `${BACKEND_URL}/manager/followup/${leadId}`,
-      {
+      const res = await fetch(`${BACKEND_URL}/manager/followup/${leadId}`, {
         method: 'PUT',
         headers,
-        body: JSON.stringify({
-          followup_status: status,
-        }),
+        body: JSON.stringify({ followup_status: status }),
+      });
+
+      const data = await res.json();
+      if (!data.success) {
+        Alert.alert('Error', data.message || 'Update failed');
+        return;
       }
-    );
 
-    const data = await res.json();
-
-    if (!data.success) {
-      Alert.alert('Error', data.message || 'Update failed');
-      return;
+      setLeads(prev =>
+        prev.map(l => l.lead_id === leadId ? { ...l, followup_status: status } : l)
+      );
+      Alert.alert('Success', 'Follow-up status updated');
+    } catch (err) {
+      Alert.alert('Error', 'Failed to update follow-up status');
+    } finally {
+      setEditingLead(null);
     }
-
-    // ✅ instant UI update (no refetch needed)
-    setLeads(prev =>
-      prev.map(l =>
-        l.lead_id === leadId
-          ? { ...l, followup_status: status }
-          : l
-      )
-    );
-
-    Alert.alert('Success', 'Follow-up status updated');
-  } catch (err) {
-    Alert.alert('Error', 'Failed to update follow-up status');
-  } finally {
-    setEditingLead(null);
-  }
-};
-
-
-  
-
-
-
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
       {/* HEADER */}
-      <View style={[styles.header, { backgroundColor: theme.navy, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12 }]}>
+      <View style={[styles.header, { backgroundColor: theme.navy || '#0f172a', paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Team Leads</Text>
-          <Text style={styles.headerSub}>{leads.length} leads</Text>
+          <Text style={styles.headerSub}>{filteredLeads.length} leads matching filter</Text>
         </View>
       </View>
 
@@ -256,10 +234,12 @@ export default function ManagerLeads() {
           {FILTERS.map(f => (
             <TouchableOpacity
               key={f}
-              style={[styles.pill, { backgroundColor: filter === f ? theme.navy : theme.bg, borderColor: theme.navy }]}
+              style={[styles.pill, { backgroundColor: filter === f ? (theme.navy || '#0f172a') : theme.bg, borderColor: theme.navy || '#0f172a' }]}
               onPress={() => setFilter(f)}
             >
-              <Text style={[styles.pillText, { color: filter === f ? '#fff' : theme.navy }]}>{f === 'All' ? 'All' : f}</Text>
+              <Text style={[styles.pillText, { color: filter === f ? '#fff' : (theme.navy || '#0f172a') }]}>
+                {f}
+              </Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
@@ -269,155 +249,98 @@ export default function ManagerLeads() {
       <ScrollView
         contentContainerStyle={[styles.content, { paddingBottom: 24 }]}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchLeads(true)} tintColor={theme.navy} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchLeads(true)} tintColor={theme.navy || '#0f172a'} />}
       >
         {loading ? (
-          <View style={styles.centered}><ActivityIndicator size="large" color={theme.navy} /></View>
-        ) : leads.length === 0 ? (
+          <View style={styles.centered}><ActivityIndicator size="large" color={theme.navy || '#0f172a'} /></View>
+        ) : filteredLeads.length === 0 ? (
           <View style={styles.centered}>
             <Ionicons name="document-text-outline" size={48} color={theme.subText} />
-            <Text style={[styles.emptyText, { color: theme.subText }]}>No leads found</Text>
+            <Text style={[styles.emptyText, { color: theme.subText }]}>No leads found for this category</Text>
           </View>
         ) : filteredLeads.map(lead => (
-          <TouchableOpacity key={lead.lead_id} style={[styles.card, { backgroundColor: theme.card }]} onPress={() => setViewing(lead)} activeOpacity={0.8}>
-            <View style={[styles.statusDot, { backgroundColor: getStatusColor(lead.status) }]} />
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.leadName, { color: theme.text }]} numberOfLines={1}>{lead.name}</Text>
-              <Text style={[styles.leadSub, { color: theme.subText }]} numberOfLines={1}>{lead.title} · {lead.company}</Text>
-              <Text style={[styles.leadEmail, { color: theme.subText }]} numberOfLines={1}>{lead.email}</Text>
-              <Text style={[styles.leadTime, { color: theme.subText }]}>{formatDate(lead.created_at)}</Text>
-            </View>
-              <View 
-                  style={[
-                    styles.statusPill,
-                    {
-                      backgroundColor: getStatusColor(lead.status)  + '18',
-                    },
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.statusPillText,
-                      {
-                        color: getStatusColor(lead.status),
-                      },   
-                    ]}
-                  >
-                    {lead.status}
+          <TouchableOpacity 
+            key={lead.lead_id} 
+            style={[styles.card, { backgroundColor: theme.card }]} 
+            onPress={() => setViewing(lead)} 
+            activeOpacity={0.8}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, width: '100%' }}>
+              <View style={[styles.statusDot, { backgroundColor: getStatusColor(lead.status) }]} />
+              
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.leadName, { color: theme.text }]} numberOfLines={1}>{lead.name}</Text>
+                <Text style={[styles.leadSub, { color: theme.subText }]} numberOfLines={1}>{lead.title} · {lead.company}</Text>
+                <Text style={[styles.leadEmail, { color: theme.subText }]} numberOfLines={1}>{lead.email}</Text>
+                <Text style={[styles.leadTime, { color: theme.subText }]}>{formatDate(lead.created_at)}</Text>
+              </View>
+
+              <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                <View style={[styles.statusPill, { backgroundColor: getStatusColor(lead.status) + '18' }]}>
+                  <Text style={[styles.statusPillText, { color: getStatusColor(lead.status) }]}>
+                    {lead.status?.toUpperCase()}
                   </Text>
                 </View>
-                <View style={{
-                  marginTop: 4,
-                  paddingHorizontal: 6,
-                  paddingVertical: 2,
-                  borderRadius: 6,
-                  backgroundColor: theme.bg,
-                }}>
+                <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: theme.bg }}>
                   <Text style={{ fontSize: 10, color: theme.subText }}>
                     follow-up: {lead.followup_status || 'pending'}
                   </Text>
                 </View>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={theme.subText} />
+            </View>
 
-              <View style={styles.actions}>
-                <TouchableOpacity
-                  style={[styles.editBtn, { borderColor: theme.accent }]}
-                 onPress={() => {
+            <View style={styles.actions}>
+              <TouchableOpacity
+                style={[styles.editBtn, { borderColor: theme.accent }]}
+                onPress={() => {
                   setEditingLead(lead);
                   setStatusPickerVisible(true);
                 }}
-                >
-                  <Text style={[styles.editBtnText, { color: theme.accent }]}>
-                    Edit Follow-Up Status
-                  </Text>
-                </TouchableOpacity>
+              >
+                <Text style={[styles.editBtnText, { color: theme.accent }]}>
+                  Edit Follow-Up Status
+                </Text>
+              </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={[styles.viewBtn, { backgroundColor: theme.accent }]}
-                  onPress={() => handleViewLead(lead.lead_id)}
-                >
-                  <Text style={styles.viewBtnText}>
-                    View Lead Details
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              <Ionicons
-                name="chevron-forward"
-                size={16}
-                color={theme.subText}
-              />
-            </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.viewBtn, { backgroundColor: theme.accent }]}
+                onPress={() => handleViewLead(lead.lead_id)}
+              >
+                <Text style={styles.viewBtnText}>
+                  View Lead Details
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
         ))}
       </ScrollView>
 
-      {viewing && (
-        <ViewModal
-          lead={viewing}
-          onClose={() => setViewing(null)}
-          theme={theme}
-          onFollowUp={() => setViewing(null)}
-        />
-      
-      )}
- 
+      {/* STATUS PICKER MODAL */}
       {statusPickerVisible && (
-  <Modal transparent animationType="fade">
-    <Pressable
-      style={{
-        flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.4)',
-        justifyContent: 'center',
-        alignItems: 'center',
-      }}
-      onPress={() => setStatusPickerVisible(false)}
-    >
-      <Pressable
-        style={{
-          width: '80%',
-          backgroundColor: theme.card,
-          borderRadius: 16,
-          padding: 20,
-        }}
-        onPress={() => {}}
-      >
-        <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 12, color: theme.text }}>
-          Update Follow-Up Status
-        </Text>
-
-        {STATUS_OPTIONS.map((status) => (
-          <TouchableOpacity
-            key={status}
-            onPress={() => handleSelectStatus(status)}
-            style={{
-              paddingVertical: 12,
-              borderRadius: 10,
-              marginBottom: 8,
-              backgroundColor: theme.bg,
-              alignItems: 'center',
-            }}
-          >
-            <Text style={{ color: theme.text, fontWeight: '600' }}>
-              {status}
-            </Text>
-          </TouchableOpacity>
-        ))}
-
-        <TouchableOpacity
-          onPress={() => setStatusPickerVisible(false)}
-          style={{
-            marginTop: 8,
-            paddingVertical: 10,
-            alignItems: 'center',
-          }}
-        >
-          <Text style={{ color: 'red', fontWeight: '600' }}>Cancel</Text>
-        </TouchableOpacity>
-
-      </Pressable>
-    </Pressable>
-  </Modal>
-  )}
-   </SafeAreaView>
+        <Modal transparent animationType="fade">
+          <Pressable style={styles.backdropOverlay} onPress={() => setStatusPickerVisible(false)}>
+            <Pressable style={[styles.pickerMenu, { backgroundColor: theme.card }]} onPress={() => {}}>
+              <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 12, color: theme.text }}>
+                Update Follow-Up Status
+              </Text>
+              {STATUS_OPTIONS.map((status) => (
+                <TouchableOpacity
+                  key={status}
+                  onPress={() => handleSelectStatus(status)}
+                  style={[styles.pickerOption, { backgroundColor: theme.bg }]}
+                >
+                  <Text style={{ color: theme.text, fontWeight: '600' }}>{status}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity onPress={() => setStatusPickerVisible(false)} style={{ marginTop: 8, paddingVertical: 10, alignItems: 'center' }}>
+                <Text style={{ color: 'red', fontWeight: '600' }}>Cancel</Text>
+              </TouchableOpacity>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
+    </SafeAreaView>
   );
 }
 
@@ -433,7 +356,7 @@ const styles = StyleSheet.create({
   content: { padding: 16, gap: 10 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12 },
   emptyText: { fontSize: 15, fontWeight: '600' },
-  card: { borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
+  card: { borderRadius: 14, padding: 14, gap: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   leadName: { fontSize: 14, fontWeight: '700' },
   leadSub: { fontSize: 12, marginTop: 2 },
@@ -441,35 +364,14 @@ const styles = StyleSheet.create({
   leadTime: { fontSize: 11, marginTop: 4 },
   statusPill: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   statusPillText: { fontSize: 10, fontWeight: '700' },
-  editBtn: {
-     borderWidth: 1.5,
-    borderRadius: 8,
-    paddingVertical: 7,
-    paddingHorizontal: 14,
-  },
-
-  editBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-
-  viewBtn: {
-    borderRadius: 8,
-    paddingVertical: 7,
-    paddingHorizontal: 14,
-  },
-
-  viewBtnText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  actions: {
-  flexDirection: 'row',
-  gap: 8,
-  marginTop: 4,
-  }
-
+  editBtn: { flex: 1, borderWidth: 1.5, borderRadius: 8, paddingVertical: 10, alignItems: 'center' },
+  editBtnText: { fontSize: 12, fontWeight: '600' },
+  viewBtn: { flex: 1, borderRadius: 8, paddingVertical: 10, justifyContent: 'center', alignItems: 'center' },
+  viewBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  actions: { flexDirection: 'row', gap: 8, marginTop: 4, justifyContent: 'space-between' },
+  backdropOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
+  pickerMenu: { width: '80%', borderRadius: 16, padding: 20 },
+  pickerOption: { paddingVertical: 12, borderRadius: 10, marginBottom: 8, alignItems: 'center' }
 });
 
 const modal = StyleSheet.create({
@@ -490,5 +392,4 @@ const modal = StyleSheet.create({
   followUpBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   closeBtn: { flex: 1, borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
   closeBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  
 });
