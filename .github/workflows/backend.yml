@@ -8,7 +8,7 @@ on:
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest        
+    runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
@@ -24,13 +24,14 @@ jobs:
         run: npm install
 
       - name: Run ESLint
-        run: npm run lint --if-present
-        continue-on-error: true
+        run: npm run lint
 
-      - name: Run tests
-        run: npm test --if-present
-        continue-on-error: true
+      - name: Run Jest tests
+        run: npm test
 
       - name: TypeScript build
         run: npx tsc --noEmit
-        continue-on-error: true
+
+      # Optional: Docker build for backend
+      - name: Build Docker image
+        run: docker build -t dell-lead-app-backend .
