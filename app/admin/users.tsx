@@ -42,13 +42,19 @@ export default function AdminUsers() {
   const [refreshing, setRefreshing] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [editUser,   setEditUser]   = useState<User | null>(null);
+  const [viewUser,   setViewUser]   = useState<User | null>(null);
+  const [saving,     setSaving]     = useState(false);
 
   // Create form
   const [newName,     setNewName]     = useState('');
   const [newEmail,    setNewEmail]    = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newRole,     setNewRole]     = useState('rep');
-  const [saving,      setSaving]      = useState(false);
+
+  // Edit form
+  const [editName,   setEditName]   = useState('');
+  const [editEmail,  setEditEmail]  = useState('');
+  const [editRole,   setEditRole]   = useState('rep');
 
   const fetchUsers = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -63,6 +69,13 @@ export default function AdminUsers() {
   }, []);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
+
+  const openEdit = (user: User) => {
+    setEditUser(user);
+    setEditName(user.full_name);
+    setEditEmail(user.email);
+    setEditRole(user.role);
+  };
 
   const handleCreate = async () => {
     if (!newName.trim() || !newEmail.trim() || !newPassword.trim()) {
@@ -87,6 +100,38 @@ export default function AdminUsers() {
     } finally { setSaving(false); }
   };
 
+  const handleEdit = async () => {
+    if (!editName.trim() || !editEmail.trim()) {
+      Alert.alert('Missing Fields', 'Name and email are required.');
+      return;
+    }
+    if (!editUser) return;
+    setSaving(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${BACKEND_URL}/admin/users/${editUser.user_id}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({
+          full_name: editName,
+          email: editEmail,
+          role: editRole,
+          team_id: editUser.team_id,
+          is_active: editUser.is_active,
+        }),
+      });
+      if (!res.ok) throw new Error('Failed to update user');
+      setUsers(prev => prev.map(u => u.user_id === editUser.user_id
+        ? { ...u, full_name: editName, email: editEmail, role: editRole }
+        : u
+      ));
+      setEditUser(null);
+      Alert.alert('Success', 'User updated successfully.');
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to update user.');
+    } finally { setSaving(false); }
+  };
+
   const handleDelete = (user: User) => {
     Alert.alert('Delete User', `Delete ${user.full_name}? This cannot be undone.`, [
       { text: 'Cancel', style: 'cancel' },
@@ -101,20 +146,6 @@ export default function AdminUsers() {
         }
       }},
     ]);
-  };
-
-  const handleToggleActive = async (user: User) => {
-    try {
-      const headers = await getAuthHeaders();
-      await fetch(`${BACKEND_URL}/admin/users/${user.user_id}`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({ ...user, is_active: !user.is_active }),
-      });
-      setUsers(prev => prev.map(u => u.user_id === user.user_id ? { ...u, is_active: !u.is_active } : u));
-    } catch {
-      Alert.alert('Error', 'Failed to update user.');
-    }
   };
 
   return (
@@ -170,11 +201,14 @@ export default function AdminUsers() {
                 </View>
               </View>
               <View style={styles.actions}>
-                <TouchableOpacity style={[styles.actionBtn, { borderColor: user.is_active ? '#ef4444' : '#22c55e' }]} onPress={() => handleToggleActive(user)}>
-                  <Ionicons name={user.is_active ? 'pause' : 'play'} size={14} color={user.is_active ? '#ef4444' : '#22c55e'} />
+                <TouchableOpacity style={[styles.actionBtn, { borderColor: theme.navy }]} onPress={() => openEdit(user)}>
+                  <Ionicons name="pencil" size={13} color={theme.navy} />
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.actionBtn, { borderColor: theme.accent }]} onPress={() => setViewUser(user)}>
+                  <Ionicons name="eye-outline" size={13} color={theme.accent} />
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.actionBtn, { borderColor: '#ef4444' }]} onPress={() => handleDelete(user)}>
-                  <Ionicons name="trash-outline" size={14} color="#ef4444" />
+                  <Ionicons name="trash-outline" size={13} color="#ef4444" />
                 </TouchableOpacity>
               </View>
             </View>
@@ -238,6 +272,81 @@ export default function AdminUsers() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* EDIT MODAL */}
+      <Modal visible={!!editUser} transparent animationType="slide">
+        <Pressable style={styles.modalBackdrop} onPress={() => setEditUser(null)}>
+          <Pressable style={[styles.modalSheet, { backgroundColor: theme.card }]} onPress={() => {}}>
+            <View style={styles.modalHandle} />
+            <Text style={[styles.modalTitle, { color: theme.text }]}>Edit User</Text>
+
+            <Text style={styles.fieldLabel}>FULL NAME</Text>
+            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={editName} onChangeText={setEditName} placeholder="Full name" placeholderTextColor={theme.subText} />
+
+            <Text style={styles.fieldLabel}>EMAIL</Text>
+            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={editEmail} onChangeText={setEditEmail} placeholder="Email address" placeholderTextColor={theme.subText} autoCapitalize="none" keyboardType="email-address" />
+
+            <Text style={styles.fieldLabel}>ROLE</Text>
+            <View style={styles.roleRow}>
+              {['rep', 'manager', 'admin'].map(r => (
+                <TouchableOpacity
+                  key={r}
+                  style={[styles.roleChip, { backgroundColor: editRole === r ? theme.navy : theme.bg, borderColor: theme.navy }]}
+                  onPress={() => setEditRole(r)}
+                >
+                  <Text style={[styles.roleChipText, { color: editRole === r ? '#fff' : theme.navy }]}>{r.toUpperCase()}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.modalBtns}>
+              <TouchableOpacity style={[styles.cancelBtn, { borderColor: theme.navy }]} onPress={() => setEditUser(null)}>
+                <Text style={[styles.cancelText, { color: theme.navy }]}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.navy, opacity: saving ? 0.7 : 1 }]} onPress={handleEdit} disabled={saving}>
+                {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveBtnText}>Save</Text>}
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+      {/* VIEW MODAL */}
+      <Modal visible={!!viewUser} transparent animationType="slide">
+        <Pressable style={styles.modalBackdrop} onPress={() => setViewUser(null)}>
+          <Pressable style={[styles.modalSheet, { backgroundColor: theme.card }]} onPress={() => {}}>
+            <View style={styles.modalHandle} />
+            <Text style={[styles.modalTitle, { color: theme.text }]}>User Details</Text>
+            {viewUser && (
+              <>
+                <View style={[styles.viewAvatar, { backgroundColor: getRoleColor(viewUser.role) + '20' }]}>
+                  <Text style={[styles.viewAvatarText, { color: getRoleColor(viewUser.role) }]}>
+                    {viewUser.full_name.charAt(0).toUpperCase()}
+                  </Text>
+                </View>
+                <Text style={styles.fieldLabel}>FULL NAME</Text>
+                <Text style={[styles.viewValue, { color: theme.text }]}>{viewUser.full_name}</Text>
+                <Text style={styles.fieldLabel}>EMAIL</Text>
+                <Text style={[styles.viewValue, { color: theme.text }]}>{viewUser.email}</Text>
+                <Text style={styles.fieldLabel}>ROLE</Text>
+                <View style={[styles.roleBadge, { backgroundColor: getRoleColor(viewUser.role) + '20', alignSelf: 'flex-start' }]}>
+                  <Text style={[styles.roleText, { color: getRoleColor(viewUser.role) }]}>{viewUser.role.toUpperCase()}</Text>
+                </View>
+                <Text style={styles.fieldLabel}>STATUS</Text>
+                <View style={[styles.statusBadge, { backgroundColor: viewUser.is_active ? '#22c55e20' : '#ef444420' }]}>
+                  <Text style={[styles.statusText, { color: viewUser.is_active ? '#22c55e' : '#ef4444' }]}>
+                    {viewUser.is_active ? 'Active' : 'Inactive'}
+                  </Text>
+                </View>
+                <Text style={styles.fieldLabel}>USER ID</Text>
+                <Text style={[styles.viewValue, { color: theme.subText }]}>#{viewUser.user_id}</Text>
+              </>
+            )}
+            <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.navy, marginTop: 20 }]} onPress={() => setViewUser(null)}>
+              <Text style={styles.saveBtnText}>Close</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -281,4 +390,7 @@ const styles = StyleSheet.create({
   bottomNav: { flexDirection: 'row', borderTopWidth: 1, paddingTop: 10, paddingHorizontal: 24, justifyContent: 'space-around', alignItems: 'center' },
   navItem: { alignItems: 'center', gap: 3, flex: 1 },
   navLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 0.3 },
+  viewAvatar: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: 16 },
+  viewAvatarText: { fontSize: 26, fontWeight: '800' },
+  viewValue: { fontSize: 14, fontWeight: '500', marginBottom: 4 },
 });

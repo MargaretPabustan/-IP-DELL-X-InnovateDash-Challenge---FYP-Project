@@ -53,7 +53,7 @@ export default function AdminDashboard() {
     else setLoading(true);
     try {
       const headers = await getAuthHeaders();
-      const res = await fetch(`${BACKEND_URL}/manager/dashboard`, { headers });
+      const res = await fetch(`${BACKEND_URL}/admin/dashboard`, { headers });
       const data = await res.json();
       if (data.success) setStats(data.data);
     } catch {} finally { setLoading(false); setRefreshing(false); }
