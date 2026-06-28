@@ -36,6 +36,14 @@ function getStatusLabel(status: string) {
 
 const TEAM_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#6366f1', '#ef4444'];
 
+const TEAM_NAMES: Record<number, string> = {
+  1: 'AI PCs',
+  2: 'Multi-cloud',
+  3: 'Storage',
+  4: 'Service',
+  5: 'Others',
+};
+
 type Lead = {
   lead_id: number;
   name: string;
@@ -82,7 +90,9 @@ function ViewModal({ lead, onClose, theme }: { lead: Lead; onClose: () => void; 
             <Text style={modal.fieldLabel}>Phone</Text>
             <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.phone_number}</Text>
             <Text style={modal.fieldLabel}>Assigned Team</Text>
-            <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.assigned_team_id ? `Team ${lead.assigned_team_id}` : '—'}</Text>
+            <Text style={[modal.fieldValue, { color: theme.text }]}>
+              {lead.assigned_team_id ? `Team ${lead.assigned_team_id} — ${TEAM_NAMES[lead.assigned_team_id] || ''}` : 'Unassigned'}
+            </Text>
             <Text style={modal.fieldLabel}>Intent</Text>
             <Text style={[modal.fieldValue, { color: theme.text }]}>{lead.customer_intent || '—'}</Text>
             <Text style={modal.fieldLabel}>Follow-up Status</Text>
@@ -107,24 +117,49 @@ function ViewModal({ lead, onClose, theme }: { lead: Lead; onClose: () => void; 
 
 // ─── Edit Modal ───────────────────────────────────────────────────────────────
 function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () => void; onSave: (updated: Lead) => void; theme: any }) {
-  const [name,    setName]    = useState(lead.name);
-  const [title,   setTitle]   = useState(lead.title);
-  const [company, setCompany] = useState(lead.company);
-  const [saving,  setSaving]  = useState(false);
+  const [name,       setName]       = useState(lead.name);
+  const [title,      setTitle]      = useState(lead.title);
+  const [company,    setCompany]    = useState(lead.company);
+  const [email,      setEmail]      = useState(lead.email);
+  const [phone,      setPhone]      = useState(lead.phone_number);
+  const [intent,     setIntent]     = useState(lead.customer_intent || '');
+  const [teamId,     setTeamId]     = useState<number>(lead.assigned_team_id ?? 0);
+  const [saving,     setSaving]     = useState(false);
 
   const handleSave = async () => {
+    if (!name.trim() || !email.trim() || !company.trim() || !title.trim() || !phone.trim()) {
+      Alert.alert('Missing Fields', 'Name, email, company, title and phone are required.');
+      return;
+    }
     setSaving(true);
     try {
       const headers = await getAuthHeaders();
+
+      // Update lead details
       const res = await fetch(`${BACKEND_URL}/leads/${lead.lead_id}`, {
         method: 'PUT',
         headers,
-        body: JSON.stringify({ name, company, title, email: lead.email, phone_number: lead.phone_number, customer_intent: lead.customer_intent }),
+        body: JSON.stringify({
+          name, company, title,
+          email, phone_number: phone,
+          customer_intent: intent,
+        }),
       });
-      if (!res.ok) throw new Error('Failed');
-      onSave({ ...lead, name, title, company });
-    } catch {
-      Alert.alert('Error', 'Failed to update lead.');
+      if (!res.ok) throw new Error('Failed to update lead details');
+
+      // Update team assignment if changed
+      if (teamId !== lead.assigned_team_id) {
+        await fetch(`${BACKEND_URL}/admin/leads/${lead.lead_id}/assign`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify({ assigned_team_id: teamId || null }),
+        });
+      }
+
+      onSave({ ...lead, name, title, company, email, phone_number: phone, customer_intent: intent, assigned_team_id: teamId || null });
+      Alert.alert('Success', 'Lead updated successfully.');
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to update lead.');
     } finally { setSaving(false); }
   };
 
@@ -134,12 +169,46 @@ function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () =
         <Pressable style={[modal.sheet, { backgroundColor: theme.card }]} onPress={() => {}}>
           <View style={modal.handle} />
           <Text style={[modal.editTitle, { color: theme.text }]}>Edit Lead</Text>
-          <Text style={modal.fieldLabel}>Name</Text>
-          <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={name} onChangeText={setName} />
-          <Text style={modal.fieldLabel}>Title</Text>
-          <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={title} onChangeText={setTitle} />
-          <Text style={modal.fieldLabel}>Company</Text>
-          <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={company} onChangeText={setCompany} />
+          <ScrollView showsVerticalScrollIndicator={false}>
+            <Text style={modal.fieldLabel}>NAME</Text>
+            <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={name} onChangeText={setName} />
+
+            <Text style={modal.fieldLabel}>TITLE</Text>
+            <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={title} onChangeText={setTitle} />
+
+            <Text style={modal.fieldLabel}>COMPANY</Text>
+            <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={company} onChangeText={setCompany} />
+
+            <Text style={modal.fieldLabel}>EMAIL</Text>
+            <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" />
+
+            <Text style={modal.fieldLabel}>PHONE</Text>
+            <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={phone} onChangeText={setPhone} keyboardType="phone-pad" />
+
+            <Text style={modal.fieldLabel}>CUSTOMER INTENT</Text>
+            <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={intent} onChangeText={setIntent} placeholder="e.g. Pricing Inquiry" placeholderTextColor={theme.subText} />
+
+            <Text style={modal.fieldLabel}>ASSIGN TEAM</Text>
+            <View style={modal.teamRow}>
+              {[0, 1, 2, 3, 4, 5].map(t => (
+                <TouchableOpacity
+                  key={t}
+                  style={[modal.teamChip, { backgroundColor: teamId === t ? theme.navy : theme.bg, borderColor: theme.navy }]}
+                  onPress={() => setTeamId(t)}
+                >
+                  <Text style={[modal.teamChipText, { color: teamId === t ? '#fff' : theme.navy }]}>
+                    {t === 0 ? 'None' : `T${t}`}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {teamId > 0 && (
+              <Text style={[{ fontSize: 11, color: theme.subText, marginTop: 4, marginBottom: 8 }]}>
+                Team {teamId} — {TEAM_NAMES[teamId]}
+              </Text>
+            )}
+          </ScrollView>
+
           <View style={modal.editBtns}>
             <TouchableOpacity style={[modal.cancelBtn, { borderColor: theme.accent }]} onPress={onClose} disabled={saving}>
               <Text style={[modal.cancelText, { color: theme.accent }]}>Cancel</Text>
@@ -189,8 +258,7 @@ export default function AdminLeads() {
 
   const teamName = (id: number) => {
     if (id === 0) return 'Unassigned';
-    const names: Record<number, string> = { 1: 'AI PCs', 2: 'Multi-cloud', 3: 'Storage', 4: 'Service', 5: 'Others' };
-    return names[id] ? `Team ${id} — ${names[id]}` : `Team ${id}`;
+    return TEAM_NAMES[id] ? `Team ${id} — ${TEAM_NAMES[id]}` : `Team ${id}`;
   };
 
   const toggleExpand = (id: number) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }));
@@ -356,7 +424,7 @@ const styles = StyleSheet.create({
 
 const modal = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
-  sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24, maxHeight: '85%' },
+  sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24, maxHeight: '90%' },
   handle: { width: 40, height: 4, backgroundColor: '#cbd5e1', borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
   leadHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
   avatar: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
@@ -371,7 +439,10 @@ const modal = StyleSheet.create({
   closeBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   editTitle: { fontSize: 17, fontWeight: '700', marginBottom: 16, textAlign: 'center' },
   input: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 13, marginBottom: 4 },
-  editBtns: { flexDirection: 'row', gap: 10, marginTop: 20 },
+  teamRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  teamChip: { borderRadius: 8, borderWidth: 1.5, paddingHorizontal: 12, paddingVertical: 8, alignItems: 'center' },
+  teamChipText: { fontSize: 12, fontWeight: '700' },
+  editBtns: { flexDirection: 'row', gap: 10, marginTop: 16 },
   cancelBtn: { flex: 1, borderWidth: 1.5, borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
   cancelText: { fontSize: 14, fontWeight: '600' },
   saveBtn: { flex: 1, borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
