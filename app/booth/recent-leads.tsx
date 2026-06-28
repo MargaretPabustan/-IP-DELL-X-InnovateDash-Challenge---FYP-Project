@@ -205,12 +205,10 @@ function ViewModal({ lead, onClose, theme }: { lead: Lead; onClose: () => void; 
   );
 }
 
-// ─── Edit Modal ───────────────────────────────────────────────────────────────
+// ─── Edit Modal (restricted — intent and notes only) ──────────────────────────
 function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () => void; onSave: (updated: Lead) => void; theme: any }) {
-  const [name,    setName]    = useState(lead.name);
-  const [role,    setRole]    = useState(lead.role);
-  const [company, setCompany] = useState(lead.company);
-  const [notes,   setNotes]   = useState(lead.notes);
+  const [intent,  setIntent]  = useState(lead.intent === 'Not specified' ? '' : lead.intent);
+  const [notes,   setNotes]   = useState(lead.notes === 'Pending AI analysis.' ? '' : lead.notes);
   const [saving,  setSaving]  = useState(false);
 
   const handleSave = async () => {
@@ -220,22 +218,19 @@ function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () =
       const response = await fetch(`${BACKEND_URL}/leads/${lead.lead_id}`, {
         method: 'PUT',
         headers: authHeaders,
-        body: JSON.stringify({ name, company, title: role, email: lead.email, phone_number: lead.phone, customer_intent: lead.intent }),
+        body: JSON.stringify({
+          name:            lead.name,
+          company:         lead.company,
+          title:           lead.role,
+          email:           lead.email,
+          phone_number:    lead.phone,
+          customer_intent: intent,
+        }),
       });
-      if (!response.ok) throw new Error('Backend failed');
-      onSave({ ...lead, name, role, company, notes });
+      if (!response.ok) throw new Error('Failed to update lead');
+      onSave({ ...lead, intent, notes });
     } catch {
-      try {
-        const response = await fetch(`${API_URL}?lead_id=eq.${lead.lead_id}`, {
-          method: 'PATCH',
-          headers: { ...SUPABASE_HEADERS, 'Prefer': 'return=minimal' },
-          body: JSON.stringify({ name, company, title: role, phone_number: lead.phone, customer_intent: lead.intent }),
-        });
-        if (!response.ok) throw new Error('Supabase failed');
-        onSave({ ...lead, name, role, company, notes });
-      } catch {
-        Alert.alert('Error', 'Failed to update lead. Please try again.');
-      }
+      Alert.alert('Error', 'Failed to update lead. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -246,18 +241,46 @@ function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () =
       <View style={modal.backdrop}>
         <View style={[modal.sheet, { backgroundColor: theme.card }]}>
           <View style={modal.handle} />
-          <Text style={[modal.editTitle, { color: theme.text }]}>Edit Lead</Text>
-          <Text style={modal.fieldLabel}>Name</Text>
-          <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: '#fafafa' }]} value={name} onChangeText={setName} />
-          <Text style={modal.fieldLabel}>Role</Text>
-          <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: '#fafafa' }]} value={role} onChangeText={setRole} />
-          <Text style={modal.fieldLabel}>Company</Text>
-          <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: '#fafafa' }]} value={company} onChangeText={setCompany} />
-          <Text style={modal.fieldLabel}>Notes</Text>
+          <Text style={[modal.editTitle, { color: theme.text }]}>Update Lead</Text>
+
+          {/* PDPA lock notice */}
+          <View style={[modal.readOnlyBox, { backgroundColor: theme.bg }]}>
+            <Ionicons name="lock-closed-outline" size={13} color={theme.subText} />
+            <Text style={[modal.readOnlyText, { color: theme.subText }]}>
+              Personal details are locked for data protection (PDPA)
+            </Text>
+          </View>
+
+          {/* Read-only fields */}
+          <View style={[modal.readOnlyRow, { backgroundColor: theme.bg }]}>
+            <Text style={[modal.readOnlyLabel, { color: theme.subText }]}>Name</Text>
+            <Text style={[modal.readOnlyValue, { color: theme.text }]}>{lead.name}</Text>
+          </View>
+          <View style={[modal.readOnlyRow, { backgroundColor: theme.bg }]}>
+            <Text style={[modal.readOnlyLabel, { color: theme.subText }]}>Company</Text>
+            <Text style={[modal.readOnlyValue, { color: theme.text }]}>{lead.company}</Text>
+          </View>
+
+          {/* Editable fields */}
+          <Text style={[modal.fieldLabel, { marginTop: 16 }]}>CUSTOMER INTENT</Text>
+          <TextInput
+            style={[modal.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: '#fafafa' }]}
+            value={intent}
+            onChangeText={setIntent}
+            placeholder="e.g. Interested in pricing, wants demo..."
+            placeholderTextColor={theme.subText}
+          />
+
+          <Text style={modal.fieldLabel}>ADDITIONAL NOTES</Text>
           <TextInput
             style={[modal.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: '#fafafa', minHeight: 72, textAlignVertical: 'top' }]}
-            value={notes} onChangeText={setNotes} multiline
+            value={notes}
+            onChangeText={setNotes}
+            multiline
+            placeholder="Add context from the conversation..."
+            placeholderTextColor={theme.subText}
           />
+
           <View style={modal.editBtns}>
             <TouchableOpacity style={[modal.cancelBtn, { borderColor: theme.accent }]} onPress={onClose} disabled={saving}>
               <Text style={[modal.cancelText, { color: theme.accent }]}>Cancel</Text>
@@ -287,14 +310,12 @@ function ProfileModal({ onClose, theme }: { onClose: () => void; theme: any }) {
         const me = parseJwt(token);
         const userId = me?.sub || me?.id || me?.user_id;
         if (!userId) throw new Error('No user id');
-
         const userRes = await fetch(
           `${SUPABASE_BASE}/users?user_id=eq.${userId}&select=user_id,full_name,email,role`,
           { headers: SUPABASE_HEADERS }
         );
         const users = await userRes.json();
         const fullUser = Array.isArray(users) && users.length > 0 ? users[0] : null;
-
         setProfile({
           email:     fullUser?.email     || me?.email     || '—',
           full_name: fullUser?.full_name || me?.full_name || me?.name || '—',
@@ -359,15 +380,15 @@ export default function RecentLeadsScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
 
-  const [leads,       setLeads]       = useState<Lead[]>([]);
-  const [loading,     setLoading]     = useState(true);
-  const [refreshing,  setRefreshing]  = useState(false);
-  const [error,       setError]       = useState<string | null>(null);
-  const [viewing,     setViewing]     = useState<Lead | null>(null);
-  const [editing,     setEditing]     = useState<Lead | null>(null);
-  const [showProfile, setShowProfile] = useState(false);
-  const [search,      setSearch]      = useState('');
-  const [activeFilter, setFilter]     = useState('ALL');
+  const [leads,        setLeads]       = useState<Lead[]>([]);
+  const [loading,      setLoading]     = useState(true);
+  const [refreshing,   setRefreshing]  = useState(false);
+  const [error,        setError]       = useState<string | null>(null);
+  const [viewing,      setViewing]     = useState<Lead | null>(null);
+  const [editing,      setEditing]     = useState<Lead | null>(null);
+  const [showProfile,  setShowProfile] = useState(false);
+  const [search,       setSearch]      = useState('');
+  const [activeFilter, setFilter]      = useState('ALL');
 
   const statusCounts = useMemo(() => {
     const counts: Record<string, number> = { ALL: leads.length };
@@ -381,16 +402,13 @@ export default function RecentLeadsScreen() {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
     setError(null);
-
     try {
       const token = await SecureStore.getItemAsync('token');
       const me = token ? parseJwt(token) : null;
       const userId = me?.sub || me?.id || me?.user_id;
-
       const url = userId
         ? `${SUPABASE_BASE}/leads?scanned_by=eq.${userId}&select=*&order=created_at.desc`
         : `${SUPABASE_BASE}/leads?select=*&order=created_at.desc`;
-
       const response = await fetch(url, { headers: SUPABASE_HEADERS });
       const data = await response.json();
       if (!Array.isArray(data)) throw new Error('Supabase failed');
@@ -622,6 +640,11 @@ const modal = StyleSheet.create({
   closeBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   editTitle: { fontSize: 17, fontWeight: '700', marginBottom: 16, textAlign: 'center' },
   input: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 13, marginBottom: 4 },
+  readOnlyBox: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 8, padding: 10, marginBottom: 12 },
+  readOnlyText: { fontSize: 11, fontWeight: '500', flex: 1 },
+  readOnlyRow: { borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 6, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  readOnlyLabel: { fontSize: 11, fontWeight: '600' },
+  readOnlyValue: { fontSize: 13, fontWeight: '500' },
   editBtns: { flexDirection: 'row', gap: 10, marginTop: 20 },
   cancelBtn: { flex: 1, borderWidth: 1.5, borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
   cancelText: { fontSize: 14, fontWeight: '600' },
