@@ -723,7 +723,7 @@ Return ONLY valid JSON in this exact format, no extra text:
 // ── MANUAL FOLLOW-UP EMAIL ROUTE ──────────────────────────────────────────────
 app.post('/send-followup/:id', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
-        const { followupDate } = req.body;
+        const { followupDate } = req.body || {};
 
         const leadResult = await pool.query('SELECT * FROM leads WHERE lead_id = $1', [req.params.id]);
         if (leadResult.rows.length === 0) return res.status(404).json({ success: false, message: 'Lead not found' });
