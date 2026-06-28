@@ -207,10 +207,8 @@ function ViewModal({ lead, onClose, theme }: { lead: Lead; onClose: () => void; 
 
 // ─── Edit Modal ───────────────────────────────────────────────────────────────
 function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () => void; onSave: (updated: Lead) => void; theme: any }) {
-  const [name,    setName]    = useState(lead.name);
-  const [role,    setRole]    = useState(lead.role);
-  const [company, setCompany] = useState(lead.company);
-  const [notes,   setNotes]   = useState(lead.notes);
+  const [intent,  setIntent]  = useState(lead.intent === 'Not specified' ? '' : lead.intent);
+  const [notes,   setNotes]   = useState(lead.notes === 'Pending AI analysis.' ? '' : lead.notes);
   const [saving,  setSaving]  = useState(false);
 
   const handleSave = async () => {
@@ -220,22 +218,19 @@ function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () =
       const response = await fetch(`${BACKEND_URL}/leads/${lead.lead_id}`, {
         method: 'PUT',
         headers: authHeaders,
-        body: JSON.stringify({ name, company, title: role, email: lead.email, phone_number: lead.phone, customer_intent: lead.intent }),
+        body: JSON.stringify({
+          name:            lead.name,
+          company:         lead.company,
+          title:           lead.role,
+          email:           lead.email,
+          phone_number:    lead.phone,
+          customer_intent: intent,
+        }),
       });
       if (!response.ok) throw new Error('Backend failed');
-      onSave({ ...lead, name, role, company, notes });
+      onSave({ ...lead, intent, notes });
     } catch {
-      try {
-        const response = await fetch(`${API_URL}?lead_id=eq.${lead.lead_id}`, {
-          method: 'PATCH',
-          headers: { ...SUPABASE_HEADERS, 'Prefer': 'return=minimal' },
-          body: JSON.stringify({ name, company, title: role, phone_number: lead.phone, customer_intent: lead.intent }),
-        });
-        if (!response.ok) throw new Error('Supabase failed');
-        onSave({ ...lead, name, role, company, notes });
-      } catch {
-        Alert.alert('Error', 'Failed to update lead. Please try again.');
-      }
+      Alert.alert('Error', 'Failed to update lead. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -246,18 +241,45 @@ function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () =
       <View style={modal.backdrop}>
         <View style={[modal.sheet, { backgroundColor: theme.card }]}>
           <View style={modal.handle} />
-          <Text style={[modal.editTitle, { color: theme.text }]}>Edit Lead</Text>
-          <Text style={modal.fieldLabel}>Name</Text>
-          <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: '#fafafa' }]} value={name} onChangeText={setName} />
-          <Text style={modal.fieldLabel}>Role</Text>
-          <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: '#fafafa' }]} value={role} onChangeText={setRole} />
-          <Text style={modal.fieldLabel}>Company</Text>
-          <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: '#fafafa' }]} value={company} onChangeText={setCompany} />
-          <Text style={modal.fieldLabel}>Notes</Text>
+          <Text style={[modal.editTitle, { color: theme.text }]}>Update Lead</Text>
+
+          {/* Read-only info */}
+          <View style={[modal.readOnlyBox, { backgroundColor: theme.bg }]}>
+            <Ionicons name="lock-closed-outline" size={13} color={theme.subText} />
+            <Text style={[modal.readOnlyText, { color: theme.subText }]}>
+              Personal details are locked for data protection (PDPA)
+            </Text>
+          </View>
+
+          <View style={[modal.readOnlyRow, { backgroundColor: theme.bg }]}>
+            <Text style={[modal.readOnlyLabel, { color: theme.subText }]}>Name</Text>
+            <Text style={[modal.readOnlyValue, { color: theme.text }]}>{lead.name}</Text>
+          </View>
+          <View style={[modal.readOnlyRow, { backgroundColor: theme.bg }]}>
+            <Text style={[modal.readOnlyLabel, { color: theme.subText }]}>Company</Text>
+            <Text style={[modal.readOnlyValue, { color: theme.text }]}>{lead.company}</Text>
+          </View>
+
+          {/* Editable fields */}
+          <Text style={[modal.fieldLabel, { marginTop: 16 }]}>CUSTOMER INTENT</Text>
+          <TextInput
+            style={[modal.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: '#fafafa' }]}
+            value={intent}
+            onChangeText={setIntent}
+            placeholder="e.g. Interested in pricing, wants demo..."
+            placeholderTextColor={theme.subText}
+          />
+
+          <Text style={modal.fieldLabel}>ADDITIONAL NOTES</Text>
           <TextInput
             style={[modal.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: '#fafafa', minHeight: 72, textAlignVertical: 'top' }]}
-            value={notes} onChangeText={setNotes} multiline
+            value={notes}
+            onChangeText={setNotes}
+            multiline
+            placeholder="Add context from the conversation..."
+            placeholderTextColor={theme.subText}
           />
+
           <View style={modal.editBtns}>
             <TouchableOpacity style={[modal.cancelBtn, { borderColor: theme.accent }]} onPress={onClose} disabled={saving}>
               <Text style={[modal.cancelText, { color: theme.accent }]}>Cancel</Text>
@@ -635,4 +657,9 @@ const modal = StyleSheet.create({
   roleBadgeText: { fontSize: 11, fontWeight: '700', letterSpacing: 1.5 },
   logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#ef4444', borderRadius: 14, paddingVertical: 14, marginTop: 16 },
   logoutText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  readOnlyBox: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 8, padding: 10, marginBottom: 12 },
+  readOnlyText: { fontSize: 11, fontWeight: '500', flex: 1 },
+  readOnlyRow: { borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 6, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  readOnlyLabel: { fontSize: 11, fontWeight: '600' },
+  readOnlyValue: { fontSize: 13, fontWeight: '500' },
 });
