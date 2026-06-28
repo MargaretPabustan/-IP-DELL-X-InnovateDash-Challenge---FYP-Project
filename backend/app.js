@@ -739,9 +739,9 @@ app.post('/send-followup/:id', authenticateToken, authorizeRoles('admin', 'manag
         // Use provided date or default to 24h from now
         const scheduledAt = followupDate || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
-        // Check if already scheduled
+        // Check if email already sent (not just pending)
         const existing = await pool.query(
-            `SELECT COUNT(*) FROM lead_followups WHERE lead_id=$1 AND followup_status='pending'`,
+            `SELECT COUNT(*) FROM lead_followups WHERE lead_id=$1 AND followup_status='done'`,
             [lead.lead_id]
         );
         if (+existing.rows[0].count > 0) {
@@ -750,7 +750,15 @@ app.post('/send-followup/:id', authenticateToken, authorizeRoles('admin', 'manag
 
         const followup = await pool.query(
             `INSERT INTO lead_followups (lead_id, followup_action, followup_status, due_date, scheduled_at, email_subject, notes)
-             VALUES ($1, 'Manual Follow-up Email', 'pending', $2, $3, $4, $5) RETURNING followup_id`,
+             VALUES ($1, 'Manual Follow-up Email', 'pending', $2, $3, $4, $5)
+             ON CONFLICT (lead_id) DO UPDATE SET
+               followup_action = 'Manual Follow-up Email',
+               followup_status = 'pending',
+               due_date = EXCLUDED.due_date,
+               scheduled_at = EXCLUDED.scheduled_at,
+               email_subject = EXCLUDED.email_subject,
+               notes = EXCLUDED.notes
+             RETURNING followup_id`,
             [lead.lead_id, scheduledAt.split('T')[0], scheduledAt, emailSubject, buildFollowUpEmail(lead, aiData, interests)]
         );
 
