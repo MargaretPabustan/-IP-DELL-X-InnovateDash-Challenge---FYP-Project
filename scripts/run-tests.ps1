@@ -2,10 +2,14 @@
 $timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
 $email = "testlead.$timestamp@testcompany.com"
 
-# Update environment file
-$env = Get-Content "postman/environments/FYP Local.environment.yaml" -Raw
-$env = $env -replace 'value: ''testlead.*@testcompany.com''', "value: '$email'"
-$env | Set-Content "postman/environments/FYP Local.environment.yaml"
-
-# Run collection
-postman collection run "postman/collections/Dell Lead Management API" -e "postman/environments/FYP Local.environment.yaml"
+# Run Postman tests passing all credentials as env vars
+postman collection run "postman/collections/Dell Lead Management API" `
+    --env-var "baseUrl=$env:BACKEND_URL" `
+    --env-var "repLoginEmail=rachel.ng@dell.com" `
+    --env-var "repLoginPassword=rep123" `
+    --env-var "managerEmail=james.lim@dell.com" `
+    --env-var "managerPassword=manager123" `
+    --env-var "adminEmail=sarah.tan@dell.com" `
+    --env-var "adminPassword=admin123" `
+    --env-var "email=$email" `
+    --reporters cli
