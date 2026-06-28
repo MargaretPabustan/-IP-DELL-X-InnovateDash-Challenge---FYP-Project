@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
   Platform,
   StatusBar,
+  Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -39,21 +40,18 @@ export default function EmailsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  const [sentThisWeek, setSentThisWeek] = useState(0);
-  const [overdue, setOverdue] = useState(0);
-  const [emails, setEmails] = useState<any[]>([]);
+  const [leads, setLeads] = useState<any[]>([]);
+  const [selectedLead, setSelectedLead] = useState<any>(null);
 
-  const [activeTab, setActiveTab] = useState('Emails');
 
-  const fetchEmails = useCallback(async () => {
+const [activeTab, setActiveTab] = useState('Emails');
+    const fetchLeads = useCallback(async () => {
     try {
       const headers = await getAuthHeaders();
-      const res = await apiFetch('/manager/emails', headers);
+      const res = await apiFetch("/manager/leads", headers);
 
       if (res.success) {
-        setSentThisWeek(Number(res.data.sentThisWeek));
-        setOverdue(Number(res.data.overdue));
-        setEmails(res.data.sent);
+        setLeads(res.data);
       }
     } catch (err) {
       console.log(err);
@@ -64,14 +62,46 @@ export default function EmailsScreen() {
   }, []);
 
   useEffect(() => {
-    fetchEmails();
-  }, []);
+    fetchLeads();
+  }, [fetchLeads]);
 
   const onRefresh = () => {
     setRefreshing(true);
-    fetchEmails();
+    fetchLeads();
   };
+  const sendFollowup = async () => {
+    if (!selectedLead) {
+      Alert.alert("No Lead", "Please select a lead.");
+      return;
+    }
 
+    try {
+      const headers = await getAuthHeaders();
+
+      const response = await fetch(
+        `${BACKEND_URL}/send-followup/${selectedLead.lead_id}`,
+        {
+          method: "POST",
+          headers,
+        }
+      );
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        Alert.alert("Success", data.message);
+      } else {
+        Alert.alert("Error", data.message || "Failed to schedule follow-up.");
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Error", "Unable to connect to the server.");
+    }
+    };
+    
+
+  
+  
   const tabs = [
     { key: 'Dashboard', icon: 'grid', iconOff: 'grid-outline' },
     { key: 'Leads', icon: 'people', iconOff: 'people-outline' },
@@ -93,73 +123,107 @@ export default function EmailsScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.navy} />
         }
       >
-        {/* EMAIL STATS */}
-        <Text style={[styles.sectionLabel, { color: theme.subText }]}>
-          EMAIL STATISTICS
-        </Text>
+        <Text style={[styles.sectionLabel,{color:theme.subText}]}>
+          FOLLOW-UP EMAIL
+          </Text>
 
-        <View style={styles.statsRow}>
-          <View style={[styles.statCard, { backgroundColor: theme.card }]}>
-            <Ionicons name="mail" size={28} color="#378ADD" />
-            <Text style={[styles.statNumber, { color: '#378ADD' }]}>
-              {sentThisWeek}
-            </Text>
-            <Text style={[styles.statLabel, { color: theme.subText }]}>
-              Emails Sent This Week
-            </Text>
+          <Text style={{color:theme.text,fontWeight:"700"}}>
+          Lead
+          </Text>
+
+          <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{marginVertical:10}}
+          >
+          {leads.map((lead)=>(
+          <TouchableOpacity
+          key={lead.lead_id}
+          onPress={()=>setSelectedLead(lead)}
+          style={{
+          paddingHorizontal:15,
+          paddingVertical:10,
+          marginRight:10,
+          borderRadius:10,
+          backgroundColor:
+          selectedLead?.lead_id===lead.lead_id
+          ?theme.navy
+          :theme.card
+          }}
+          >
+
+          <Text
+          style={{
+          color:
+          selectedLead?.lead_id===lead.lead_id
+          ?"white"
+          :theme.text
+          }}
+          >
+          {lead.name}
+          </Text>
+
+          </TouchableOpacity>
+          ))}
+          </ScrollView>
+
+          {selectedLead && (
+          <View
+          style={{
+          backgroundColor:theme.card,
+          padding:15,
+          borderRadius:12,
+          marginBottom:15
+          }}
+          >
+
+          <Text style={{color:theme.text}}>
+          Email
+          </Text>
+
+          <Text style={{marginBottom:10,color:theme.subText}}>
+          {selectedLead.email}
+          </Text>
+
+          <Text style={{color:theme.text}}>
+          Company
+          </Text>
+
+          <Text style={{marginBottom:10,color:theme.subText}}>
+          {selectedLead.company}
+          </Text>
+
+          <Text style={{color:theme.text}}>
+          Status
+          </Text>
+
+          <Text style={{color:theme.subText}}>
+          {selectedLead.status}
+          </Text>
+
           </View>
-
-          <View style={[styles.statCard, { backgroundColor: theme.card }]}>
-            <Ionicons name="time" size={28} color="#ef4444" />
-            <Text style={[styles.statNumber, { color: '#ef4444' }]}>
-              {overdue}
-            </Text>
-            <Text style={[styles.statLabel, { color: theme.subText }]}>
-              Overdue Follow-ups
-            </Text>
-          </View>
-        </View>
-
-        {/* EMAIL LIST */}
-        <Text style={[styles.sectionLabel, { color: theme.subText }]}>
-          EMAIL HISTORY
-        </Text>
-
-        {emails.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="mail-open-outline" size={60} color={theme.subText} />
-            <Text style={[styles.emptyText, { color: theme.subText }]}>
-              No email activity found.
-            </Text>
-          </View>
-        ) : (
-          emails.map((item, index) => (
-            <View
-              key={index}
-              style={[styles.emailCard, { backgroundColor: theme.card }]}
+          )}
+          <TouchableOpacity
+            onPress={sendFollowup}
+            style={{
+              marginTop: 20,
+              backgroundColor: theme.navy,
+              padding: 15,
+              borderRadius: 12,
+              alignItems: "center",
+            }}
+          >
+            <Text
+              style={{
+                color: "white",
+                fontWeight: "700",
+                fontSize: 16,
+              }}
             >
-              <View
-                style={[styles.emailIcon, { backgroundColor: theme.navy + '15' }]}
-              >
-                <Ionicons name="mail-outline" size={20} color={theme.navy} />
-              </View>
+              Schedule Follow-up
+            </Text>
+          </TouchableOpacity>
 
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.emailTitle, { color: theme.text }]}>
-                  {item.activity_type}
-                </Text>
-
-                <Text style={[styles.emailDescription, { color: theme.subText }]}>
-                  {item.activity_description}
-                </Text>
-
-                <Text style={[styles.emailDate, { color: theme.subText }]}>
-                  {new Date(item.created_at).toLocaleString('en-SG')}
-                </Text>
-              </View>
-            </View>
-          ))
-        )}
       </ScrollView>
     );
   };
