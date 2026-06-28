@@ -807,7 +807,7 @@ app.post('/send-followup/:id', async (req, res) => {
                 [lead.lead_id]
             );
             console.log(`📧 Manual follow-up email sent immediately to ${lead.email}`);
-            res.json({ success: true, message: 'Follow-up email sent immediately.' });
+            res.json({ success: true, message: 'Follow-up scheduled for 24h later' });
         } catch (err) {
             console.error('❌ Manual follow-up email error:', err.message);
             res.status(500).json({ success: false, message: 'Failed to send email.' });
