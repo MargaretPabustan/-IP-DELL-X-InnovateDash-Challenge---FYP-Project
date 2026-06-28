@@ -23,12 +23,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # ✅ Correct Postman CLI installation (Sahana’s fix)
       - name: Install Postman CLI
-        run: curl -o- "https://dl-cli.pstmn.io/install/linux64.sh" | sh
+        run: npm install -g @postman/cli
 
       - name: Start backend server
-        working-directory: ./
+        working-directory: ./backend
         run: node app.js &
 
       - name: Wait for server to start
@@ -36,7 +35,7 @@ jobs:
 
       - name: Run Postman tests
         shell: pwsh
-        working-directory: ./
+        working-directory: ./backend
         run: .\scripts\run-tests.ps1
 
       - name: Stop server
@@ -64,8 +63,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
-          context: ./
-          file: ./Dockerfile
+          context: ./backend
+          file: ./backend/Dockerfile
           push: true
           tags: ghcr.io/${{ github.repository_owner }}/dell-lead-app-backend:latest
 
