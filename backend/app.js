@@ -8,6 +8,7 @@ const bcrypt = require('bcrypt');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const ExcelJS = require('exceljs');
 const nodemailer = require('nodemailer');
+const cron = require('node-cron');
 
 const app = express();
 app.use(express.json());
@@ -425,27 +426,35 @@ app.get('/manager/dashboard', authenticateToken, authorizeRoles('admin', 'manage
 
 app.get('/manager/leads', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     const { status } = req.query;
+
     try {
         const teamId = req.user.team_id;
-        console.log('👤 Manager leads — user:', req.user.id, 'team_id:', teamId);
+
         let query = `
-    SELECT leads.*, lf.followup_status
-    FROM leads
-    LEFT JOIN lead_followups lf ON leads.lead_id = lf.lead_id
-    WHERE assigned_team_id = $1
-    `;
+            SELECT 
+                leads.*,
+                COALESCE(lf.followup_status, 'pending') AS followup_status
+            FROM leads
+            LEFT JOIN lead_followups lf ON leads.lead_id = lf.lead_id
+            WHERE assigned_team_id = $1
+        `;
 
-    const params = [teamId];
+        const params = [teamId];
 
-    if (status && status !== 'All') {
-    params.push(status);
-    query += ` AND leads.status = $${params.length}`;
-    }
+        if (status && status !== 'ALL') {
+            params.push(status);
+            query += ` AND leads.status = $${params.length}`;
+        }
 
-    query += ' ORDER BY leads.created_at DESC';
+        query += ' ORDER BY leads.created_at DESC';
+
         const result = await pool.query(query, params);
+
         res.json({ success: true, data: result.rows });
-    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+
+    } catch (err) {
+        res.status(500).json({ success: false, message: err.message });
+    }
 });
 
 app.get('/manager/emails', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
@@ -503,51 +512,45 @@ app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager
 
 // MANAGER ROUTES TO PERFORM FOLLOWUPS ON LEADS// (For Follow-Up Buttons)
 app.get('/manager/followup/:leadId', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
-    try {
-        const result = await pool.query(
-            `SELECT *
-             FROM lead_followups
-             WHERE lead_id = $1
-             ORDER BY created_at DESC
-             LIMIT 1`,
-            [req.params.leadId]
-        );
+  try {
+    const result = await pool.query(
+      `SELECT *
+       FROM lead_followups
+       WHERE lead_id = $1`,
+      [req.params.leadId]
+    );
 
-        if (result.rows.length === 0) {
-            return res.json({
-                success: true,
-                data: null
-            });
-        }
+    res.json({
+      success: true,
+      data: result.rows[0] || null
+    });
 
-        res.json({
-            success: true,
-            data: result.rows[0]
-        });
-
-    } catch (err) {
-        res.status(500).json({
-            success:false,
-            message:err.message
-        });
-    }
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: err.message
+    });
+  }
 });
 
 //Update Leads Followup Status//
 app.put('/manager/followup/:leadId', authenticateToken, authorizeRoles('admin','manager'), async (req, res) => {
   const { followup_status } = req.body;
+  const leadId = req.params.leadId;
 
   try {
-    await pool.query(`
-      INSERT INTO lead_followups (lead_id, followup_status)
-      VALUES ($1, $2)
-      ON CONFLICT (lead_id)
-      DO UPDATE SET followup_status = EXCLUDED.followup_status
-    `, [
-      req.params.leadId,
-      followup_status
-    ]);
-
+   await pool.query(`
+    INSERT INTO lead_followups (
+        lead_id,
+        followup_status,
+        updated_at
+    )
+    VALUES ($1, $2, NOW())
+    ON CONFLICT (lead_id)
+    DO UPDATE SET 
+        followup_status = EXCLUDED.followup_status,
+        updated_at = NOW()
+    `, [leadId, followup_status]);
     res.json({
       success: true,
       message: "Follow-up updated"
@@ -771,39 +774,7 @@ Return ONLY valid JSON in this exact format, no extra text:
         // Update lead status for email builder
         lead.status = status;
 
-        // ── Auto schedule 24h personalised follow-up email ────────────────────
-        setTimeout(async () => {
-            try {
-                const emailBody = buildFollowUpEmail(lead, aiData, interests);
-                await transporter.sendMail({
-                    from:    `"Boothflow" <${process.env.EMAIL_USER}>`,
-                    to:      lead.email,
-                    subject: `Your Dell Technologies Follow-up — ${interests}`,
-                    text:    emailBody
-                });
-                await pool.query(
-                    `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'EMAIL_SENT', 'Automated personalised follow-up after 24h')`,
-                    [lead.lead_id]
-                );
-                console.log(`📧 24h follow-up email sent to ${lead.email} (intent: ${aiData.intent})`);
-            } catch (err) {
-                console.error('❌ Follow-up email error:', err.message);
-            }
-        }, 24 * 60 * 60 * 1000);
-
-        res.json({
-            success: true,
-            lead,
-            used_fallback: usedFallback,
-            ai_analysis: {
-                intent:             aiData.intent,
-                confidence:         aiData.confidence,
-                follow_up_required: aiData.follow_up_required,
-                follow_up_status:   statusDisplay[status],
-                notes:              aiData.notes,
-                assigned_team_id:   lead.assigned_team_id,
-            }
-        });
+        
 
     } catch (error) {
         console.error('AI analysis error:', error);
@@ -812,43 +783,184 @@ Return ONLY valid JSON in this exact format, no extra text:
 });
 
 // ── MANUAL FOLLOW-UP EMAIL ROUTE (kept for manual triggers) ──────────────────
-app.post('/send-followup/:id', async (req, res) => {
-    try {
-        const leadResult = await pool.query('SELECT * FROM leads WHERE lead_id=$1', [req.params.id]);
-        if (leadResult.rows.length === 0) return res.status(404).json({ success: false, message: 'Lead not found' });
+app.post(
+    '/send-followup/:id',
+    authenticateToken,
+    authorizeRoles('admin', 'manager'),
+    async (req, res) => {
+        try {
+            const { followupDate } = req.body;
 
-        const lead = leadResult.rows[0];
-        const aiData = {
-            intent: lead.status === 'QUALIFIED' ? 'High' : lead.status === 'CONTACTED' ? 'Medium' : 'Low',
-            notes:  lead.ai_notes || 'Thank you for visiting our booth.',
-        };
-        const interests = 'Dell Technologies solutions';
-
-        setTimeout(async () => {
-            try {
-                const emailBody = buildFollowUpEmail(lead, aiData, interests);
-                await transporter.sendMail({
-                    from:    `"Boothflow" <${process.env.EMAIL_USER}>`,
-                    to:      lead.email,
-                    subject: `Your Dell Technologies Follow-up`,
-                    text:    emailBody
+            if (!followupDate) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Follow-up date is required.'
                 });
-                await pool.query(
-                    `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'EMAIL_SENT', 'Manual follow-up email scheduled')`,
-                    [lead.lead_id]
-                );
-                console.log(`📧 Manual follow-up email sent to ${lead.email}`);
-            } catch (err) {
-                console.error('❌ Manual follow-up email error:', err.message);
             }
-        }, 24 * 60 * 60 * 1000);
 
-        res.json({ success: true, message: 'Follow-up scheduled for 24h later' });
+            const leadResult = await pool.query(
+                'SELECT * FROM leads WHERE lead_id = $1',
+                [req.params.id]
+            );
+
+            if (leadResult.rows.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Lead not found'
+                });
+            }
+
+            const lead = leadResult.rows[0];
+
+            const aiData = {
+                intent:
+                    lead.status === 'QUALIFIED'
+                        ? 'High'
+                        : lead.status === 'CONTACTED'
+                        ? 'Medium'
+                        : 'Low',
+
+                notes:
+                    lead.ai_notes ||
+                    'Thank you for visiting our booth.'
+            };
+
+            const interests = 'Dell Technologies solutions';
+
+            const emailSubject = 'Your Dell Technologies Follow-up';
+
+            // Store scheduled follow-up
+            const followup = await pool.query(
+                `
+                INSERT INTO lead_followups
+                (
+                    lead_id,
+                    followup_action,
+                    followup_status,
+                    due_date,
+                    scheduled_at,
+                    email_subject,
+                    notes
+                )
+                VALUES
+                (
+                    $1,
+                    $2,
+                    'pending',
+                    $3,
+                    $4,
+                    $5,
+                    $6
+                )
+                RETURNING followup_id
+                `,
+                [
+                    lead.lead_id,
+                    'Manual Follow-up Email',
+                    followupDate.split('T')[0],
+                    followupDate,
+                    emailSubject,
+                    buildFollowUpEmail(lead, aiData, interests)
+                ]
+            );
+
+            // Activity log
+            await pool.query(
+                `
+                INSERT INTO lead_activity_logs
+                (
+                    lead_id,
+                    activity_type,
+                    activity_description
+                )
+                VALUES
+                (
+                    $1,
+                    'FOLLOWUP_SCHEDULED',
+                    $2
+                )
+                `,
+                [
+                    lead.lead_id,
+                    `Manager scheduled follow-up email for ${followupDate}`
+                ]
+            );
+
+            res.json({
+                success: true,
+                message: 'Follow-up scheduled successfully.',
+                followup_id: followup.rows[0].followup_id
+            });
+
+        } catch (err) {
+            console.error(err);
+
+            res.status(500).json({
+                success: false,
+                message: err.message
+            });
+        }
+    }
+);
+cron.schedule('* * * * *', async () => {
+    try {
+
+        const followups = await pool.query(`
+            SELECT *
+            FROM lead_followups
+            WHERE
+                followup_status = 'pending'
+                AND scheduled_at <= NOW()
+        `);
+
+        for (const followup of followups.rows) {
+
+            const leadResult = await pool.query(
+                'SELECT * FROM leads WHERE lead_id = $1',
+                [followup.lead_id]
+            );
+
+            if (leadResult.rows.length === 0) continue;
+
+            const lead = leadResult.rows[0];
+
+            await transporter.sendMail({
+                from: `"Boothflow" <${process.env.EMAIL_USER}>`,
+                to: lead.email,
+                subject: followup.email_subject,
+                text: followup.notes
+            });
+
+            await pool.query(`
+                UPDATE lead_followups
+                SET
+                    followup_status = 'done',
+                    sent_at = NOW()
+                WHERE followup_id = $1
+            `, [followup.followup_id]);
+
+            await pool.query(`
+                INSERT INTO lead_activity_logs
+                (
+                    lead_id,
+                    activity_type,
+                    activity_description
+                )
+                VALUES
+                (
+                    $1,
+                    'EMAIL_SENT',
+                    'Scheduled follow-up email sent'
+                )
+            `, [lead.lead_id]);
+
+            console.log(`✅ Scheduled email sent to ${lead.email}`);
+        }
+
     } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
+        console.error('Cron Error:', err);
     }
 });
-
 // ── GLOBAL ERROR HANDLER ──────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
     console.error('❌ Unhandled error:', err.message);

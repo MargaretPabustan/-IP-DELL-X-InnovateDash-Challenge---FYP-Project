@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
   StatusBar, Platform, ScrollView, ActivityIndicator,
@@ -119,12 +120,6 @@ function ViewModal({ lead, onClose, theme, onFollowUp }: { lead: Lead; onClose: 
             <Text style={[modal.fieldValue, { color: theme.text }]}>{new Date(lead.created_at).toLocaleString('en-SG')}</Text>
           </ScrollView>
           <View style={modal.modalBtns}>
-            <TouchableOpacity style={[modal.followUpBtn, { backgroundColor: theme.accent, opacity: sending ? 0.7 : 1 }]} onPress={handleFollowUp} disabled={sending}>
-              {sending
-                ? <ActivityIndicator color="#fff" size="small" />
-                : <><Ionicons name="mail-outline" size={16} color="#fff" /><Text style={modal.followUpBtnText}>Send Follow-up</Text></>
-              }
-            </TouchableOpacity>
             <TouchableOpacity style={[modal.closeBtn, { backgroundColor: theme.navy || '#0f172a' }]} onPress={onClose}>
               <Text style={modal.closeBtnText}>Close</Text>
             </TouchableOpacity>
@@ -134,7 +129,13 @@ function ViewModal({ lead, onClose, theme, onFollowUp }: { lead: Lead; onClose: 
     </Modal>
   );
 }
-
+const tabs = [
+  { key: 'Dashboard', icon: 'grid', iconOff: 'grid-outline' },
+  { key: 'Leads', icon: 'people', iconOff: 'people-outline' },
+  { key: 'Activity', icon: 'pulse', iconOff: 'pulse-outline' },
+  { key: 'Emails', icon: 'mail', iconOff: 'mail-outline' },
+  { key: 'Export', icon: 'download', iconOff: 'download-outline' },
+];
 export default function ManagerLeads() {
   const router = useRouter();
   const { theme } = useAppTheme();
@@ -143,9 +144,9 @@ export default function ManagerLeads() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState('ALL'); // ✅ Defaulting clean to 'ALL'
-  const [viewing, setViewing] = useState<Lead | null>(null);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [statusPickerVisible, setStatusPickerVisible] = useState(false);
+  const [viewingLead, setViewingLead] = useState<Lead | null>(null);
 
   // ✅ Client-side fallback filter logic safely standardizing cases
   const filteredLeads = leads.filter(l => {
@@ -154,34 +155,60 @@ export default function ManagerLeads() {
   });
 
   const fetchLeads = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    try {
-      const headers = await getAuthHeaders();
-      // ✅ Dynamic parameter matching what your server parameters accept
-      const path = filter === 'ALL' ? '/manager/leads' : `/manager/leads?status=${filter.toUpperCase()}`;
-      const res = await fetch(`${BACKEND_URL}${path}`, { headers });
-      const data = await res.json();
-      if (data.success) setLeads(data.data);
-    } catch (err) {
-      console.error(err);
-    } finally { setLoading(false); setRefreshing(false); }
-  }, [filter]);
+  if (isRefresh) setRefreshing(true);
+  else setLoading(true);
+
+  try {
+    const headers = await getAuthHeaders();
+
+    const statusQuery =
+      filter === 'ALL' ? '' : `?status=${filter.toUpperCase()}`;
+
+    const res = await fetch(
+      `${BACKEND_URL}/manager/leads${statusQuery}`,
+      { headers }
+    );
+
+    const data = await res.json();
+
+    if (data.success) {
+      const normalized = (data.data || []).map((l: any) => ({
+        lead_id: l.lead_id,
+        name: l.name,
+        title: l.title,
+        company: l.company,
+        email: l.email,
+        phone_number: l.phone_number,
+        customer_intent: l.customer_intent,
+        status: l.status ?? 'NEW',
+        ai_notes: l.ai_notes ?? '',
+        confidence_score: l.confidence_score ?? null,
+        scanned_by_name: l.scanned_by_name ?? null,
+        created_at: l.created_at,
+        followup_status: l.followup_status ?? 'pending',
+
+        // 🔥 IMPORTANT: NEVER default this blindly
+       follow_up_required: l.follow_up_required ?? false,
+      }));
+
+      setLeads(normalized);
+    }
+  } catch (err) {
+    console.error(err);
+  } finally {
+    setLoading(false);
+    setRefreshing(false);
+  }
+}, [filter]);
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
+      useFocusEffect(
+        useCallback(() => {
+          fetchLeads(true);
+        }, [fetchLeads])
+      );
 
-  const handleViewLead = async (leadId: number) => {
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(`${BACKEND_URL}/leads/${leadId}`, { headers });
-      const data = await res.json();
-      if (data.success) {
-        setViewing(data.data);
-      }
-    } catch (err) {
-      Alert.alert("Error", "Unable to load lead details.");
-    }
-  };
+   
 
   const handleSelectStatus = async (status: string) => {
     if (!editingLead) return;
@@ -262,7 +289,7 @@ export default function ManagerLeads() {
           <TouchableOpacity 
             key={lead.lead_id} 
             style={[styles.card, { backgroundColor: theme.card }]} 
-            onPress={() => setViewing(lead)} 
+            onPress={() => setViewingLead(lead)}
             activeOpacity={0.8}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, width: '100%' }}>
@@ -305,7 +332,7 @@ export default function ManagerLeads() {
 
               <TouchableOpacity
                 style={[styles.viewBtn, { backgroundColor: theme.accent }]}
-                onPress={() => handleViewLead(lead.lead_id)}
+                onPress={() => setViewingLead(lead)}
               >
                 <Text style={styles.viewBtnText}>
                   View Lead Details
@@ -340,8 +367,51 @@ export default function ManagerLeads() {
           </Pressable>
         </Modal>
       )}
-    </SafeAreaView>
+      {viewingLead && (
+        <ViewModal
+          lead={viewingLead}
+          theme={theme}
+          onClose={() => setViewingLead(null)}
+          onFollowUp={() => {
+            setViewingLead(null);
+            fetchLeads(true);
+          }}
+        />
+      )}
+        <View style={[styles.bottomNav, { backgroundColor: theme.navBg }]}>
+    {tabs.map((tab) => {
+      const isActive = tab.key === 'Leads';
+
+      return (
+        <TouchableOpacity
+          key={tab.key}
+          style={styles.navItem}
+          onPress={() => {
+            if (tab.key !== 'Leads') {
+              router.replace(`/manager/${tab.key.toLowerCase()}` as any);
+            }
+          }}
+        >
+          <Ionicons
+            name={isActive ? (tab.icon as any) : (tab.iconOff as any)}
+            size={22}
+            color={isActive ? theme.accent : theme.subText}
+          />
+          <Text
+            style={[
+              styles.navLabel,
+              { color: isActive ? theme.accent : theme.subText },
+            ]}
+          >
+            {tab.key}
+          </Text>
+        </TouchableOpacity>
+      );
+    })}
+  </View>
+      </SafeAreaView>
   );
+       
 }
 
 const styles = StyleSheet.create({
@@ -371,7 +441,21 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: 8, marginTop: 4, justifyContent: 'space-between' },
   backdropOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
   pickerMenu: { width: '80%', borderRadius: 16, padding: 20 },
-  pickerOption: { paddingVertical: 12, borderRadius: 10, marginBottom: 8, alignItems: 'center' }
+  pickerOption: { paddingVertical: 12, borderRadius: 10, marginBottom: 8, alignItems: 'center' },
+  bottomNav: {
+  flexDirection: 'row',
+  paddingVertical: 10,
+  borderTopWidth: 1,
+  borderTopColor: '#00000010' },
+  navItem: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 2,
+  },
+  navLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+  },
 });
 
 const modal = StyleSheet.create({
