@@ -8,6 +8,7 @@ const bcrypt = require('bcrypt');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const ExcelJS = require('exceljs');
 const nodemailer = require('nodemailer');
+const RateLimit = require('express-rate-limit');
 const cron = require('node-cron');
 
 const app = express();
@@ -16,23 +17,23 @@ app.use(cors());
 
 // ── RATE LIMITING ─────────────────────────────────────────────────────────────
 const generalLimiter = RateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100,                  // max 100 requests per window
+    windowMs: 15 * 60 * 1000,
+    max: 100,
     message: { success: false, message: 'Too many requests, please try again later.' },
     standardHeaders: true,
     legacyHeaders: false,
 });
 
 const authLimiter = RateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 20,                   // stricter limit for auth routes
+    windowMs: 15 * 60 * 1000,
+    max: 20,
     message: { success: false, message: 'Too many login attempts, please try again later.' },
     standardHeaders: true,
     legacyHeaders: false,
 });
 
-app.use(generalLimiter);   // apply to all routes
-app.use('/auth', authLimiter); // stricter on login
+app.use(generalLimiter);
+app.use('/auth', authLimiter);
 
 // ── REQUEST LOGGER ────────────────────────────────────────────────────────────
 app.use((req, res, next) => {
@@ -198,16 +199,11 @@ app.post("/auth/login", async (req, res) => {
     const { email, password } = req.body;
     console.log("🔐 Login attempt for:", email);
     try {
-        console.log('🔍 Querying user from DB...');
         const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
-        console.log('👤 User found:', result.rows.length > 0 ? 'YES' : 'NO');
         if (result.rows.length === 0) return res.status(401).json({ message: 'Invalid credentials' });
         const user = result.rows[0];
-        console.log('🔑 Comparing password for user_id:', user.user_id, 'role:', user.role);
         const validPassword = await bcrypt.compare(password, user.password_hash);
-        console.log('🔑 Password valid:', validPassword);
         if (!validPassword) return res.status(401).json({ message: 'Invalid credentials' });
-        console.log('🔏 Signing JWT, JWT_SECRET present:', !!process.env.JWT_SECRET);
         const token = jwt.sign(
             { id: user.user_id, role: user.role, team_id: user.team_id },
             process.env.JWT_SECRET,
@@ -217,7 +213,6 @@ app.post("/auth/login", async (req, res) => {
         res.json({ token, role: user.role });
     } catch (err) {
         console.error('❌ Login error:', err.message);
-        console.error('Stack:', err.stack);
         res.status(500).json({ message: err.message });
     }
 });
@@ -234,9 +229,7 @@ app.get('/leads', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM leads ORDER BY lead_id');
         res.json({ success: true, data: result.rows });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 app.get('/leads/:id', async (req, res) => {
@@ -244,60 +237,30 @@ app.get('/leads/:id', async (req, res) => {
         const result = await pool.query('SELECT * FROM leads WHERE lead_id = $1', [req.params.id]);
         if (result.rows.length === 0) return res.status(404).json({ success: false, message: 'Lead not found' });
         res.json({ success: true, data: result.rows[0] });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 app.post('/leads', async (req, res) => {
-    const {
-        name, email, company, title, phone_number,
-        customer_intent,
-        assigned_team_id,
-        primary_interest,
-        selected_interests,
-        additional_notes,
-        scanned_by,
-        scanned_by_name,
-    } = req.body;
-
+    const { name, email, company, title, phone_number, customer_intent, assigned_team_id, primary_interest, selected_interests, additional_notes, scanned_by, scanned_by_name } = req.body;
     const error = validateLead(name, email, company, title, phone_number);
     if (error) return res.status(400).json({ success: false, message: error });
-
     try {
         const existing = await pool.query('SELECT lead_id FROM leads WHERE email = $1', [email]);
-        if (existing.rows.length > 0) {
-            return res.status(409).json({ success: false, code: 'DUPLICATE_EMAIL', message: 'A lead with this email already exists' });
-        }
-    } catch (err) {
-        return res.status(500).json({ success: false, message: err.message });
-    }
-
+        if (existing.rows.length > 0) return res.status(409).json({ success: false, code: 'DUPLICATE_EMAIL', message: 'A lead with this email already exists' });
+    } catch (err) { return res.status(500).json({ success: false, message: err.message }); }
     let teamId = assigned_team_id;
     if (!teamId) {
         const interestsList = Array.isArray(selected_interests) ? selected_interests : [];
         teamId = resolveTeamId(primary_interest, interestsList);
-        console.log(`🏷 Server resolved team: ${teamId} (primary: "${primary_interest}", selected: [${interestsList}])`);
-    } else {
-        console.log(`🏷 Frontend provided team: ${teamId}`);
     }
-
     try {
         const result = await pool.query(
             `INSERT INTO leads (name, email, company, title, phone_number, customer_intent, assigned_team_id, ai_notes, scanned_by, scanned_by_name)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-             RETURNING lead_id`,
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING lead_id`,
             [name, email, company, title, phone_number, customer_intent || null, teamId, additional_notes || null, scanned_by || null, scanned_by_name || null]
         );
-        res.status(201).json({
-            success: true,
-            message: 'Lead created successfully',
-            lead_id: result.rows[0].lead_id,
-            assigned_team_id: teamId,
-        });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
+        res.status(201).json({ success: true, message: 'Lead created successfully', lead_id: result.rows[0].lead_id, assigned_team_id: teamId });
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 app.put('/leads/:id', async (req, res) => {
@@ -311,9 +274,7 @@ app.put('/leads/:id', async (req, res) => {
         );
         if (result.rowCount === 0) return res.status(404).json({ success: false, message: 'Lead not found' });
         res.json({ success: true, message: 'Lead updated successfully' });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 app.delete('/leads/:id', async (req, res) => {
@@ -321,9 +282,7 @@ app.delete('/leads/:id', async (req, res) => {
         const result = await pool.query('DELETE FROM leads WHERE lead_id = $1', [req.params.id]);
         if (result.rowCount === 0) return res.status(404).json({ success: false, message: 'Lead not found' });
         res.json({ success: true, message: 'Lead deleted successfully' });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 // ── INTEREST CATEGORIES ───────────────────────────────────────────────────────
@@ -331,24 +290,18 @@ app.get('/interest_categories', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM interest_categories');
         res.json({ success: true, data: result.rows });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 app.get('/lead_interest_categories/:lead_id', async (req, res) => {
     try {
         const result = await pool.query(
-            `SELECT ic.category_id, ic.category_name
-             FROM lead_interest_categories lic
-             JOIN interest_categories ic ON lic.category_id = ic.category_id
-             WHERE lic.lead_id = $1`,
+            `SELECT ic.category_id, ic.category_name FROM lead_interest_categories lic
+             JOIN interest_categories ic ON lic.category_id = ic.category_id WHERE lic.lead_id = $1`,
             [req.params.lead_id]
         );
         res.json({ success: true, data: result.rows });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 app.post('/lead_interest_categories', async (req, res) => {
@@ -358,18 +311,14 @@ app.post('/lead_interest_categories', async (req, res) => {
     try {
         await pool.query('INSERT INTO lead_interest_categories (lead_id, category_id) VALUES ($1, $2)', [lead_id, category_id]);
         res.status(201).json({ success: true, message: 'Interest added' });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 app.delete('/lead_interest_categories/:lead_id/:category_id', async (req, res) => {
     try {
         await pool.query('DELETE FROM lead_interest_categories WHERE lead_id=$1 AND category_id=$2', [req.params.lead_id, req.params.category_id]);
         res.json({ success: true, message: 'Interest removed' });
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 // ── TEAMS ─────────────────────────────────────────────────────────────────────
@@ -410,10 +359,7 @@ app.delete('/teams/:id', async (req, res) => {
 // ── MANAGER ME ────────────────────────────────────────────────────────────────
 app.get('/manager/me', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
-        const result = await pool.query(
-            'SELECT user_id, full_name, email, role, team_id FROM users WHERE user_id = $1',
-            [req.user.id]
-        );
+        const result = await pool.query('SELECT user_id, full_name, email, role, team_id FROM users WHERE user_id = $1', [req.user.id]);
         if (result.rows.length === 0) return res.status(404).json({ success: false, message: 'User not found' });
         res.json({ success: true, data: result.rows[0] });
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
@@ -423,7 +369,6 @@ app.get('/manager/me', authenticateToken, authorizeRoles('admin', 'manager'), as
 app.get('/manager/dashboard', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
         const teamId = req.user.team_id;
-        console.log('👤 Manager dashboard — user:', req.user.id, 'team_id:', teamId);
         const totalLeads = await pool.query('SELECT COUNT(*) FROM leads WHERE assigned_team_id = $1', [teamId]);
         const qualified  = await pool.query("SELECT COUNT(*) FROM leads WHERE assigned_team_id = $1 AND status='QUALIFIED'", [teamId]);
         const contacted  = await pool.query("SELECT COUNT(*) FROM leads WHERE assigned_team_id = $1 AND status='CONTACTED'", [teamId]);
@@ -446,35 +391,19 @@ app.get('/manager/dashboard', authenticateToken, authorizeRoles('admin', 'manage
 
 app.get('/manager/leads', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     const { status } = req.query;
-
     try {
         const teamId = req.user.team_id;
-
         let query = `
-            SELECT 
-                leads.*,
-                COALESCE(lf.followup_status, 'pending') AS followup_status
-            FROM leads
-            LEFT JOIN lead_followups lf ON leads.lead_id = lf.lead_id
+            SELECT leads.*, COALESCE(lf.followup_status, 'pending') AS followup_status
+            FROM leads LEFT JOIN lead_followups lf ON leads.lead_id = lf.lead_id
             WHERE assigned_team_id = $1
         `;
-
         const params = [teamId];
-
-        if (status && status !== 'ALL') {
-            params.push(status);
-            query += ` AND leads.status = $${params.length}`;
-        }
-
+        if (status && status !== 'ALL') { params.push(status); query += ` AND leads.status = $${params.length}`; }
         query += ' ORDER BY leads.created_at DESC';
-
         const result = await pool.query(query, params);
-
         res.json({ success: true, data: result.rows });
-
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 app.get('/manager/emails', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
@@ -514,9 +443,7 @@ app.get('/export/leads/excel', authenticateToken, authorizeRoles('admin', 'manag
         res.setHeader('Content-Disposition', 'attachment; filename=leads.xlsx');
         await workbook.xlsx.write(res);
         res.end();
-    } catch (err) {
-        res.status(500).json({ success: false, message: err.message });
-    }
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
@@ -530,58 +457,23 @@ app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-// MANAGER ROUTES TO PERFORM FOLLOWUPS ON LEADS// (For Follow-Up Buttons)
 app.get('/manager/followup/:leadId', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
-  try {
-    const result = await pool.query(
-      `SELECT *
-       FROM lead_followups
-       WHERE lead_id = $1`,
-      [req.params.leadId]
-    );
-
-    res.json({
-      success: true,
-      data: result.rows[0] || null
-    });
-
-  } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: err.message
-    });
-  }
+    try {
+        const result = await pool.query('SELECT * FROM lead_followups WHERE lead_id = $1', [req.params.leadId]);
+        res.json({ success: true, data: result.rows[0] || null });
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-//Update Leads Followup Status//
-app.put('/manager/followup/:leadId', authenticateToken, authorizeRoles('admin','manager'), async (req, res) => {
-  const { followup_status } = req.body;
-  const leadId = req.params.leadId;
-
-  try {
-   await pool.query(`
-    INSERT INTO lead_followups (
-        lead_id,
-        followup_status,
-        updated_at
-    )
-    VALUES ($1, $2, NOW())
-    ON CONFLICT (lead_id)
-    DO UPDATE SET 
-        followup_status = EXCLUDED.followup_status,
-        updated_at = NOW()
-    `, [leadId, followup_status]);
-    res.json({
-      success: true,
-      message: "Follow-up updated"
-    });
-
-  } catch (err) {
-    res.status(500).json({
-      success: false,
-      message: err.message
-    });
-  }
+app.put('/manager/followup/:leadId', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
+    const { followup_status } = req.body;
+    try {
+        await pool.query(`
+            INSERT INTO lead_followups (lead_id, followup_status, updated_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (lead_id) DO UPDATE SET followup_status = EXCLUDED.followup_status, updated_at = NOW()
+        `, [req.params.leadId, followup_status]);
+        res.json({ success: true, message: 'Follow-up updated' });
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 // ── ADMIN ROUTES ──────────────────────────────────────────────────────────────
@@ -725,33 +617,22 @@ app.post('/analyze-lead/:id', async (req, res) => {
         if (leadResult.rows.length === 0) return res.status(404).json({ success: false, message: 'Lead not found' });
 
         const lead = leadResult.rows[0];
-
         const interestsResult = await pool.query(
             `SELECT ic.category_name FROM lead_interest_categories lic
-             JOIN interest_categories ic ON lic.category_id = ic.category_id
-             WHERE lic.lead_id = $1`,
+             JOIN interest_categories ic ON lic.category_id = ic.category_id WHERE lic.lead_id = $1`,
             [lead.lead_id]
         );
         const interests = interestsResult.rows.map(r => r.category_name).join(', ') || 'Not specified';
-
-        const othersInterestText = lead.customer_intent?.includes('Others:')
-            ? lead.customer_intent.split('Others:')[1]?.trim()
-            : null;
-
-        const allInterests = [
-            interests !== 'Not specified' ? interests : '',
-            othersInterestText || '',
-        ].filter(Boolean).join(', ') || 'Not specified';
+        const othersInterestText = lead.customer_intent?.includes('Others:') ? lead.customer_intent.split('Others:')[1]?.trim() : null;
+        const allInterests = [interests !== 'Not specified' ? interests : '', othersInterestText || ''].filter(Boolean).join(', ') || 'Not specified';
 
         if (!lead.assigned_team_id) {
             const resolvedTeam = resolveTeamId(null, interests.split(', '));
             await pool.query('UPDATE leads SET assigned_team_id=$1 WHERE lead_id=$2', [resolvedTeam, lead.lead_id]);
             lead.assigned_team_id = resolvedTeam;
-            console.log(`🔧 Fixed missing team assignment: lead ${lead.lead_id} → team ${resolvedTeam}`);
         }
 
         const repNotes = lead.ai_notes || null;
-
         const prompt = `
 You are a sales analyst for Dell Technologies at a booth event.
 Analyze this lead and determine their purchase intent and best follow-up action.
@@ -765,8 +646,6 @@ Lead Details:
 ${allInterests !== interests && allInterests !== 'Not specified' ? `- Other Interests Mentioned: ${allInterests}` : ''}
 ${repNotes ? `- Rep's Additional Notes: ${repNotes}` : ''}
 
-Use ALL of the above to give a personalised and accurate follow-up suggestion.
-
 Return ONLY valid JSON in this exact format, no extra text:
 {
   "intent": "Low" or "Medium" or "High",
@@ -778,15 +657,12 @@ Return ONLY valid JSON in this exact format, no extra text:
 
         let aiData;
         let usedFallback = false;
-
         try {
             const result   = await model.generateContent(prompt);
             const response = result.response.text().replace(/```json|```/g, '').trim();
             aiData = JSON.parse(response);
             const validIntents = ['Low', 'Medium', 'High'];
-            if (!validIntents.includes(aiData.intent) || typeof aiData.confidence !== 'number' || typeof aiData.follow_up_required !== 'boolean') {
-                throw new Error('Invalid AI response format');
-            }
+            if (!validIntents.includes(aiData.intent) || typeof aiData.confidence !== 'number' || typeof aiData.follow_up_required !== 'boolean') throw new Error('Invalid AI response format');
             console.log('✅ Gemini AI analysis successful');
         } catch (aiError) {
             console.warn('⚠️ Gemini failed, using rule-based fallback:', aiError.message);
@@ -804,16 +680,39 @@ Return ONLY valid JSON in this exact format, no extra text:
 
         const statusDisplay = { 'QUALIFIED': 'Ready for Follow-up', 'CONTACTED': 'Review for Follow-up', 'NEW': 'No Follow-up Needed' };
 
-        // Update lead with AI results
         await pool.query(
             'UPDATE leads SET ai_notes=$1, status=$2, confidence_score=$3, follow_up_required=$4 WHERE lead_id=$5',
             [aiData.notes || null, status, aiData.confidence, aiData.follow_up_required, parseInt(lead.lead_id)]
         );
 
-        // Update lead status for email builder
         lead.status = status;
 
-        
+        // ── Schedule follow-up email via DB (cron will pick up) ───────────────
+        try {
+            await pool.query(
+                `INSERT INTO lead_followups (lead_id, followup_action, followup_status, due_date, scheduled_at, email_subject, notes)
+                 VALUES ($1, 'Automated Follow-up Email', 'pending', NOW() + INTERVAL '24 hours', NOW() + INTERVAL '24 hours', $2, $3)
+                 ON CONFLICT (lead_id) DO NOTHING`,
+                [lead.lead_id, `Your Dell Technologies Follow-up — ${interests}`, buildFollowUpEmail(lead, aiData, interests)]
+            );
+            console.log(`📅 Follow-up email scheduled for lead ${lead.lead_id} in 24h`);
+        } catch (scheduleErr) {
+            console.error('⚠️ Could not schedule follow-up email:', scheduleErr.message);
+        }
+
+        res.json({
+            success: true,
+            lead,
+            used_fallback: usedFallback,
+            ai_analysis: {
+                intent:             aiData.intent,
+                confidence:         aiData.confidence,
+                follow_up_required: aiData.follow_up_required,
+                follow_up_status:   statusDisplay[status],
+                notes:              aiData.notes,
+                assigned_team_id:   lead.assigned_team_id,
+            }
+        });
 
     } catch (error) {
         console.error('AI analysis error:', error);
@@ -821,189 +720,88 @@ Return ONLY valid JSON in this exact format, no extra text:
     }
 });
 
-// ── MANUAL FOLLOW-UP EMAIL ROUTE (kept for manual triggers) ──────────────────
-app.post(
-    '/send-followup/:id',
-    authenticateToken,
-    authorizeRoles('admin', 'manager'),
-    async (req, res) => {
-        try {
-            const { followupDate } = req.body;
-
-            if (!followupDate) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Follow-up date is required.'
-                });
-            }
-
-            const leadResult = await pool.query(
-                'SELECT * FROM leads WHERE lead_id = $1',
-                [req.params.id]
-            );
-
-            if (leadResult.rows.length === 0) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'Lead not found'
-                });
-            }
-
-            const lead = leadResult.rows[0];
-
-            const aiData = {
-                intent:
-                    lead.status === 'QUALIFIED'
-                        ? 'High'
-                        : lead.status === 'CONTACTED'
-                        ? 'Medium'
-                        : 'Low',
-
-                notes:
-                    lead.ai_notes ||
-                    'Thank you for visiting our booth.'
-            };
-
-            const interests = 'Dell Technologies solutions';
-
-            const emailSubject = 'Your Dell Technologies Follow-up';
-
-            // Store scheduled follow-up
-            const followup = await pool.query(
-                `
-                INSERT INTO lead_followups
-                (
-                    lead_id,
-                    followup_action,
-                    followup_status,
-                    due_date,
-                    scheduled_at,
-                    email_subject,
-                    notes
-                )
-                VALUES
-                (
-                    $1,
-                    $2,
-                    'pending',
-                    $3,
-                    $4,
-                    $5,
-                    $6
-                )
-                RETURNING followup_id
-                `,
-                [
-                    lead.lead_id,
-                    'Manual Follow-up Email',
-                    followupDate.split('T')[0],
-                    followupDate,
-                    emailSubject,
-                    buildFollowUpEmail(lead, aiData, interests)
-                ]
-            );
-
-            // Activity log
-            await pool.query(
-                `
-                INSERT INTO lead_activity_logs
-                (
-                    lead_id,
-                    activity_type,
-                    activity_description
-                )
-                VALUES
-                (
-                    $1,
-                    'FOLLOWUP_SCHEDULED',
-                    $2
-                )
-                `,
-                [
-                    lead.lead_id,
-                    `Manager scheduled follow-up email for ${followupDate}`
-                ]
-            );
-
-            res.json({
-                success: true,
-                message: 'Follow-up scheduled successfully.',
-                followup_id: followup.rows[0].followup_id
-            });
-
-        } catch (err) {
-            console.error(err);
-
-            res.status(500).json({
-                success: false,
-                message: err.message
-            });
-        }
-    }
-);
-cron.schedule('* * * * *', async () => {
+// ── MANUAL FOLLOW-UP EMAIL ROUTE ──────────────────────────────────────────────
+app.post('/send-followup/:id', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
+        const { followupDate } = req.body;
 
-        const followups = await pool.query(`
-            SELECT *
-            FROM lead_followups
-            WHERE
-                followup_status = 'pending'
-                AND scheduled_at <= NOW()
-        `);
+        const leadResult = await pool.query('SELECT * FROM leads WHERE lead_id = $1', [req.params.id]);
+        if (leadResult.rows.length === 0) return res.status(404).json({ success: false, message: 'Lead not found' });
 
-        for (const followup of followups.rows) {
+        const lead = leadResult.rows[0];
+        const aiData = {
+            intent: lead.status === 'QUALIFIED' ? 'High' : lead.status === 'CONTACTED' ? 'Medium' : 'Low',
+            notes:  lead.ai_notes || 'Thank you for visiting our booth.',
+        };
+        const interests = lead.customer_intent || 'Dell Technologies solutions';
+        const emailSubject = 'Your Dell Technologies Follow-up';
 
-            const leadResult = await pool.query(
-                'SELECT * FROM leads WHERE lead_id = $1',
-                [followup.lead_id]
-            );
+        // Use provided date or default to 24h from now
+        const scheduledAt = followupDate || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
-            if (leadResult.rows.length === 0) continue;
-
-            const lead = leadResult.rows[0];
-
-            await transporter.sendMail({
-                from: `"Boothflow" <${process.env.EMAIL_USER}>`,
-                to: lead.email,
-                subject: followup.email_subject,
-                text: followup.notes
-            });
-
-            await pool.query(`
-                UPDATE lead_followups
-                SET
-                    followup_status = 'done',
-                    sent_at = NOW()
-                WHERE followup_id = $1
-            `, [followup.followup_id]);
-
-            await pool.query(`
-                INSERT INTO lead_activity_logs
-                (
-                    lead_id,
-                    activity_type,
-                    activity_description
-                )
-                VALUES
-                (
-                    $1,
-                    'EMAIL_SENT',
-                    'Scheduled follow-up email sent'
-                )
-            `, [lead.lead_id]);
-
-            console.log(`✅ Scheduled email sent to ${lead.email}`);
+        // Check if already scheduled
+        const existing = await pool.query(
+            `SELECT COUNT(*) FROM lead_followups WHERE lead_id=$1 AND followup_status='pending'`,
+            [lead.lead_id]
+        );
+        if (+existing.rows[0].count > 0) {
+            return res.status(409).json({ success: false, message: 'Follow-up already scheduled for this lead.' });
         }
+
+        const followup = await pool.query(
+            `INSERT INTO lead_followups (lead_id, followup_action, followup_status, due_date, scheduled_at, email_subject, notes)
+             VALUES ($1, 'Manual Follow-up Email', 'pending', $2, $3, $4, $5) RETURNING followup_id`,
+            [lead.lead_id, scheduledAt.split('T')[0], scheduledAt, emailSubject, buildFollowUpEmail(lead, aiData, interests)]
+        );
+
+        await pool.query(
+            `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'FOLLOWUP_SCHEDULED', $2)`,
+            [lead.lead_id, `Manager scheduled follow-up email for ${scheduledAt}`]
+        );
+
+        res.json({ success: true, message: 'Follow-up scheduled for 24h later', followup_id: followup.rows[0].followup_id });
 
     } catch (err) {
-        console.error('Cron Error:', err);
+        console.error(err);
+        res.status(500).json({ success: false, message: err.message });
     }
 });
+
+// ── CRON JOB — runs every minute, sends pending emails ───────────────────────
+cron.schedule('* * * * *', async () => {
+    try {
+        const followups = await pool.query(`
+            SELECT * FROM lead_followups WHERE followup_status = 'pending' AND scheduled_at <= NOW()
+        `);
+        for (const followup of followups.rows) {
+            const leadResult = await pool.query('SELECT * FROM leads WHERE lead_id = $1', [followup.lead_id]);
+            if (leadResult.rows.length === 0) continue;
+            const lead = leadResult.rows[0];
+            try {
+                await transporter.sendMail({
+                    from:    `"Boothflow" <${process.env.EMAIL_USER}>`,
+                    to:      lead.email,
+                    subject: followup.email_subject,
+                    text:    followup.notes
+                });
+                await pool.query(`UPDATE lead_followups SET followup_status='done', sent_at=NOW() WHERE followup_id=$1`, [followup.followup_id]);
+                await pool.query(
+                    `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'EMAIL_SENT', 'Scheduled follow-up email sent via cron')`,
+                    [lead.lead_id]
+                );
+                console.log(`✅ Cron sent email to ${lead.email}`);
+            } catch (emailErr) {
+                console.error(`❌ Failed to send to ${lead.email}:`, emailErr.message);
+            }
+        }
+    } catch (err) {
+        console.error('❌ Cron job error:', err.message);
+    }
+});
+
 // ── GLOBAL ERROR HANDLER ──────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
     console.error('❌ Unhandled error:', err.message);
-    console.error('Stack:', err.stack);
     res.status(500).json({ success: false, message: err.message });
 });
 
