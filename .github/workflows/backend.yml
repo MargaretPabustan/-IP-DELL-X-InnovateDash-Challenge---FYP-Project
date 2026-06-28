@@ -27,7 +27,7 @@ jobs:
         run: npm install -g @postman/cli
 
       - name: Start backend server
-        working-directory: ./backend
+        working-directory: ./
         run: node app.js &
 
       - name: Wait for server to start
@@ -35,7 +35,7 @@ jobs:
 
       - name: Run Postman tests
         shell: pwsh
-        working-directory: ./backend
+        working-directory: ./
         run: .\scripts\run-tests.ps1
 
       - name: Stop server
