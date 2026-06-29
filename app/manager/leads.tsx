@@ -22,6 +22,7 @@ function getStatusColor(status: string) {
     case 'QUALIFIED': return '#22c55e';
     case 'CONTACTED': return '#f59e0b';
     case 'CLOSED':    return '#6366f1';
+    case 'NEW':       return '#ef4444';
     default:          return '#ef4444';
   }
 }
@@ -67,12 +68,11 @@ type Lead = {
 function ViewModal({ lead, onClose, theme, onFollowUp }: { lead: Lead; onClose: () => void; theme: any; onFollowUp: (id: number) => void }) {
   const statusColor = getStatusColor(lead.status);
   const confidencePct = lead.confidence_score ? `${Math.round(lead.confidence_score * 100)}%` : '—';
-  const [sending, setSending] = useState(false);
 
   return (
     <Modal visible animationType="slide" transparent>
       <Pressable style={modal.backdrop} onPress={onClose}>
-        <Pressable style={[modal.sheet, { backgroundColor: theme.card }]} onPress={() => {}}>
+        <Pressable style={[modal.sheet, { backgroundColor: theme.card }]} onPress={(e) => e.stopPropagation()}>
           <View style={modal.handle} />
           <View style={modal.leadHeader}>
             <View style={[modal.avatar, { backgroundColor: statusColor }]}>
@@ -178,8 +178,6 @@ export default function ManagerLeads() {
     }
   }, [filter]);
 
-  useEffect(() => { fetchLeads(); }, [fetchLeads]);
-  
   useFocusEffect(
     useCallback(() => {
       fetchLeads(true);
@@ -248,7 +246,7 @@ export default function ManagerLeads() {
         </ScrollView>
       </View>
 
-      {/* LEADS LIST (OPTIMIZED VIA FLATLIST) */}
+      {/* LEADS LIST */}
       <View style={{ flex: 1 }}>
         {loading ? (
           <View style={styles.centered}><ActivityIndicator size="large" color={theme.navy || '#0f172a'} /></View>
@@ -268,77 +266,78 @@ export default function ManagerLeads() {
               </View>
             }
             renderItem={({ item: lead }) => {
-  // 1. Fallback constants to prevent style object exceptions
-  const accentColor = theme.accent || '#6366f1'; 
-  const statusColor = getStatusColor(lead.status) || '#ef4444';
-  const statusPillBg = statusColor.startsWith('#') ? `${statusColor}18` : 'rgba(239, 68, 68, 0.1)';
+              const accentColor = theme.accent || '#6366f1'; 
+              const currentStatus = lead.status ? lead.status.toUpperCase() : 'NEW';
+              const statusColor = getStatusColor(currentStatus);
+              const statusPillBg = statusColor.startsWith('#') ? `${statusColor}18` : 'rgba(239, 68, 68, 0.1)';
 
-  return (
-    <TouchableOpacity 
-      style={[styles.card, { backgroundColor: theme.card }]} 
-      onPress={() => setViewingLead(lead)}
-      activeOpacity={0.8}
-    >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
-        <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
-        
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.leadName, { color: theme.text }]} numberOfLines={1}>{lead.name}</Text>
-          <Text style={[styles.leadSub, { color: theme.subText }]} numberOfLines={1}>{lead.title} · {lead.company}</Text>
-          <Text style={[styles.leadEmail, { color: theme.subText }]} numberOfLines={1}>{lead.email}</Text>
-          <Text style={[styles.leadTime, { color: theme.subText }]}>{formatDate(lead.created_at)}</Text>
-        </View>
-
-        <View style={{ alignItems: 'flex-end', gap: 4 }}>
-          <View style={[styles.statusPill, { backgroundColor: statusPillBg }]}>
-            <Text style={[styles.statusPillText, { color: statusColor }]}>
-              {lead.status?.toUpperCase() || 'NEW'}
-            </Text>
-          </View>
-          <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: theme.bg }}>
-            <Text style={{ fontSize: 10, color: theme.subText }}>
-              follow-up: {lead.followup_status || 'pending'}
-            </Text>
-          </View>
-        </View>
-        <Ionicons name="chevron-forward" size={16} color={theme.subText} />
-      </View>
-
-                {/* BUTTONS ROW - Safely using fallback theme styles so they ALWAYS show */}
-                <View style={styles.actions}>
-                  <TouchableOpacity
-                    style={[styles.editBtn, { borderColor: accentColor }]}
-                    onPress={() => {
-                      setEditingLead(lead);
-                      setStatusPickerVisible(true);
-                    }}
-                  >
-                    <Text style={[styles.editBtnText, { color: accentColor }]}>
-                      Edit Follow-Up Status
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.viewBtn, { backgroundColor: accentColor }]}
+              return (
+                <View style={[styles.card, { backgroundColor: theme.card }]}>
+                  {/* UPPER TAP TARGET (CARD BODY) */}
+                  <TouchableOpacity 
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }} 
                     onPress={() => setViewingLead(lead)}
+                    activeOpacity={0.7}
                   >
-                    <Text style={styles.viewBtnText}>
-                      View Lead Details
-                    </Text>
+                    <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+                    
+                    <View style={{ flex: 1 }}>
+                      <Text style={[styles.leadName, { color: theme.text }]} numberOfLines={1}>{lead.name}</Text>
+                      <Text style={[styles.leadSub, { color: theme.subText }]} numberOfLines={1}>{lead.title} · {lead.company}</Text>
+                      <Text style={[styles.leadEmail, { color: theme.subText }]} numberOfLines={1}>{lead.email}</Text>
+                      <Text style={[styles.leadTime, { color: theme.subText }]}>{formatDate(lead.created_at)}</Text>
+                    </View>
+
+                    <View style={{ alignItems: 'flex-end', gap: 4 }}>
+                      <View style={[styles.statusPill, { backgroundColor: statusPillBg }]}>
+                        <Text style={[styles.statusPillText, { color: statusColor }]}>
+                          {currentStatus}
+                        </Text>
+                      </View>
+                      <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: theme.bg }}>
+                        <Text style={{ fontSize: 10, color: theme.subText }}>
+                          follow-up: {lead.followup_status || 'pending'}
+                        </Text>
+                      </View>
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={theme.subText} />
                   </TouchableOpacity>
+
+                  {/* BOTTOM BUTTONS ROW */}
+                  <View style={[styles.actions, { marginTop: 12 }]}>
+                    <TouchableOpacity
+                      style={[styles.editBtn, { borderColor: accentColor }]}
+                      onPress={() => {
+                        setEditingLead(lead);
+                        setStatusPickerVisible(true);
+                      }}
+                    >
+                      <Text style={[styles.editBtnText, { color: accentColor }]}>
+                        Edit Follow-Up Status
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.viewBtn, { backgroundColor: accentColor }]}
+                      onPress={() => setViewingLead(lead)}
+                    >
+                      <Text style={styles.viewBtnText}>
+                        View Lead Details
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </TouchableOpacity>
-            );
-          }}
+              );
+            }}
           />
         )}
       </View>
 
       {/* STATUS PICKER MODAL */}
       {statusPickerVisible && (
-        <Modal transparent animationType="fade">
+        <Modal transparent animationType="fade" visible={statusPickerVisible}>
           <Pressable style={styles.backdropOverlay} onPress={() => setStatusPickerVisible(false)}>
-            <Pressable style={[styles.pickerMenu, { backgroundColor: theme.card }]} onPress={() => {}}>
+            <Pressable style={[styles.pickerMenu, { backgroundColor: theme.card }]} onPress={(e) => e.stopPropagation()}>
               <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 12, color: theme.text }}>
                 Update Follow-Up Status
               </Text>
@@ -410,10 +409,10 @@ const styles = StyleSheet.create({
   filterRow: { borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
   pill: { borderRadius: 20, borderWidth: 1.5, paddingHorizontal: 14, paddingVertical: 6 },
   pillText: { fontSize: 12, fontWeight: '600' },
-  content: { padding: 16, gap: 10 },
+  content: { padding: 16, gap: 14 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 80, gap: 12 },
   emptyText: { fontSize: 15, fontWeight: '600' },
-  card: { borderRadius: 14, padding: 14, gap: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
+  card: { borderRadius: 14, padding: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
   leadName: { fontSize: 14, fontWeight: '700' },
   leadSub: { fontSize: 12, marginTop: 2 },
@@ -425,7 +424,7 @@ const styles = StyleSheet.create({
   editBtnText: { fontSize: 12, fontWeight: '600' },
   viewBtn: { flex: 1, borderRadius: 8, paddingVertical: 10, justifyContent: 'center', alignItems: 'center' },
   viewBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
-  actions: { flexDirection: 'row', gap: 8, marginTop: 4, justifyContent: 'space-between' },
+  actions: { flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
   backdropOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
   pickerMenu: { width: '80%', borderRadius: 16, padding: 20 },
   pickerOption: { paddingVertical: 12, borderRadius: 10, marginBottom: 8, alignItems: 'center' },
