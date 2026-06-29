@@ -5,12 +5,10 @@ export default function ManagerLayout() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="leads" />
-      <Stack.Screen name="teams" />
       <Stack.Screen name="activity" />
       <Stack.Screen name="export" />
       <Stack.Screen name="dashboard" />
-       <Stack.Screen name="emails" />
-
+      <Stack.Screen name="emails" />
     </Stack>
   );
 }
