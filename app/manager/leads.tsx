@@ -3,7 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import {
   View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
   StatusBar, Platform, ScrollView, ActivityIndicator,
-  RefreshControl, Modal, Pressable, Alert,
+  RefreshControl, Modal, Pressable, Alert, FlatList
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -44,7 +44,6 @@ function formatDate(iso: string) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-// ✅ Added 'ALL' options cleanly to manage list queries effectively
 const FILTERS = ['ALL', 'NEW', 'CONTACTED', 'QUALIFIED', 'CLOSED'];
 const STATUS_OPTIONS = ['pending', 'done', 'cancelled'];
 
@@ -69,19 +68,6 @@ function ViewModal({ lead, onClose, theme, onFollowUp }: { lead: Lead; onClose: 
   const statusColor = getStatusColor(lead.status);
   const confidencePct = lead.confidence_score ? `${Math.round(lead.confidence_score * 100)}%` : '—';
   const [sending, setSending] = useState(false);
-
-  const handleFollowUp = async () => {
-    setSending(true);
-    try {
-      const headers = await getAuthHeaders();
-      const res = await fetch(`${BACKEND_URL}/send-followup/${lead.lead_id}`, { method: 'POST', headers });
-      if (!res.ok) throw new Error('Failed');
-      Alert.alert('Success', 'Follow-up email scheduled for 24 hours.');
-      onFollowUp(lead.lead_id);
-    } catch {
-      Alert.alert('Error', 'Failed to schedule follow-up.');
-    } finally { setSending(false); }
-  };
 
   return (
     <Modal visible animationType="slide" transparent>
@@ -129,6 +115,7 @@ function ViewModal({ lead, onClose, theme, onFollowUp }: { lead: Lead; onClose: 
     </Modal>
   );
 }
+
 const tabs = [
   { key: 'Dashboard', icon: 'grid', iconOff: 'grid-outline' },
   { key: 'Leads', icon: 'people', iconOff: 'people-outline' },
@@ -136,6 +123,7 @@ const tabs = [
   { key: 'Emails', icon: 'mail', iconOff: 'mail-outline' },
   { key: 'Export', icon: 'download', iconOff: 'download-outline' },
 ];
+
 export default function ManagerLeads() {
   const router = useRouter();
   const { theme } = useAppTheme();
@@ -143,72 +131,60 @@ export default function ManagerLeads() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [filter, setFilter] = useState('ALL'); // ✅ Defaulting clean to 'ALL'
+  const [filter, setFilter] = useState('ALL');
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [statusPickerVisible, setStatusPickerVisible] = useState(false);
   const [viewingLead, setViewingLead] = useState<Lead | null>(null);
 
-  // ✅ Client-side fallback filter logic safely standardizing cases
   const filteredLeads = leads.filter(l => {
     if (filter === 'ALL') return true;
     return l.status?.toUpperCase() === filter.toUpperCase();
   });
 
   const fetchLeads = useCallback(async (isRefresh = false) => {
-  if (isRefresh) setRefreshing(true);
-  else setLoading(true);
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
 
-  try {
-    const headers = await getAuthHeaders();
+    try {
+      const headers = await getAuthHeaders();
+      const statusQuery = filter === 'ALL' ? '' : `?status=${filter.toUpperCase()}`;
+      const res = await fetch(`${BACKEND_URL}/manager/leads${statusQuery}`, { headers });
+      const data = await res.json();
 
-    const statusQuery =
-      filter === 'ALL' ? '' : `?status=${filter.toUpperCase()}`;
-
-    const res = await fetch(
-      `${BACKEND_URL}/manager/leads${statusQuery}`,
-      { headers }
-    );
-
-    const data = await res.json();
-
-    if (data.success) {
-      const normalized = (data.data || []).map((l: any) => ({
-        lead_id: l.lead_id,
-        name: l.name,
-        title: l.title,
-        company: l.company,
-        email: l.email,
-        phone_number: l.phone_number,
-        customer_intent: l.customer_intent,
-        status: l.status ?? 'NEW',
-        ai_notes: l.ai_notes ?? '',
-        confidence_score: l.confidence_score ?? null,
-        scanned_by_name: l.scanned_by_name ?? null,
-        created_at: l.created_at,
-        followup_status: l.followup_status ?? 'pending',
-
-        // 🔥 IMPORTANT: NEVER default this blindly
-       follow_up_required: l.follow_up_required ?? false,
-      }));
-
-      setLeads(normalized);
+      if (data.success) {
+        const normalized = (data.data || []).map((l: any) => ({
+          lead_id: l.lead_id,
+          name: l.name,
+          title: l.title,
+          company: l.company,
+          email: l.email,
+          phone_number: l.phone_number,
+          customer_intent: l.customer_intent,
+          status: l.status ?? 'NEW',
+          ai_notes: l.ai_notes ?? '',
+          confidence_score: l.confidence_score ?? null,
+          scanned_by_name: l.scanned_by_name ?? null,
+          created_at: l.created_at,
+          followup_status: l.followup_status ?? 'pending',
+          follow_up_required: l.follow_up_required ?? false,
+        }));
+        setLeads(normalized);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-  } catch (err) {
-    console.error(err);
-  } finally {
-    setLoading(false);
-    setRefreshing(false);
-  }
-}, [filter]);
+  }, [filter]);
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
-      useFocusEffect(
-        useCallback(() => {
-          fetchLeads(true);
-        }, [fetchLeads])
-      );
-
-   
+  
+  useFocusEffect(
+    useCallback(() => {
+      fetchLeads(true);
+    }, [fetchLeads])
+  );
 
   const handleSelectStatus = async (status: string) => {
     if (!editingLead) return;
@@ -272,76 +248,91 @@ export default function ManagerLeads() {
         </ScrollView>
       </View>
 
-      {/* LEADS LIST */}
-      <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: 24 }]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchLeads(true)} tintColor={theme.navy || '#0f172a'} />}
-      >
+      {/* LEADS LIST (OPTIMIZED VIA FLATLIST) */}
+      <View style={{ flex: 1 }}>
         {loading ? (
           <View style={styles.centered}><ActivityIndicator size="large" color={theme.navy || '#0f172a'} /></View>
-        ) : filteredLeads.length === 0 ? (
-          <View style={styles.centered}>
-            <Ionicons name="document-text-outline" size={48} color={theme.subText} />
-            <Text style={[styles.emptyText, { color: theme.subText }]}>No leads found for this category</Text>
+        ) : (
+          <FlatList
+            data={filteredLeads}
+            keyExtractor={(item) => item.lead_id.toString()}
+            contentContainerStyle={[styles.content, { paddingBottom: 24 }]}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl refreshing={refreshing} onRefresh={() => fetchLeads(true)} tintColor={theme.navy || '#0f172a'} />
+            }
+            ListEmptyComponent={
+              <View style={styles.centered}>
+                <Ionicons name="document-text-outline" size={48} color={theme.subText} />
+                <Text style={[styles.emptyText, { color: theme.subText }]}>No leads found for this category</Text>
+              </View>
+            }
+            renderItem={({ item: lead }) => {
+  // 1. Fallback constants to prevent style object exceptions
+  const accentColor = theme.accent || '#6366f1'; 
+  const statusColor = getStatusColor(lead.status) || '#ef4444';
+  const statusPillBg = statusColor.startsWith('#') ? `${statusColor}18` : 'rgba(239, 68, 68, 0.1)';
+
+  return (
+    <TouchableOpacity 
+      style={[styles.card, { backgroundColor: theme.card }]} 
+      onPress={() => setViewingLead(lead)}
+      activeOpacity={0.8}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 }}>
+        <View style={[styles.statusDot, { backgroundColor: statusColor }]} />
+        
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.leadName, { color: theme.text }]} numberOfLines={1}>{lead.name}</Text>
+          <Text style={[styles.leadSub, { color: theme.subText }]} numberOfLines={1}>{lead.title} · {lead.company}</Text>
+          <Text style={[styles.leadEmail, { color: theme.subText }]} numberOfLines={1}>{lead.email}</Text>
+          <Text style={[styles.leadTime, { color: theme.subText }]}>{formatDate(lead.created_at)}</Text>
+        </View>
+
+        <View style={{ alignItems: 'flex-end', gap: 4 }}>
+          <View style={[styles.statusPill, { backgroundColor: statusPillBg }]}>
+            <Text style={[styles.statusPillText, { color: statusColor }]}>
+              {lead.status?.toUpperCase() || 'NEW'}
+            </Text>
           </View>
-        ) : filteredLeads.map(lead => (
-          <TouchableOpacity 
-            key={lead.lead_id} 
-            style={[styles.card, { backgroundColor: theme.card }]} 
-            onPress={() => setViewingLead(lead)}
-            activeOpacity={0.8}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, width: '100%' }}>
-              <View style={[styles.statusDot, { backgroundColor: getStatusColor(lead.status) }]} />
-              
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.leadName, { color: theme.text }]} numberOfLines={1}>{lead.name}</Text>
-                <Text style={[styles.leadSub, { color: theme.subText }]} numberOfLines={1}>{lead.title} · {lead.company}</Text>
-                <Text style={[styles.leadEmail, { color: theme.subText }]} numberOfLines={1}>{lead.email}</Text>
-                <Text style={[styles.leadTime, { color: theme.subText }]}>{formatDate(lead.created_at)}</Text>
-              </View>
+          <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: theme.bg }}>
+            <Text style={{ fontSize: 10, color: theme.subText }}>
+              follow-up: {lead.followup_status || 'pending'}
+            </Text>
+          </View>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={theme.subText} />
+      </View>
 
-              <View style={{ alignItems: 'flex-end', gap: 4 }}>
-                <View style={[styles.statusPill, { backgroundColor: getStatusColor(lead.status) + '18' }]}>
-                  <Text style={[styles.statusPillText, { color: getStatusColor(lead.status) }]}>
-                    {lead.status?.toUpperCase()}
-                  </Text>
+                {/* BUTTONS ROW - Safely using fallback theme styles so they ALWAYS show */}
+                <View style={styles.actions}>
+                  <TouchableOpacity
+                    style={[styles.editBtn, { borderColor: accentColor }]}
+                    onPress={() => {
+                      setEditingLead(lead);
+                      setStatusPickerVisible(true);
+                    }}
+                  >
+                    <Text style={[styles.editBtnText, { color: accentColor }]}>
+                      Edit Follow-Up Status
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.viewBtn, { backgroundColor: accentColor }]}
+                    onPress={() => setViewingLead(lead)}
+                  >
+                    <Text style={styles.viewBtnText}>
+                      View Lead Details
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-                <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: theme.bg }}>
-                  <Text style={{ fontSize: 10, color: theme.subText }}>
-                    follow-up: {lead.followup_status || 'pending'}
-                  </Text>
-                </View>
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={theme.subText} />
-            </View>
-
-            <View style={styles.actions}>
-              <TouchableOpacity
-                style={[styles.editBtn, { borderColor: theme.accent }]}
-                onPress={() => {
-                  setEditingLead(lead);
-                  setStatusPickerVisible(true);
-                }}
-              >
-                <Text style={[styles.editBtnText, { color: theme.accent }]}>
-                  Edit Follow-Up Status
-                </Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.viewBtn, { backgroundColor: theme.accent }]}
-                onPress={() => setViewingLead(lead)}
-              >
-                <Text style={styles.viewBtnText}>
-                  View Lead Details
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+            );
+          }}
+          />
+        )}
+      </View>
 
       {/* STATUS PICKER MODAL */}
       {statusPickerVisible && (
@@ -367,6 +358,7 @@ export default function ManagerLeads() {
           </Pressable>
         </Modal>
       )}
+
       {viewingLead && (
         <ViewModal
           lead={viewingLead}
@@ -378,40 +370,35 @@ export default function ManagerLeads() {
           }}
         />
       )}
-        <View style={[styles.bottomNav, { backgroundColor: theme.navBg }]}>
-          {tabs.map((tab) => {
-            const isActive = tab.key === 'Leads';
 
-            return (
-              <TouchableOpacity
-                key={tab.key}
-                style={styles.navItem}
-                onPress={() => {
-                  if (tab.key !== 'Leads') {
-                    router.replace(`/manager/${tab.key.toLowerCase()}` as any);
-                  }
-                }}
-              >
-                <Ionicons
-                  name={isActive ? (tab.icon as any) : (tab.iconOff as any)}
-                  size={22}
-                  color={isActive ? theme.accent : theme.subText}
-                />
-                <Text
-                  style={[
-                    styles.navLabel,
-                    { color: isActive ? theme.accent : theme.subText },
-                  ]}
-                >
-                  {tab.key}
-                </Text>
-        </TouchableOpacity>
-      );
-    })}
-  </View>
-  </SafeAreaView>
+      {/* BOTTOM NAV BAR */}
+      <View style={[styles.bottomNav, { backgroundColor: theme.navBg }]}>
+        {tabs.map((tab) => {
+          const isActive = tab.key === 'Leads';
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              style={styles.navItem}
+              onPress={() => {
+                if (tab.key !== 'Leads') {
+                  router.replace(`/manager/${tab.key.toLowerCase()}` as any);
+                }
+              }}
+            >
+              <Ionicons
+                name={isActive ? (tab.icon as any) : (tab.iconOff as any)}
+                size={22}
+                color={isActive ? theme.accent : theme.subText}
+              />
+              <Text style={[styles.navLabel, { color: isActive ? theme.accent : theme.subText }]}>
+                {tab.key}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </SafeAreaView>
   );
-       
 }
 
 const styles = StyleSheet.create({
@@ -424,7 +411,7 @@ const styles = StyleSheet.create({
   pill: { borderRadius: 20, borderWidth: 1.5, paddingHorizontal: 14, paddingVertical: 6 },
   pillText: { fontSize: 12, fontWeight: '600' },
   content: { padding: 16, gap: 10 },
-  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12 },
+  centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 80, gap: 12 },
   emptyText: { fontSize: 15, fontWeight: '600' },
   card: { borderRadius: 14, padding: 14, gap: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
   statusDot: { width: 8, height: 8, borderRadius: 4 },
@@ -442,20 +429,9 @@ const styles = StyleSheet.create({
   backdropOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
   pickerMenu: { width: '80%', borderRadius: 16, padding: 20 },
   pickerOption: { paddingVertical: 12, borderRadius: 10, marginBottom: 8, alignItems: 'center' },
-  bottomNav: {
-  flexDirection: 'row',
-  paddingVertical: 10,
-  borderTopWidth: 1,
-  borderTopColor: '#00000010' },
-  navItem: {
-    flex: 1,
-    alignItems: 'center',
-    gap: 2,
-  },
-  navLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-  },
+  bottomNav: { flexDirection: 'row', paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#00000010' },
+  navItem: { flex: 1, alignItems: 'center', gap: 2 },
+  navLabel: { fontSize: 10, fontWeight: '600' },
 });
 
 const modal = StyleSheet.create({
@@ -472,8 +448,6 @@ const modal = StyleSheet.create({
   fieldLabel: { fontSize: 11, fontWeight: '700', color: '#999', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 10, marginBottom: 3 },
   fieldValue: { fontSize: 13, fontWeight: '500', lineHeight: 20 },
   modalBtns: { flexDirection: 'row', gap: 10, marginTop: 16 },
-  followUpBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, borderRadius: 10, paddingVertical: 13 },
-  followUpBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   closeBtn: { flex: 1, borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
   closeBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
 });
