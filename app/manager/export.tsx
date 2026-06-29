@@ -42,48 +42,76 @@ export default function ManagerExport() {
   };
 
   const downloadExcel = async () => {
-  setDownloadLoading(true);
+    setDownloadLoading(true);
 
-  try {
-    const token = await SecureStore.getItemAsync("token");
+    try {
+      const token = await SecureStore.getItemAsync("token");
+      const fileName = `leads-${Date.now()}.xlsx`;
+      
+      // On Android, saving to documentDirectory makes it much more permanent and visible 
+      // to system intent systems than cacheDirectory.
+      const directory = Platform.OS === 'android' ? FileSystem.documentDirectory : FileSystem.cacheDirectory;
+      const fileUri = `${directory}${fileName}`;
 
-    const fileUri =
-      FileSystem.cacheDirectory + `leads-${Date.now()}.xlsx`;
-
-    const result = await FileSystem.downloadAsync(
-      `${BACKEND_URL}/export/leads/excel`,
-      fileUri,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-
-    const available = await Sharing.isAvailableAsync();
-
-    if (!available) {
-      Alert.alert(
-        "Sharing unavailable",
-        "This device does not support file sharing."
+      const result = await FileSystem.downloadAsync(
+        `${BACKEND_URL}/export/leads/excel`,
+        fileUri,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
       );
-      return;
+
+      // Verify the native sharing module is accessible
+      const available = await Sharing.isAvailableAsync();
+
+      if (!available) {
+        Alert.alert(
+          "Sharing unavailable",
+          "This device does not support file sharing systems."
+        );
+        return;
+      }
+
+      // Explicit Android layout optimization
+      if (Platform.OS === 'android') {
+        Alert.alert(
+          "🎉 Export Success",
+          `File "${fileName}" downloaded successfully. Choose an option below to view or save it.`,
+          [
+            {
+              text: "Open / Share File",
+              onPress: async () => {
+                await Sharing.shareAsync(result.uri, {
+                  mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                  dialogTitle: "Open Exported Leads",
+                  UTI: "org.openxmlformats.spreadsheetml.sheet",
+                });
+              }
+            },
+            {
+              text: "Cancel",
+              style: "cancel"
+            }
+          ]
+        );
+      } else {
+        // Standard iOS Share Sheet behavior
+        await Sharing.shareAsync(result.uri, {
+          mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          dialogTitle: "Export Leads",
+          UTI: "org.openxmlformats.spreadsheetml.sheet",
+        });
+      }
+
+    } catch (err) {
+      console.error(err);
+      Alert.alert("Error", "Excel export failed. Verify your server endpoint is active.");
+    } finally {
+      setDownloadLoading(false);
     }
-
-    await Sharing.shareAsync(result.uri, {
-      mimeType:
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      dialogTitle: "Export Leads",
-      UTI: "org.openxmlformats.spreadsheetml.sheet",
-    });
-
-  } catch (err) {
-    console.error(err);
-    Alert.alert("Error", "Excel export failed.");
-  } finally {
-    setDownloadLoading(false);
-  }
-};
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
