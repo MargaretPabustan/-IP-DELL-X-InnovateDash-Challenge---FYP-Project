@@ -11,6 +11,17 @@ import * as SecureStore from 'expo-secure-store';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
+interface ActivityLog {
+  activity_id: string | number;
+  activity_type: 'EMAIL_SENT' | 'FOLLOWUP_SENT' | string;
+  lead_name?: string;
+  company?: string;
+  activity_description?: string;
+  created_at: string;
+  followup_id?: string | null;
+  followup_status?: string | null;
+}
+
 async function getAuthHeaders() {
   const token = await SecureStore.getItemAsync('token');
   return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
@@ -20,7 +31,7 @@ export default function ManagerActivity() {
   const router    = useRouter();
   const { theme } = useAppTheme();
 
-  const [logs,       setLogs]       = useState<any[]>([]);
+  const [logs,       setLogs]       = useState<ActivityLog[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -58,11 +69,11 @@ export default function ManagerActivity() {
   const handleCancelFollowup = async (followupId: string) => {
     Alert.alert(
       "Cancel Followup",
-      "Are you sure you want to permanently delete this followup record?",
+      "Are you sure you want to permanently cancel this scheduled followup record?",
       [
         { text: "No", style: "cancel" },
         {
-          text: "Yes, Remove",
+          text: "Yes, Cancel",
           style: "destructive",
           onPress: async () => {
             try {
@@ -74,7 +85,7 @@ export default function ManagerActivity() {
               });
               const data = await res.json();
               if (data.success) {
-                Alert.alert("Deleted", "Followup removed successfully.");
+                Alert.alert("Cancelled", "Followup status updated successfully.");
                 fetchLogs(true);
               } else {
                 Alert.alert("Error", data.message || "Failed to cancel follow-up.");
@@ -105,13 +116,14 @@ export default function ManagerActivity() {
     }
   };
 
-  const renderLogItem = ({ item: log }: { item: any }) => {
+  const renderLogItem = ({ item: log }: { item: ActivityLog }) => {
     const color = getActivityColor(log.activity_type);
     
-    // Normalized checking definitions to guarantee button visibility matching 'PENDING' data variants
     const hasFollowupId = log.followup_id !== null && log.followup_id !== undefined && log.followup_id !== '';
-    const isPending = log.followup_status?.toString().trim().toLowerCase() === 'pending';
-    const hasActiveFollowup = hasFollowupId && isPending;
+    const statusCleaned = log.followup_status?.toString().trim().toLowerCase();
+    
+    const isPending = statusCleaned === 'pending';
+    const isCancelled = statusCleaned === 'cancelled';
 
     return (
       <View style={[styles.card, { backgroundColor: theme.card }]}>
@@ -128,14 +140,23 @@ export default function ManagerActivity() {
             {new Date(log.created_at).toLocaleString('en-SG')}
           </Text>
 
-          {hasActiveFollowup && (
+          {/* Active Cancel Trigger Button */}
+          {hasFollowupId && isPending && log.followup_id && (
             <TouchableOpacity 
               style={styles.cancelBtn} 
-              onPress={() => handleCancelFollowup(log.followup_id)}
+              onPress={() => handleCancelFollowup(log.followup_id!)}
             >
               <Ionicons name="close-circle" size={14} color="#ef4444" />
               <Text style={styles.cancelBtnText}>Cancel Followup</Text>
             </TouchableOpacity>
+          )}
+
+          {/* Persistent Cancelled History Indicator */}
+          {hasFollowupId && isCancelled && (
+            <View style={[styles.cancelBtn, { borderColor: 'transparent', backgroundColor: '#ef444408', marginTop: 10 }]}>
+              <Ionicons name="ban" size={14} color="#94a3b8" />
+              <Text style={[styles.cancelBtnText, { color: '#94a3b8' }]}>Cancelled</Text>
+            </View>
           )}
         </View>
       </View>
@@ -164,7 +185,7 @@ export default function ManagerActivity() {
         <FlatList
           data={logs}
           renderItem={renderLogItem}
-          keyExtractor={(item) => item.activity_id.toString()}
+          keyExtractor={(item, index) => item.activity_id ? item.activity_id.toString() : index.toString()}
           contentContainerStyle={[styles.content, { paddingBottom: 24 }]}
           showsVerticalScrollIndicator={false}
           refreshControl={
