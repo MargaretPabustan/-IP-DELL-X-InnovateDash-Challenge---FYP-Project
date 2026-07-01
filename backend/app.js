@@ -479,6 +479,7 @@ app.get('/export/leads/excel', authenticateToken, authorizeRoles('admin', 'manag
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 // 1. GET ACTIVITY LOGS WITH LINKED ACTIVE FOLLOW-UP TRACKING
+// 1. GET ACTIVITY LOGS WITH LINKED FOLLOW-UP TRACKING
 app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
         const { role, team_id } = req.user; 
@@ -489,14 +490,13 @@ app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager
                 la.activity_type, 
                 la.activity_description, 
                 la.created_at, 
+                la.lead_id, -- Crucial for tracking the cancellation target
                 l.name AS lead_name, 
                 l.company,
                 f.followup_id,
                 f.followup_status
             FROM lead_activity_logs la 
             LEFT JOIN leads l ON la.lead_id = l.lead_id
-            -- CRITICAL FIX: Only join follow-ups that match the active or cancelled context, 
-            -- preventing old historical logs from inheriting unrelated new follow-ups.
             LEFT JOIN lead_followups f ON l.lead_id = f.lead_id
         `;
         
@@ -510,7 +510,7 @@ app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager
         query += ` ORDER BY la.created_at DESC LIMIT 100 `;
 
         const result = await pool.query(query, queryParams);
-        res.json({ success: true, data:  result.rows });
+        res.json({ success: true, data: result.rows });
         
     } catch (err) { 
         console.error("Error fetching activity logs:", err);
@@ -518,26 +518,24 @@ app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager
     }
 });
 
-// 2. SOFT-DELETE/UPDATE FOLLOW-UP TO 'CANCELLED'
+// 2. CANCEL FOLLOW-UP VIA TARGET SELECTION
 app.post('/manager/followup/cancel', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
-    const { followup_id } = req.body;
+    const { followup_id, lead_id } = req.body;
     
-    if (!followup_id) {
-        return res.status(400).json({ success: false, message: 'Missing followup_id parameter' });
-    }
-
     try {
         await pool.query('BEGIN');
 
-        // FIX: Update status to 'cancelled' instead of completely purging the row
-        await pool.query(`
-            UPDATE lead_followups 
-            SET followup_status = 'cancelled', updated_at = NOW() 
-            WHERE followup_id = $1
-        `, [followup_id]);
+        if (followup_id) {
+            await pool.query(`UPDATE lead_followups SET followup_status = 'cancelled', updated_at = NOW() WHERE followup_id = $1`, [followup_id]);
+        } else if (lead_id) {
+            await pool.query(`UPDATE lead_followups SET followup_status = 'cancelled', updated_at = NOW() WHERE lead_id = $1`, [lead_id]);
+        } else {
+            await pool.query('ROLLBACK');
+            return res.status(400).json({ success: false, message: 'Missing parameters' });
+        }
 
         await pool.query('COMMIT');
-        res.json({ success: true, message: 'Followup changed to cancelled.' });
+        res.json({ success: true, message: 'Followup cancelled successfully.' });
     } catch (err) { 
         await pool.query('ROLLBACK');
         console.error("Error updating database followup entry:", err);

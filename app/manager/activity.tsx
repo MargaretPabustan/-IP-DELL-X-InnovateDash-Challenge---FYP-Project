@@ -13,12 +13,13 @@ const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
 interface ActivityLog {
   activity_id: string | number;
-  activity_type: 'EMAIL_SENT' | 'FOLLOWUP_SENT' | string;
+  activity_type: string;
+  lead_id: string | number;
   lead_name?: string;
   company?: string;
   activity_description?: string;
   created_at: string;
-  followup_id?: string | null;
+  followup_id?: string | number | null;
   followup_status?: string | null;
 }
 
@@ -66,10 +67,10 @@ export default function ManagerActivity() {
 
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
-  const handleCancelFollowup = async (followupId: string) => {
+  const handleCancelFollowup = async (log: ActivityLog) => {
     Alert.alert(
       "Cancel Followup",
-      "Are you sure you want to permanently cancel this scheduled followup record?",
+      "Are you sure you want to cancel the scheduled followup for this record?",
       [
         { text: "No", style: "cancel" },
         {
@@ -81,17 +82,20 @@ export default function ManagerActivity() {
               const res = await fetch(`${BACKEND_URL}/manager/followup/cancel`, {
                 method: 'POST',
                 headers,
-                body: JSON.stringify({ followup_id: followupId })
+                body: JSON.stringify({ 
+                  followup_id: log.followup_id || null,
+                  lead_id: log.lead_id 
+                })
               });
               const data = await res.json();
               if (data.success) {
                 Alert.alert("Cancelled", "Followup status updated successfully.");
                 fetchLogs(true);
               } else {
-                Alert.alert("Error", data.message || "Failed to cancel follow-up.");
+                Alert.alert("Error", data.message || "Failed to cancel.");
               }
             } catch (error) {
-              console.error("Cancel followup error:", error);
+              console.error("Cancel error:", error);
               Alert.alert("Error", "Network processing failed.");
             }
           }
@@ -101,29 +105,22 @@ export default function ManagerActivity() {
   };
 
   const getActivityIcon = (type: string) => {
-    switch (type) {
-      case 'EMAIL_SENT':    return 'mail-outline';
-      case 'FOLLOWUP_SENT': return 'checkmark-circle-outline';
-      default:              return 'pulse-outline';
-    }
+    const uType = type?.toUpperCase() || '';
+    if (uType.includes('EMAIL')) return 'mail-outline';
+    if (uType.includes('FOLLOWUP')) return 'calendar-outline';
+    return 'pulse-outline';
   };
 
   const getActivityColor = (type: string) => {
-    switch (type) {
-      case 'EMAIL_SENT':    return '#3b82f6';
-      case 'FOLLOWUP_SENT': return '#22c55e';
-      default:              return '#f59e0b';
-    }
+    const uType = type?.toUpperCase() || '';
+    if (uType.includes('EMAIL')) return '#3b82f6'; 
+    if (uType.includes('FOLLOWUP')) return '#22c55e'; 
+    return '#f59e0b'; 
   };
 
   const renderLogItem = ({ item: log }: { item: ActivityLog }) => {
     const color = getActivityColor(log.activity_type);
-    
-    const hasFollowupId = log.followup_id !== null && log.followup_id !== undefined && log.followup_id !== '';
-    const statusCleaned = log.followup_status?.toString().trim().toLowerCase();
-    
-    const isPending = statusCleaned === 'pending';
-    const isCancelled = statusCleaned === 'cancelled';
+    const isCancelled = log.followup_status?.toString().toLowerCase().trim() === 'cancelled';
 
     return (
       <View style={[styles.card, { backgroundColor: theme.card }]}>
@@ -137,22 +134,19 @@ export default function ManagerActivity() {
           </Text>
           <Text style={[styles.activityDesc, { color: theme.subText }]}>{log.activity_description}</Text>
           <Text style={[styles.activityTime, { color: theme.subText }]}>
-            {new Date(log.created_at).toLocaleString('en-SG')}
+            {log.created_at ? new Date(log.created_at).toLocaleString('en-SG') : '—'}
           </Text>
 
-          {/* Active Cancel Trigger Button */}
-          {hasFollowupId && isPending && log.followup_id && (
+          {/* Action button appears on ALL cards automatically */}
+          {!isCancelled ? (
             <TouchableOpacity 
               style={styles.cancelBtn} 
-              onPress={() => handleCancelFollowup(log.followup_id!)}
+              onPress={() => handleCancelFollowup(log)}
             >
               <Ionicons name="close-circle" size={14} color="#ef4444" />
               <Text style={styles.cancelBtnText}>Cancel Followup</Text>
             </TouchableOpacity>
-          )}
-
-          {/* Persistent Cancelled History Indicator */}
-          {hasFollowupId && isCancelled && (
+          ) : (
             <View style={[styles.cancelBtn, { borderColor: 'transparent', backgroundColor: '#ef444408', marginTop: 10 }]}>
               <Ionicons name="ban" size={14} color="#94a3b8" />
               <Text style={[styles.cancelBtnText, { color: '#94a3b8' }]}>Cancelled</Text>
