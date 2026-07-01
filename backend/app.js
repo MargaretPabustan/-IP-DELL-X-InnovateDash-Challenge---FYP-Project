@@ -445,23 +445,67 @@ app.get('/export/leads/excel', authenticateToken, authorizeRoles('admin', 'manag
         res.end();
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
-
+// UPDATED MANAGER ACTIVITY ROUTE
+// 1. GET ACTIVITY LOGS WITH LINKED FOLLOW-UP TRACKING
 app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
-        const result = await pool.query(`
-            SELECT la.activity_id, la.activity_type, la.activity_description, la.created_at, l.name AS lead_name, l.company
-            FROM lead_activity_logs la LEFT JOIN leads l ON la.lead_id = l.lead_id
-            ORDER BY la.created_at DESC LIMIT 100
-        `);
+        const { role, team_id } = req.user; 
+        
+        let query = `
+            SELECT 
+                la.activity_id, 
+                la.activity_type, 
+                la.activity_description, 
+                la.created_at, 
+                l.name AS lead_name, 
+                l.company,
+                f.followup_id,
+                f.followup_status
+            FROM lead_activity_logs la 
+            LEFT JOIN leads l ON la.lead_id = l.lead_id
+            LEFT JOIN lead_followups f ON l.lead_id = f.lead_id
+        `;
+        
+        const queryParams = [];
+
+        if (role === 'manager') {
+            query += ` WHERE l.assigned_team_id = $1 `;
+            queryParams.push(team_id);
+        }
+
+        query += ` ORDER BY la.created_at DESC LIMIT 100 `;
+
+        const result = await pool.query(query, queryParams);
         res.json({ success: true, data: result.rows });
-    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+        
+    } catch (err) { 
+        console.error("Error fetching activity logs:", err);
+        res.status(500).json({ success: false, message: err.message }); 
+    }
 });
 
-app.get('/manager/followup/:leadId', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
+// 2. DELETE/REMOVE FOLLOW-UP FROM DB ENTITIES PERMANENTLY
+app.post('/manager/followup/cancel', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
+    const { followup_id } = req.body;
+    
+    if (!followup_id) {
+        return res.status(400).json({ success: false, message: 'Missing followup_id parameter' });
+    }
+
     try {
-        const result = await pool.query('SELECT * FROM lead_followups WHERE lead_id = $1', [req.params.leadId]);
-        res.json({ success: true, data: result.rows[0] || null });
-    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+        // Start a SQL Transaction to ensure reliable absolute removal
+        await pool.query('BEGIN');
+
+        // Delete permanently from lead_followups matching your schema key rules
+        await pool.query(`DELETE FROM lead_followups WHERE followup_id = $1`, [followup_id]);
+
+        await pool.query('COMMIT');
+        res.json({ success: true, message: 'Followup permanently removed from the database.' });
+    } catch (err) { 
+        await pool.query('ROLLBACK');
+        console.error("Error destroying database followup entry:", err);
+        res.status(500).json({ success: false, message: err.message }); 
+    }
 });
 
 app.put('/manager/followup/:leadId', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
