@@ -24,6 +24,9 @@ jobs:
         working-directory: ./backend
         run: npm install
 
+      - name: Install Postman CLI
+        run: curl -o- "https://dl-cli.pstmn.io/install/linux64.sh" | sh
+
       - name: Start backend with Docker Compose
         working-directory: ./backend
         env:
@@ -36,7 +39,14 @@ jobs:
         run: docker compose up -d
 
       - name: Wait for server to start
-        run: sleep 15
+        run: sleep 20
+
+      - name: Check Docker Compose logs
+        if: always()
+        working-directory: ./backend
+        run: |
+          docker compose logs
+          docker ps -a
 
       - name: Health check
         run: curl -f http://localhost:3000/ || exit 1

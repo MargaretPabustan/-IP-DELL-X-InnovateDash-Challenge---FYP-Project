@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
+const helmet = require('helmet');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
@@ -12,8 +13,18 @@ const RateLimit = require('express-rate-limit');
 const cron = require('node-cron');
 
 const app = express();
+const allowedOrigins = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : [];
+app.use(helmet());
 app.use(express.json());
-app.use(cors());
+app.use(cors({
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+            return callback(null, true);
+        }
+        callback(new Error('CORS origin denied'));
+    },
+    credentials: true,
+}));
 
 // ── RATE LIMITING ─────────────────────────────────────────────────────────────
 const generalLimiter = RateLimit({
@@ -37,15 +48,20 @@ app.use('/auth', authLimiter);
 
 // ── REQUEST LOGGER ────────────────────────────────────────────────────────────
 app.use((req, res, next) => {
-    console.log(`📥 ${req.method} ${req.path}`, JSON.stringify(req.body || {}).substring(0, 200));
+    const safeBody = { ...req.body };
+    if (safeBody.password) safeBody.password = '[REDACTED]';
+    const requestData = JSON.stringify(safeBody || {}).substring(0, 200);
+    console.log('📥', req.method, req.path, requestData);
     next();
 });
 
-app.post('/debug-bcrypt', async (req, res) => {
-    const { password, hash } = req.body;
-    const result = await bcrypt.compare(password, hash);
-    res.json({ result });
-});
+if (process.env.NODE_ENV !== 'production') {
+    app.post('/debug-bcrypt', async (req, res) => {
+        const { password, hash } = req.body;
+        const result = await bcrypt.compare(password, hash);
+        res.json({ result });
+    });
+}
 
 // ── JWT AUTH MIDDLEWARE ───────────────────────────────────────────────────────
 function authenticateToken(req, res, next) {
@@ -67,9 +83,10 @@ function authorizeRoles(...roles) {
 }
 
 // ── SUPABASE CONNECTION ───────────────────────────────────────────────────────
+const sslOptions = process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false;
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: sslOptions,
 });
 pool.connect()
     .then(() => console.log('✅ Connected to Supabase PostgreSQL'))
@@ -171,7 +188,7 @@ function generateRuleBasedAnalysis(customerIntent, interests) {
 // ── VALIDATION ────────────────────────────────────────────────────────────────
 function validateLead(name, email, company, title, phone) {
     if (!name || !email || !company || !title || !phone) return 'All fields (name, email, company, title, phone) are required';
-    const emailRegex = /\S+@\S+\.\S+/;
+    const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
     if (!emailRegex.test(email)) return 'Invalid email format';
     if (phone.length < 8) return 'Phone number is too short';
     return null;
@@ -197,7 +214,7 @@ app.get('/', (req, res) => {
 // ── AUTH ──────────────────────────────────────────────────────────────────────
 app.post("/auth/login", async (req, res) => {
     const { email, password } = req.body;
-    console.log("🔐 Login attempt for:", email);
+    console.log("🔐 Login attempt");
     try {
         const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
         if (result.rows.length === 0) return res.status(401).json({ message: 'Invalid credentials' });
@@ -209,7 +226,7 @@ app.post("/auth/login", async (req, res) => {
             process.env.JWT_SECRET,
             { expiresIn: '8h' }
         );
-        console.log('✅ Login successful for:', email, 'role:', user.role);
+        console.log('✅ Login successful for user_id:', user.user_id, 'role:', user.role);
         res.json({ token, role: user.role });
     } catch (err) {
         console.error('❌ Login error:', err.message);
