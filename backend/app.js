@@ -95,7 +95,9 @@ pool.connect()
 // ── GEMINI SETUP ──────────────────────────────────────────────────────────────
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-console.log('GEMINI_API_KEY loaded:', process.env.GEMINI_API_KEY ? '✅ ' + process.env.GEMINI_API_KEY.substring(0, 8) + '...' : '❌ MISSING');
+if (!process.env.GEMINI_API_KEY) {
+    console.warn('❌ GEMINI_API_KEY is missing from environment configuration');
+}
 
 // ── EMAIL TRANSPORTER ─────────────────────────────────────────────────────────
 const transporter = nodemailer.createTransport({
@@ -188,9 +190,13 @@ function generateRuleBasedAnalysis(customerIntent, interests) {
 // ── VALIDATION ────────────────────────────────────────────────────────────────
 function validateLead(name, email, company, title, phone) {
     if (!name || !email || !company || !title || !phone) return 'All fields (name, email, company, title, phone) are required';
-    const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-    if (!emailRegex.test(email)) return 'Invalid email format';
-    if (phone.length < 8) return 'Phone number is too short';
+    if (typeof email !== 'string' || email.length > 254) return 'Invalid email format';
+    const atIndex = email.indexOf('@');
+    const dotIndex = email.lastIndexOf('.');
+    if (atIndex <= 0 || dotIndex <= atIndex + 1 || dotIndex === email.length - 1 || email.includes(' ')) {
+        return 'Invalid email format';
+    }
+    if (typeof phone !== 'string' || phone.length < 8 || phone.length > 25) return 'Phone number is invalid';
     return null;
 }
 
