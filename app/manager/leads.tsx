@@ -334,25 +334,65 @@ export default function ManagerLeads() {
       </View>
 
       {/* STATUS PICKER MODAL */}
-      {statusPickerVisible && (
-        <Modal transparent animationType="fade" visible={statusPickerVisible}>
-          <Pressable style={styles.backdropOverlay} onPress={() => setStatusPickerVisible(false)}>
-            <Pressable style={[styles.pickerMenu, { backgroundColor: theme.card }]} onPress={(e) => e.stopPropagation()}>
-              <Text style={{ fontSize: 16, fontWeight: '700', marginBottom: 12, color: theme.text }}>
-                Update Follow-Up Status
-              </Text>
-              {STATUS_OPTIONS.map((status) => (
-                <TouchableOpacity
-                  key={status}
-                  onPress={() => handleSelectStatus(status)}
-                  style={[styles.pickerOption, { backgroundColor: theme.bg }]}
+      {statusPickerVisible && editingLead && (
+        <Modal transparent animationType="slide" visible={statusPickerVisible}>
+          <Pressable style={modal.backdrop} onPress={() => setStatusPickerVisible(false)}>
+            <Pressable style={[modal.sheet, { backgroundColor: theme.card }]} onPress={(e) => e.stopPropagation()}>
+              <View style={modal.handle} />
+              
+              <View style={modal.leadHeader}>
+                <View style={[modal.avatar, { backgroundColor: getStatusColor(editingLead.status) }]}>
+                  <Ionicons name="create" size={22} color="#fff" />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[modal.leadName, { color: theme.text }]}>Update Follow-Up</Text>
+                  <Text style={[modal.leadSub, { color: theme.subText }]}>{editingLead.name} · {editingLead.company}</Text>
+                </View>
+              </View>
+
+              <View style={[modal.divider, { backgroundColor: theme.bg }]} />
+
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <Text style={modal.fieldLabel}>Select Progress Status</Text>
+                <View style={{ gap: 8, marginTop: 4 }}>
+                  {STATUS_OPTIONS.map((status) => {
+                    const isCurrent = editingLead.followup_status === status;
+                    return (
+                      <TouchableOpacity
+                        key={status}
+                        onPress={() => handleSelectStatus(status)}
+                        style={{
+                          paddingVertical: 14,
+                          paddingHorizontal: 16,
+                          borderRadius: 10,
+                          backgroundColor: theme.bg,
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          borderWidth: isCurrent ? 1.5 : 0,
+                          borderColor: theme.accent || '#6366f1'
+                        }}
+                      >
+                        <Text style={{ color: theme.text, fontWeight: '600' }}>
+                          {status}
+                        </Text>
+                        {isCurrent && (
+                          <Ionicons name="checkmark-circle" size={20} color={theme.accent || '#6366f1'} />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </ScrollView>
+
+              <View style={modal.modalBtns}>
+                <TouchableOpacity 
+                  onPress={() => setStatusPickerVisible(false)} 
+                  style={[modal.closeBtn, { backgroundColor: '#ef4444' }]}
                 >
-                  <Text style={{ color: theme.text, fontWeight: '600' }}>{status}</Text>
+                  <Text style={modal.closeBtnText}>Cancel</Text>
                 </TouchableOpacity>
-              ))}
-              <TouchableOpacity onPress={() => setStatusPickerVisible(false)} style={{ marginTop: 8, paddingVertical: 10, alignItems: 'center' }}>
-                <Text style={{ color: 'red', fontWeight: '600' }}>Cancel</Text>
-              </TouchableOpacity>
+              </View>
             </Pressable>
           </Pressable>
         </Modal>
@@ -425,9 +465,6 @@ const styles = StyleSheet.create({
   viewBtn: { flex: 1, borderRadius: 8, paddingVertical: 10, justifyContent: 'center', alignItems: 'center' },
   viewBtnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
   actions: { flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
-  backdropOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' },
-  pickerMenu: { width: '80%', borderRadius: 16, padding: 20 },
-  pickerOption: { paddingVertical: 12, borderRadius: 10, marginBottom: 8, alignItems: 'center' },
   bottomNav: { flexDirection: 'row', paddingVertical: 10, borderTopWidth: 1, borderTopColor: '#00000010' },
   navItem: { flex: 1, alignItems: 'center', gap: 2 },
   navLabel: { fontSize: 10, fontWeight: '600' },
