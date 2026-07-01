@@ -38,7 +38,6 @@ export default function EmailsScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
 
-  // Track component mounted status safely
   const isMounted = useRef(true);
 
   const [loading, setLoading] = useState(true);
@@ -51,13 +50,32 @@ export default function EmailsScreen() {
   const [followupTime, setFollowupTime] = useState(new Date());
   const [showTimePicker, setShowTimePicker] = useState(false);
 
+  // ➕ ADDED: State to store real-time tracking metrics fetched from the backend router
+  const [metrics, setMetrics] = useState({ sentCount: 0, sentThisWeek: 0, overdue: 0 });
+
   const fetchLeads = useCallback(async () => {
     try {
       const headers = await getAuthHeaders();
-      const res = await apiFetch("/manager/leads", headers);
+      
+      // ➕ ADDED: Upgraded fetching sequence to handle multiple route queries concurrently using Promise.all
+      // Added `.catch` fallbacks to isolate failures, keeping the app from crashing if metrics routes are not deployed yet
+      const [leadsRes, emailsRes] = await Promise.all([
+        apiFetch("/manager/leads", headers).catch(() => ({ success: false, data: [] })),
+        apiFetch("/manager/emails", headers).catch(() => ({ success: false, data: {} }))
+      ]);
 
-      if (isMounted.current && res && res.success) {
-        setLeads(res.data || []);
+      if (isMounted.current) {
+        if (leadsRes && leadsRes.success) {
+          setLeads(leadsRes.data || []);
+        }
+        // ➕ ADDED: Populates analytical summary state fields safely if endpoint array returns clean payload mapping data
+        if (emailsRes && emailsRes.success && emailsRes.data) {
+          setMetrics({
+            sentCount: emailsRes.data.sent?.length || 0,
+            sentThisWeek: emailsRes.data.sentThisWeek || 0,
+            overdue: emailsRes.data.overdue || 0
+          });
+        }
       }
     } catch (err) {
       console.log("Fetch error:", err);
@@ -72,8 +90,6 @@ export default function EmailsScreen() {
   useEffect(() => {
     isMounted.current = true;
 
-    // Defer the API initial fetch invocation slightly so Expo Router
-    // finishes its layout queue safely first.
     const timer = setTimeout(() => {
       fetchLeads();
     }, 0);
@@ -95,9 +111,7 @@ export default function EmailsScreen() {
       return;
     }
 
-    // combine selected date + selected time
     const scheduledDate = new Date(followupDate);
-
     scheduledDate.setHours(
       followupTime.getHours(),
       followupTime.getMinutes(),
@@ -123,6 +137,12 @@ export default function EmailsScreen() {
 
       if (response.ok && data.success) {
         Alert.alert("Success", data.message);
+        
+        // ➕ ADDED: UX enhancements to clear lead selection box to stop repetitive accidental submissions
+        setSelectedLead(null); 
+        
+        // ➕ ADDED: Forces UI component to sync background counts right after scheduling successfully
+        fetchLeads();          
       } else {
         Alert.alert("Error", data.message || "Failed to schedule follow-up.");
       }
@@ -148,6 +168,22 @@ export default function EmailsScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.navy} />
         }
       >
+        {/* ➕ ADDED: Visual KPI Dashboard Card blocks displaying analytical counts from state array context */}
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 10 }}>
+          <View style={{ flex: 1, backgroundColor: theme.card, padding: 12, borderRadius: 10 }}>
+            <Text style={{ fontSize: 10, fontWeight: '600', color: theme.subText }}>TOTAL SENT</Text>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: theme.text, marginTop: 4 }}>{metrics.sentCount}</Text>
+          </View>
+          <View style={{ flex: 1, backgroundColor: theme.card, padding: 12, borderRadius: 10 }}>
+            <Text style={{ fontSize: 10, fontWeight: '600', color: theme.subText }}>THIS WEEK</Text>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: theme.text, marginTop: 4 }}>{metrics.sentThisWeek}</Text>
+          </View>
+          <View style={{ flex: 1, backgroundColor: theme.card, padding: 12, borderRadius: 10 }}>
+            <Text style={{ fontSize: 10, fontWeight: '600', color: '#ff4d4d' }}>OVERDUE</Text>
+            <Text style={{ fontSize: 18, fontWeight: '700', color: '#ff4d4d', marginTop: 4 }}>{metrics.overdue}</Text>
+          </View>
+        </View>
+
         <Text style={[styles.sectionLabel, { color: theme.subText }]}>
           FOLLOW-UP EMAIL
         </Text>
@@ -206,7 +242,7 @@ export default function EmailsScreen() {
             <Text style={{ color: theme.subText }}>{selectedLead.status}</Text>
           </View>
         )}
-        {/* Follow-up Date */}
+        
         <Text style={{ color: theme.text, fontWeight: "700" }}>
           Follow-up Date
         </Text>
@@ -220,7 +256,7 @@ export default function EmailsScreen() {
             marginTop: 8,
           }}
         >
-          <Text>{followupDate.toDateString()}</Text>
+          <Text style={{ color: theme.text }}>{followupDate.toDateString()}</Text>
         </TouchableOpacity>
 
         {showDatePicker && (
@@ -234,7 +270,6 @@ export default function EmailsScreen() {
           />
         )}
 
-        {/* Follow-up Time */}
         <Text
           style={{
             marginTop: 15,
@@ -254,7 +289,7 @@ export default function EmailsScreen() {
             marginTop: 8,
           }}
         >
-          <Text>
+          <Text style={{ color: theme.text }}>
             {followupTime.toLocaleTimeString([], {
               hour: "2-digit",
               minute: "2-digit",
@@ -305,7 +340,7 @@ export default function EmailsScreen() {
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       <StatusBar barStyle="light-content" />
 
-      {/* TOP NAV */}
+      {/* ── TOP NAV BAR ────────────────────────────────────────────────────────── */}
       <View style={[styles.header, { backgroundColor: theme.navy }]}>
         <View>
           <Text style={styles.logoSub}>MANAGER PANEL</Text>
@@ -322,11 +357,12 @@ export default function EmailsScreen() {
           </TouchableOpacity>
         </View>
       </View>
+      {/* ──────────────────────────────────────────────────────────────────────── */}
 
-      {/* BODY */}
+      {/* BODY PLATFORM */}
       <View style={{ flex: 1 }}>{renderTab()}</View>
 
-      {/* BOTTOM NAV */}
+      {/* ── BOTTOM NAV BAR ─────────────────────────────────────────────────────── */}
       <View style={[styles.bottomNav, { backgroundColor: theme.navBg }]}>
         {tabs.map((tab) => {
           const isActive = tab.key === 'Emails';
@@ -353,6 +389,7 @@ export default function EmailsScreen() {
           );
         })}
       </View>
+      {/* ──────────────────────────────────────────────────────────────────────── */}
     </SafeAreaView>
   );
 }

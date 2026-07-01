@@ -411,8 +411,18 @@ app.get('/manager/emails', authenticateToken, authorizeRoles('admin', 'manager')
         const sent    = await pool.query("SELECT * FROM lead_activity_logs WHERE activity_type = 'EMAIL_SENT' ORDER BY created_at DESC");
         const weekly  = await pool.query("SELECT COUNT(*) FROM lead_activity_logs WHERE activity_type = 'EMAIL_SENT' AND created_at >= NOW() - INTERVAL '7 days'");
         const overdue = await pool.query("SELECT COUNT(*) FROM lead_followups WHERE followup_status = 'pending' AND due_date < CURRENT_DATE");
-        res.json({ success: true, data: { sent: sent.rows, sentThisWeek: weekly.rows[0].count, overdue: overdue.rows[0].count } });
-    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+        
+        res.json({ 
+            success: true, 
+            data: { 
+                sent: sent.rows, 
+                sentThisWeek: parseInt(weekly.rows[0].count, 10), 
+                overdue: parseInt(overdue.rows[0].count, 10) 
+            } 
+        });
+    } catch (err) { 
+        res.status(500).json({ success: false, message: err.message }); 
+    }
 });
 
 app.get('/manager/export/leads', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
@@ -775,22 +785,22 @@ app.post('/send-followup/:id', authenticateToken, authorizeRoles('admin', 'manag
         const lead = leadResult.rows[0];
         const aiData = {
             intent: lead.status === 'QUALIFIED' ? 'High' : lead.status === 'CONTACTED' ? 'Medium' : 'Low',
-            notes:  lead.ai_notes || 'Thank you for visiting our booth.',
+            notes:  lead.ai_notes || lead.AI_notes || 'Thank you for visiting our booth.',
         };
         const interests = lead.customer_intent || 'Dell Technologies solutions';
         const emailSubject = 'Your Dell Technologies Follow-up';
 
-        // Use provided date or default to 24h from now
         const scheduledAt = followupDate || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
-        // Check if email already sent (not just pending)
         const existing = await pool.query(
-            `SELECT COUNT(*) FROM lead_followups WHERE lead_id=$1 AND followup_status='done'`,
+            `SELECT followup_status FROM lead_followups WHERE lead_id = $1`,
             [lead.lead_id]
         );
-        if (+existing.rows[0].count > 0) {
-            return res.status(409).json({ success: false, message: 'Follow-up already scheduled for this lead.' });
+        if (existing.rows.length > 0 && existing.rows[0].followup_status === 'done') {
+            return res.status(409).json({ success: false, message: 'Follow-up already completed for this lead.' });
         }
+
+        const isUpdating = existing.rows.length > 0 && existing.rows[0].followup_status === 'pending';
 
         const followup = await pool.query(
             `INSERT INTO lead_followups (lead_id, followup_action, followup_status, due_date, scheduled_at, email_subject, notes)
@@ -806,12 +816,20 @@ app.post('/send-followup/:id', authenticateToken, authorizeRoles('admin', 'manag
             [lead.lead_id, scheduledAt.split('T')[0], scheduledAt, emailSubject, buildFollowUpEmail(lead, aiData, interests)]
         );
 
+        const logDescription = isUpdating 
+            ? `Manager updated/rescheduled follow-up email for ${scheduledAt}`
+            : `Manager scheduled follow-up email for ${scheduledAt}`;
+
         await pool.query(
             `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'FOLLOWUP_SCHEDULED', $2)`,
-            [lead.lead_id, `Manager scheduled follow-up email for ${scheduledAt}`]
+            [lead.lead_id, logDescription]
         );
 
-        res.json({ success: true, message: 'Follow-up scheduled for 24h later', followup_id: followup.rows[0].followup_id });
+        res.json({ 
+            success: true, 
+            message: `Follow-up successfully scheduled for ${new Date(scheduledAt).toLocaleString()}`, 
+            followup_id: followup.rows[0].followup_id 
+        });
 
     } catch (err) {
         console.error(err);
@@ -820,6 +838,7 @@ app.post('/send-followup/:id', authenticateToken, authorizeRoles('admin', 'manag
 });
 
 // ── CRON JOB — runs every minute, sends pending emails ───────────────────────
+// Queue Runner checking conditions every minute
 cron.schedule('* * * * *', async () => {
     try {
         const followups = await pool.query(`
@@ -830,24 +849,34 @@ cron.schedule('* * * * *', async () => {
             if (leadResult.rows.length === 0) continue;
             const lead = leadResult.rows[0];
             try {
-                await transporter.sendMail({
+                // Execute delivery request
+                const info = await transporter.sendMail({
                     from:    `"Boothflow" <${process.env.EMAIL_USER}>`,
                     to:      lead.email,
                     subject: followup.email_subject,
                     text:    followup.notes
                 });
+                
+                // Verify recipient address was accepted by server provider rules
+                if (info.rejected && info.rejected.length > 0) {
+                     await pool.query(`UPDATE lead_followups SET followup_status='cancelled', notes='Delivery bounced or rejected' WHERE followup_id=$1`, [followup.followup_id]);
+                     console.log(`❌ Server rejected destination address: ${lead.email}`);
+                     continue;
+                }
+
                 await pool.query(`UPDATE lead_followups SET followup_status='done', sent_at=NOW() WHERE followup_id=$1`, [followup.followup_id]);
+                
                 await pool.query(
                     `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'EMAIL_SENT', 'Scheduled follow-up email sent via cron')`,
                     [lead.lead_id]
                 );
-                console.log(`✅ Cron sent email to ${lead.email}`);
+                console.log(`✅ Cron confirmed delivery to ${lead.email}`);
             } catch (emailErr) {
-                console.error(`❌ Failed to send to ${lead.email}:`, emailErr.message);
+                console.error(`❌ Connection failed for ${lead.email}:`, emailErr.message);
             }
         }
     } catch (err) {
-        console.error('❌ Cron job error:', err.message);
+        console.error('❌ Queue execution error:', err.message);
     }
 });
 
