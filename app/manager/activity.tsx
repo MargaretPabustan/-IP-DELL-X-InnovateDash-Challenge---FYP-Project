@@ -32,8 +32,8 @@ export default function ManagerActivity() {
   const router    = useRouter();
   const { theme } = useAppTheme();
 
-  const [logs,       setLogs]       = useState<ActivityLog[]>([]);
-  const [loading,    setLoading]    = useState(true);
+  const [logs, setLogs] = useState<ActivityLog[]>([]);
+  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const tabs = [
@@ -120,6 +120,10 @@ export default function ManagerActivity() {
 
   const renderLogItem = ({ item: log }: { item: ActivityLog }) => {
     const color = getActivityColor(log.activity_type);
+    const uType = log.activity_type?.toUpperCase() || '';
+    
+    // Explicitly determine if this specific item represents an active followup card
+    const isFollowupType = uType.includes('FOLLOWUP') && log.followup_id !== null;
     const isCancelled = log.followup_status?.toString().toLowerCase().trim() === 'cancelled';
 
     return (
@@ -137,20 +141,22 @@ export default function ManagerActivity() {
             {log.created_at ? new Date(log.created_at).toLocaleString('en-SG') : '—'}
           </Text>
 
-          {/* Action button appears on ALL cards automatically */}
-          {!isCancelled ? (
-            <TouchableOpacity 
-              style={styles.cancelBtn} 
-              onPress={() => handleCancelFollowup(log)}
-            >
-              <Ionicons name="close-circle" size={14} color="#ef4444" />
-              <Text style={styles.cancelBtnText}>Cancel Followup</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={[styles.cancelBtn, { borderColor: 'transparent', backgroundColor: '#ef444408', marginTop: 10 }]}>
-              <Ionicons name="ban" size={14} color="#94a3b8" />
-              <Text style={[styles.cancelBtnText, { color: '#94a3b8' }]}>Cancelled</Text>
-            </View>
+          {/* Action button rendering isolated exclusively using strict boolean evaluations */}
+          {isFollowupType && (
+            !isCancelled ? (
+              <TouchableOpacity 
+                style={styles.cancelBtn} 
+                onPress={() => handleCancelFollowup(log)}
+              >
+                <Ionicons name="close-circle" size={14} color="#ef4444" />
+                <Text style={styles.cancelBtnText}>Cancel Followup</Text>
+              </TouchableOpacity>
+            ) : (
+              <View style={[styles.cancelBtn, { borderColor: 'transparent', backgroundColor: '#ef444408', marginTop: 10 }]}>
+                <Ionicons name="ban" size={14} color="#94a3b8" />
+                <Text style={[styles.cancelBtnText, { color: '#94a3b8' }]}>Cancelled</Text>
+              </View>
+            )
           )}
         </View>
       </View>
@@ -179,9 +185,11 @@ export default function ManagerActivity() {
         <FlatList
           data={logs}
           renderItem={renderLogItem}
-          keyExtractor={(item, index) => item.activity_id ? item.activity_id.toString() : index.toString()}
+          keyExtractor={(item, index) => item.activity_id ? `activity-${item.activity_id}` : `idx-${index}`}
           contentContainerStyle={[styles.content, { paddingBottom: 24 }]}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={10}
+          windowSize={5}
           refreshControl={
             <RefreshControl 
               refreshing={refreshing} 
@@ -206,7 +214,7 @@ export default function ManagerActivity() {
             <TouchableOpacity
               key={tab.key}
               style={styles.navItem}
-              onPress={() => { if (tab.route && !isActive) router.push(tab.route as any); }}
+              onPress={() => { if (tab.route && !isActive) router.replace(tab.route as any); }}
             >
               <Ionicons name={isActive ? tab.icon as any : tab.iconOff as any} size={24} color={isActive ? theme.accent : theme.subText} />
               <Text style={[styles.navLabel, { color: isActive ? theme.accent : theme.subText }]}>{tab.key}</Text>

@@ -479,22 +479,32 @@ app.get('/export/leads/excel', authenticateToken, authorizeRoles('admin', 'manag
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 // 1. GET ACTIVITY LOGS WITH LINKED ACTIVE FOLLOW-UP TRACKING
-// 1. GET ACTIVITY LOGS WITH LINKED FOLLOW-UP TRACKING
+// ==========================================
+// 1. GET ACTIVITY LOGS WITH STRICT SINGLE FOLLOW-UP BOUNDS
+// ==========================================
 app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
         const { role, team_id } = req.user; 
         
+        // This query isolates followup data exclusively to activity rows containing 'FOLLOWUP' keywords.
+        // It prevents data bleeding across non-followup historical logs.
         let query = `
             SELECT 
                 la.activity_id, 
                 la.activity_type, 
                 la.activity_description, 
                 la.created_at, 
-                la.lead_id, -- Crucial for tracking the cancellation target
+                la.lead_id,
                 l.name AS lead_name, 
                 l.company,
-                f.followup_id,
-                f.followup_status
+                CASE 
+                    WHEN UPPER(la.activity_type) LIKE '%FOLLOWUP%' THEN f.followup_id
+                    ELSE NULL 
+                END as followup_id,
+                CASE 
+                    WHEN UPPER(la.activity_type) LIKE '%FOLLOWUP%' THEN f.followup_status
+                    ELSE NULL 
+                END as followup_status
             FROM lead_activity_logs la 
             LEFT JOIN leads l ON la.lead_id = l.lead_id
             LEFT JOIN lead_followups f ON l.lead_id = f.lead_id
@@ -518,20 +528,44 @@ app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager
     }
 });
 
-// 2. CANCEL FOLLOW-UP VIA TARGET SELECTION
+// ==========================================
+// 2. TARGETED SINGLE ACTION CANCEL ENDPOINT
+// ==========================================
 app.post('/manager/followup/cancel', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     const { followup_id, lead_id } = req.body;
+    
+    if (!followup_id && !lead_id) {
+        return res.status(400).json({ success: false, message: 'Missing cancellation identity parameters.' });
+    }
     
     try {
         await pool.query('BEGIN');
 
+        // Target explicitly by followup_id first to isolate the single item
         if (followup_id) {
-            await pool.query(`UPDATE lead_followups SET followup_status = 'cancelled', updated_at = NOW() WHERE followup_id = $1`, [followup_id]);
-        } else if (lead_id) {
-            await pool.query(`UPDATE lead_followups SET followup_status = 'cancelled', updated_at = NOW() WHERE lead_id = $1`, [lead_id]);
+            const result = await pool.query(
+                `UPDATE lead_followups 
+                 SET followup_status = 'cancelled', updated_at = NOW() 
+                 WHERE followup_id = $1`, 
+                [followup_id]
+            );
+            
+            // Safe fallback logic if the ID sync is catching up
+            if (result.rowCount === 0 && lead_id) {
+                await pool.query(
+                    `UPDATE lead_followups 
+                     SET followup_status = 'cancelled', updated_at = NOW() 
+                     WHERE lead_id = $1`, 
+                    [lead_id]
+                );
+            }
         } else {
-            await pool.query('ROLLBACK');
-            return res.status(400).json({ success: false, message: 'Missing parameters' });
+            await pool.query(
+                `UPDATE lead_followups 
+                 SET followup_status = 'cancelled', updated_at = NOW() 
+                 WHERE lead_id = $1`, 
+                [lead_id]
+            );
         }
 
         await pool.query('COMMIT');
@@ -542,6 +576,7 @@ app.post('/manager/followup/cancel', authenticateToken, authorizeRoles('admin', 
         res.status(500).json({ success: false, message: err.message }); 
     }
 });
+
 app.put('/manager/followup/:leadId', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     const { followup_status } = req.body;
     try {
