@@ -46,7 +46,9 @@
       ],
       "expo-sharing",
       "expo-secure-store",
-      "expo-asset"
+      "expo-asset",
+      "expo-web-browser",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true,
