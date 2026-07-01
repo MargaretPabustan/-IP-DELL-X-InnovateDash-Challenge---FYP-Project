@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
   StatusBar, Platform, ScrollView, ActivityIndicator,
-  RefreshControl,
+  RefreshControl, Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,6 +24,14 @@ export default function ManagerActivity() {
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
+  const tabs = [
+    { key: 'Dashboard', icon: 'grid',     iconOff: 'grid-outline',     route: null },
+    { key: 'Leads',     icon: 'people',   iconOff: 'people-outline',   route: '/manager/leads' },
+    { key: 'Activity',  icon: 'pulse',    iconOff: 'pulse-outline',    route: '/manager/activity' },
+    { key: 'Emails',    icon: 'mail',     iconOff: 'mail-outline',     route: '/manager/emails' },
+    { key: 'Export',    icon: 'download', iconOff: 'download-outline', route: '/manager/export' },
+  ];
+
   const fetchLogs = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
@@ -36,6 +44,37 @@ export default function ManagerActivity() {
   }, []);
 
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+  const handleCancelFollowup = async (followupId: string) => {
+    Alert.alert(
+      "Cancel Followup",
+      "Are you sure you want to permanently delete this followup record?",
+      [
+        { text: "No", style: "cancel" },
+        {
+          text: "Yes, Remove",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const headers = await getAuthHeaders();
+              const res = await fetch(`${BACKEND_URL}/manager/followup/cancel`, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ followup_id: followupId })
+              });
+              const data = await res.json();
+              if (data.success) {
+                Alert.alert("Deleted", "Followup removed successfully.");
+                fetchLogs(true);
+              }
+            } catch {
+              Alert.alert("Error", "Network processing failed.");
+            }
+          }
+        }
+      ]
+    );
+  };
 
   const getActivityIcon = (type: string) => {
     switch (type) {
@@ -57,7 +96,9 @@ export default function ManagerActivity() {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* HEADER */}
+      {/* ========================================================= */}
+      {/* 1. TOP NAVBAR (HEADER) LOCATION                           */}
+      {/* ========================================================= */}
       <View style={[styles.header, { backgroundColor: theme.navy, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
@@ -82,6 +123,8 @@ export default function ManagerActivity() {
           </View>
         ) : logs.map(log => {
           const color = getActivityColor(log.activity_type);
+          const hasActiveFollowup = log.followup_id && log.followup_status === 'pending';
+
           return (
             <View key={log.activity_id} style={[styles.card, { backgroundColor: theme.card }]}>
               <View style={[styles.iconBox, { backgroundColor: color + '18' }]}>
@@ -96,11 +139,43 @@ export default function ManagerActivity() {
                 <Text style={[styles.activityTime, { color: theme.subText }]}>
                   {new Date(log.created_at).toLocaleString('en-SG')}
                 </Text>
+
+                {/* ========================================================= */}
+                {/* 2. CANCEL FOLLOWUP BUTTON LOCATION                        */}
+                {/* ========================================================= */}
+                {hasActiveFollowup && (
+                  <TouchableOpacity 
+                    style={styles.cancelBtn} 
+                    onPress={() => handleCancelFollowup(log.followup_id)}
+                  >
+                    <Ionicons name="close-circle" size={14} color="#ef4444" />
+                    <Text style={styles.cancelBtnText}>Cancel Followup</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </View>
           );
         })}
       </ScrollView>
+
+      {/* ========================================================= */}
+      {/* 3. BOTTOM NAV BAR LOCATION                                */}
+      {/* ========================================================= */}
+      <View style={[styles.bottomNav, { backgroundColor: theme.navBg, borderTopColor: theme.subText + '22', paddingBottom: Platform.OS === 'ios' ? 28 : 12 }]}>
+        {tabs.map(tab => {
+          const isActive = tab.key === 'Activity';
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              style={styles.navItem}
+              onPress={() => { if (tab.route && !isActive) router.push(tab.route as any); }}
+            >
+              <Ionicons name={isActive ? tab.icon as any : tab.iconOff as any} size={24} color={isActive ? theme.accent : theme.subText} />
+              <Text style={[styles.navLabel, { color: isActive ? theme.accent : theme.subText }]}>{tab.key}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </SafeAreaView>
   );
 }
@@ -120,4 +195,21 @@ const styles = StyleSheet.create({
   activityLead: { fontSize: 12, marginTop: 2 },
   activityDesc: { fontSize: 12, marginTop: 2 },
   activityTime: { fontSize: 11, marginTop: 4 },
+  cancelBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    backgroundColor: '#ef444412',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#ef444425'
+  },
+  cancelBtnText: { color: '#ef4444', fontSize: 11, fontWeight: '700' },
+  bottomNav: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingTop: 10, borderTopWidth: 1 },
+  navItem: { alignItems: 'center', justifyContent: 'center', flex: 1 },
+  navLabel: { fontSize: 11, marginTop: 4, fontWeight: '500' },
 });
