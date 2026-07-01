@@ -95,7 +95,9 @@ pool.connect()
 // ── GEMINI SETUP ──────────────────────────────────────────────────────────────
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
-console.log('GEMINI_API_KEY loaded:', process.env.GEMINI_API_KEY ? '✅ ' + process.env.GEMINI_API_KEY.substring(0, 8) + '...' : '❌ MISSING');
+if (!process.env.GEMINI_API_KEY) {
+    console.warn('❌ GEMINI_API_KEY is missing from environment configuration');
+}
 
 // ── EMAIL TRANSPORTER ─────────────────────────────────────────────────────────
 const transporter = nodemailer.createTransport({
