@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
-  StatusBar, Platform, ScrollView, ActivityIndicator,
-  RefreshControl, Alert,
+  StatusBar, Platform, ActivityIndicator, RefreshControl, 
+  Alert, FlatList
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,9 +25,9 @@ export default function ManagerActivity() {
   const [refreshing, setRefreshing] = useState(false);
 
   const tabs = [
-    { key: 'Dashboard', icon: 'grid',     iconOff: 'grid-outline',     route: null },
+    { key: 'Dashboard', icon: 'grid',     iconOff: 'grid-outline',     route: '/manager/dashboard' },
     { key: 'Leads',     icon: 'people',   iconOff: 'people-outline',   route: '/manager/leads' },
-    { key: 'Activity',  icon: 'pulse',    iconOff: 'pulse-outline',    route: '/manager/activity' },
+    { key: 'Activity',  icon: 'pulse',    iconOff: 'pulse-outline',    route: null },
     { key: 'Emails',    icon: 'mail',     iconOff: 'mail-outline',     route: '/manager/emails' },
     { key: 'Export',    icon: 'download', iconOff: 'download-outline', route: '/manager/export' },
   ];
@@ -39,8 +39,18 @@ export default function ManagerActivity() {
       const headers = await getAuthHeaders();
       const res  = await fetch(`${BACKEND_URL}/manager/activity`, { headers });
       const data = await res.json();
-      if (data.success) setLogs(data.data);
-    } catch {} finally { setLoading(false); setRefreshing(false); }
+      if (data.success) {
+        setLogs(data.data || []);
+      } else {
+        Alert.alert("Error", data.message || "Failed to load activities.");
+      }
+    } catch (error) {
+      console.error("Fetch logs error:", error);
+      Alert.alert("Network Error", "Could not connect to the server.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
   }, []);
 
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
@@ -66,8 +76,11 @@ export default function ManagerActivity() {
               if (data.success) {
                 Alert.alert("Deleted", "Followup removed successfully.");
                 fetchLogs(true);
+              } else {
+                Alert.alert("Error", data.message || "Failed to cancel follow-up.");
               }
-            } catch {
+            } catch (error) {
+              console.error("Cancel followup error:", error);
               Alert.alert("Error", "Network processing failed.");
             }
           }
@@ -92,13 +105,48 @@ export default function ManagerActivity() {
     }
   };
 
+  const renderLogItem = ({ item: log }: { item: any }) => {
+    const color = getActivityColor(log.activity_type);
+    
+    // Normalized checking definitions to guarantee button visibility matching 'PENDING' data variants
+    const hasFollowupId = log.followup_id !== null && log.followup_id !== undefined && log.followup_id !== '';
+    const isPending = log.followup_status?.toString().trim().toLowerCase() === 'pending';
+    const hasActiveFollowup = hasFollowupId && isPending;
+
+    return (
+      <View style={[styles.card, { backgroundColor: theme.card }]}>
+        <View style={[styles.iconBox, { backgroundColor: color + '18' }]}>
+          <Ionicons name={getActivityIcon(log.activity_type) as any} size={20} color={color} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.activityType, { color: theme.text }]}>{log.activity_type}</Text>
+          <Text style={[styles.activityLead, { color: theme.subText }]}>
+            {log.lead_name || 'N/A'} {log.company ? `· ${log.company}` : ''}
+          </Text>
+          <Text style={[styles.activityDesc, { color: theme.subText }]}>{log.activity_description}</Text>
+          <Text style={[styles.activityTime, { color: theme.subText }]}>
+            {new Date(log.created_at).toLocaleString('en-SG')}
+          </Text>
+
+          {hasActiveFollowup && (
+            <TouchableOpacity 
+              style={styles.cancelBtn} 
+              onPress={() => handleCancelFollowup(log.followup_id)}
+            >
+              <Ionicons name="close-circle" size={14} color="#ef4444" />
+              <Text style={styles.cancelBtnText}>Cancel Followup</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* ========================================================= */}
-      {/* 1. TOP NAVBAR (HEADER) LOCATION                           */}
-      {/* ========================================================= */}
+      {/* HEADER */}
       <View style={[styles.header, { backgroundColor: theme.navy, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
@@ -109,58 +157,33 @@ export default function ManagerActivity() {
         </View>
       </View>
 
-      <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: 24 }]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchLogs(true)} tintColor={theme.navy} />}
-      >
-        {loading ? (
-          <View style={styles.centered}><ActivityIndicator size="large" color={theme.navy} /></View>
-        ) : logs.length === 0 ? (
-          <View style={styles.centered}>
-            <Ionicons name="pulse-outline" size={48} color={theme.subText} />
-            <Text style={[styles.emptyText, { color: theme.subText }]}>No activity yet</Text>
-          </View>
-        ) : logs.map(log => {
-          const color = getActivityColor(log.activity_type);
-          const hasActiveFollowup = log.followup_id && log.followup_status === 'pending';
-
-          return (
-            <View key={log.activity_id} style={[styles.card, { backgroundColor: theme.card }]}>
-              <View style={[styles.iconBox, { backgroundColor: color + '18' }]}>
-                <Ionicons name={getActivityIcon(log.activity_type) as any} size={20} color={color} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.activityType, { color: theme.text }]}>{log.activity_type}</Text>
-                <Text style={[styles.activityLead, { color: theme.subText }]}>
-                  {log.lead_name || 'N/A'} {log.company ? `· ${log.company}` : ''}
-                </Text>
-                <Text style={[styles.activityDesc, { color: theme.subText }]}>{log.activity_description}</Text>
-                <Text style={[styles.activityTime, { color: theme.subText }]}>
-                  {new Date(log.created_at).toLocaleString('en-SG')}
-                </Text>
-
-                {/* ========================================================= */}
-                {/* 2. CANCEL FOLLOWUP BUTTON LOCATION                        */}
-                {/* ========================================================= */}
-                {hasActiveFollowup && (
-                  <TouchableOpacity 
-                    style={styles.cancelBtn} 
-                    onPress={() => handleCancelFollowup(log.followup_id)}
-                  >
-                    <Ionicons name="close-circle" size={14} color="#ef4444" />
-                    <Text style={styles.cancelBtnText}>Cancel Followup</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
+      {/* BODY */}
+      {loading ? (
+        <View style={[styles.centered, { paddingTop: 0 }]}><ActivityIndicator size="large" color={theme.navy} /></View>
+      ) : (
+        <FlatList
+          data={logs}
+          renderItem={renderLogItem}
+          keyExtractor={(item) => item.activity_id.toString()}
+          contentContainerStyle={[styles.content, { paddingBottom: 24 }]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={() => fetchLogs(true)} 
+              tintColor={theme.navy} 
+            />
+          }
+          ListEmptyComponent={
+            <View style={styles.centered}>
+              <Ionicons name="pulse-outline" size={48} color={theme.subText} />
+              <Text style={[styles.emptyText, { color: theme.subText }]}>No activity yet</Text>
             </View>
-          );
-        })}
-      </ScrollView>
+          }
+        />
+      )}
 
-      {/* ========================================================= */}
-      {/* 3. BOTTOM NAV BAR LOCATION                                */}
-      {/* ========================================================= */}
+      {/* BOTTOM NAV BAR */}
       <View style={[styles.bottomNav, { backgroundColor: theme.navBg, borderTopColor: theme.subText + '22', paddingBottom: Platform.OS === 'ios' ? 28 : 12 }]}>
         {tabs.map(tab => {
           const isActive = tab.key === 'Activity';
