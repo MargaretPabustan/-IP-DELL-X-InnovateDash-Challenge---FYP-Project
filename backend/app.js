@@ -190,9 +190,13 @@ function generateRuleBasedAnalysis(customerIntent, interests) {
 // ── VALIDATION ────────────────────────────────────────────────────────────────
 function validateLead(name, email, company, title, phone) {
     if (!name || !email || !company || !title || !phone) return 'All fields (name, email, company, title, phone) are required';
-    const emailRegex = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-    if (!emailRegex.test(email)) return 'Invalid email format';
-    if (phone.length < 8) return 'Phone number is too short';
+    if (typeof email !== 'string' || email.length > 254) return 'Invalid email format';
+    const atIndex = email.indexOf('@');
+    const dotIndex = email.lastIndexOf('.');
+    if (atIndex <= 0 || dotIndex <= atIndex + 1 || dotIndex === email.length - 1 || email.includes(' ')) {
+        return 'Invalid email format';
+    }
+    if (typeof phone !== 'string' || phone.length < 8 || phone.length > 25) return 'Phone number is invalid';
     return null;
 }
 
