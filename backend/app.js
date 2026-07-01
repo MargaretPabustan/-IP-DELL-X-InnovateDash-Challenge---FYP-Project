@@ -736,7 +736,17 @@ Return ONLY valid JSON in this exact format, no extra text:
         let usedFallback = false;
         try {
             const result   = await model.generateContent(prompt);
-            const response = result.response.text().replace(/```json|```/g, '').trim();
+            let response = result.response.text().trim();
+            const codeFence = '```json';
+            if (response.startsWith(codeFence)) {
+                response = response.slice(codeFence.length).trim();
+            }
+            if (response.startsWith('```')) {
+                response = response.slice(3).trim();
+            }
+            if (response.endsWith('```')) {
+                response = response.slice(0, -3).trim();
+            }
             aiData = JSON.parse(response);
             const validIntents = ['Low', 'Medium', 'High'];
             if (!validIntents.includes(aiData.intent) || typeof aiData.confidence !== 'number' || typeof aiData.follow_up_required !== 'boolean') throw new Error('Invalid AI response format');
