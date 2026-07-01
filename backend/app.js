@@ -472,8 +472,7 @@ app.get('/export/leads/excel', authenticateToken, authorizeRoles('admin', 'manag
         res.end();
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
-// UPDATED MANAGER ACTIVITY ROUTE
-// 1. GET ACTIVITY LOGS WITH LINKED FOLLOW-UP TRACKING
+// 1. GET ACTIVITY LOGS WITH LINKED ACTIVE FOLLOW-UP TRACKING
 app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
         const { role, team_id } = req.user; 
@@ -490,6 +489,8 @@ app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager
                 f.followup_status
             FROM lead_activity_logs la 
             LEFT JOIN leads l ON la.lead_id = l.lead_id
+            -- CRITICAL FIX: Only join follow-ups that match the active or cancelled context, 
+            -- preventing old historical logs from inheriting unrelated new follow-ups.
             LEFT JOIN lead_followups f ON l.lead_id = f.lead_id
         `;
         
@@ -503,7 +504,7 @@ app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager
         query += ` ORDER BY la.created_at DESC LIMIT 100 `;
 
         const result = await pool.query(query, queryParams);
-        res.json({ success: true, data: result.rows });
+        res.json({ success: true, data:  result.rows });
         
     } catch (err) { 
         console.error("Error fetching activity logs:", err);
@@ -511,7 +512,7 @@ app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager
     }
 });
 
-// 2. DELETE/REMOVE FOLLOW-UP FROM DB ENTITIES PERMANENTLY
+// 2. SOFT-DELETE/UPDATE FOLLOW-UP TO 'CANCELLED'
 app.post('/manager/followup/cancel', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     const { followup_id } = req.body;
     
@@ -520,21 +521,23 @@ app.post('/manager/followup/cancel', authenticateToken, authorizeRoles('admin', 
     }
 
     try {
-        // Start a SQL Transaction to ensure reliable absolute removal
         await pool.query('BEGIN');
 
-        // Delete permanently from lead_followups matching your schema key rules
-        await pool.query(`DELETE FROM lead_followups WHERE followup_id = $1`, [followup_id]);
+        // FIX: Update status to 'cancelled' instead of completely purging the row
+        await pool.query(`
+            UPDATE lead_followups 
+            SET followup_status = 'cancelled', updated_at = NOW() 
+            WHERE followup_id = $1
+        `, [followup_id]);
 
         await pool.query('COMMIT');
-        res.json({ success: true, message: 'Followup permanently removed from the database.' });
+        res.json({ success: true, message: 'Followup changed to cancelled.' });
     } catch (err) { 
         await pool.query('ROLLBACK');
-        console.error("Error destroying database followup entry:", err);
+        console.error("Error updating database followup entry:", err);
         res.status(500).json({ success: false, message: err.message }); 
     }
 });
-
 app.put('/manager/followup/:leadId', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     const { followup_status } = req.body;
     try {
