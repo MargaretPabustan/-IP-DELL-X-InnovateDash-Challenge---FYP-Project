@@ -2,16 +2,16 @@ apiVersion: v1
 kind: Service
 
 metadata:
-  name: dell-backend-service
+  name: boothflow-backend-service
   namespace: boothflow
 
 spec:
   selector:
-    app: dell-backend
+    app: boothflow-backend
 
   ports:
-  - protocol: TCP
-    port: 3000
-    targetPort: 3000
+    - port: 80
+      targetPort: 3000
+      nodePort: 30080
 
   type: NodePort
