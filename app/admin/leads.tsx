@@ -35,13 +35,8 @@ function getStatusLabel(status: string) {
 }
 
 const TEAM_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#6366f1', '#ef4444'];
-
 const TEAM_NAMES: Record<number, string> = {
-  1: 'AI PCs',
-  2: 'Multi-cloud',
-  3: 'Storage',
-  4: 'Service',
-  5: 'Others',
+  1: 'AI PCs', 2: 'Multi-cloud', 3: 'Storage', 4: 'Service', 5: 'Others',
 };
 
 type Lead = {
@@ -65,7 +60,6 @@ type Lead = {
 function ViewModal({ lead, onClose, theme }: { lead: Lead; onClose: () => void; theme: any }) {
   const statusColor = getStatusColor(lead.status);
   const confidencePct = lead.confidence_score ? `${Math.round(lead.confidence_score * 100)}%` : '—';
-
   return (
     <Modal visible animationType="slide" transparent>
       <Pressable style={modal.backdrop} onPress={onClose}>
@@ -127,37 +121,20 @@ function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () =
     setSaving(true);
     try {
       const headers = await getAuthHeaders();
-
-      // Update intent and status
       await fetch(`${BACKEND_URL}/leads/${lead.lead_id}`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({
-          name:            lead.name,
-          company:         lead.company,
-          title:           lead.title,
-          email:           lead.email,
-          phone_number:    lead.phone_number,
-          customer_intent: intent,
-        }),
+        method: 'PUT', headers,
+        body: JSON.stringify({ name: lead.name, company: lead.company, title: lead.title, email: lead.email, phone_number: lead.phone_number, customer_intent: intent }),
       });
-
-      // Update AI notes and status
       await fetch(`${BACKEND_URL}/admin/leads/${lead.lead_id}/notes`, {
-        method: 'PUT',
-        headers,
+        method: 'PUT', headers,
         body: JSON.stringify({ ai_notes: aiNotes, status }),
       });
-
-      // Update team assignment if changed
       if (teamId !== lead.assigned_team_id) {
         await fetch(`${BACKEND_URL}/admin/leads/${lead.lead_id}/assign`, {
-          method: 'PUT',
-          headers,
+          method: 'PUT', headers,
           body: JSON.stringify({ assigned_team_id: teamId || null }),
         });
       }
-
       onSave({ ...lead, customer_intent: intent, ai_notes: aiNotes, status, assigned_team_id: teamId || null });
       Alert.alert('Success', 'Lead updated successfully.');
     } catch (e: any) {
@@ -172,87 +149,39 @@ function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () =
       <Pressable style={modal.backdrop} onPress={onClose}>
         <Pressable style={[modal.sheet, { backgroundColor: theme.card }]} onPress={() => {}}>
           <View style={modal.handle} />
-          <Text style={[modal.editTitle, { color: theme.text }]}>Edit Lead</Text>
+          <Text style={[modal.modalTitle, { color: theme.text }]}>Edit Lead</Text>
           <ScrollView showsVerticalScrollIndicator={false}>
-
-            {/* Read-only info */}
             <View style={[modal.readOnlyCard, { backgroundColor: theme.bg }]}>
-              <View style={modal.readOnlyRow}>
-                <Text style={[modal.readOnlyLabel, { color: theme.subText }]}>Name</Text>
-                <Text style={[modal.readOnlyValue, { color: theme.text }]}>{lead.name}</Text>
-              </View>
-              <View style={modal.readOnlyRow}>
-                <Text style={[modal.readOnlyLabel, { color: theme.subText }]}>Company</Text>
-                <Text style={[modal.readOnlyValue, { color: theme.text }]}>{lead.company}</Text>
-              </View>
-              <View style={modal.readOnlyRow}>
-                <Text style={[modal.readOnlyLabel, { color: theme.subText }]}>Email</Text>
-                <Text style={[modal.readOnlyValue, { color: theme.text }]}>{lead.email}</Text>
-              </View>
-              <View style={modal.readOnlyRow}>
-                <Text style={[modal.readOnlyLabel, { color: theme.subText }]}>Primary Interest</Text>
-                <Text style={[modal.readOnlyValue, { color: theme.text }]}>{lead.customer_intent || '—'}</Text>
-              </View>
+              {[['Name', lead.name], ['Company', lead.company], ['Email', lead.email], ['Primary Interest', lead.customer_intent || '—']].map(([label, value]) => (
+                <View key={label} style={modal.readOnlyRow}>
+                  <Text style={[modal.readOnlyLabel, { color: theme.subText }]}>{label}</Text>
+                  <Text style={[modal.readOnlyValue, { color: theme.text }]}>{value}</Text>
+                </View>
+              ))}
             </View>
-
-            {/* Status */}
             <Text style={modal.fieldLabel}>STATUS</Text>
-            <View style={modal.teamRow}>
+            <View style={modal.chipRow}>
               {STATUS_OPTIONS.map(s => (
-                <TouchableOpacity
-                  key={s}
-                  style={[modal.teamChip, { backgroundColor: status === s ? getStatusColor(s) : theme.bg, borderColor: getStatusColor(s) }]}
-                  onPress={() => setStatus(s)}
-                >
-                  <Text style={[modal.teamChipText, { color: status === s ? '#fff' : getStatusColor(s) }]}>{s}</Text>
+                <TouchableOpacity key={s} style={[modal.chip, { backgroundColor: status === s ? getStatusColor(s) : theme.bg, borderColor: getStatusColor(s) }]} onPress={() => setStatus(s)}>
+                  <Text style={[modal.chipText, { color: status === s ? '#fff' : getStatusColor(s) }]}>{s}</Text>
                 </TouchableOpacity>
               ))}
             </View>
-
-            {/* Customer Intent */}
             <Text style={modal.fieldLabel}>CUSTOMER INTENT</Text>
-            <TextInput
-              style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]}
-              value={intent}
-              onChangeText={setIntent}
-              placeholder="e.g. Pricing Inquiry, Demo Request..."
-              placeholderTextColor={theme.subText}
-            />
-
-            {/* AI Notes */}
+            <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={intent} onChangeText={setIntent} placeholder="e.g. Pricing Inquiry, Demo Request..." placeholderTextColor={theme.subText} />
             <Text style={modal.fieldLabel}>AI NOTES (OVERRIDE)</Text>
-            <TextInput
-              style={[modal.input, { color: theme.text, borderColor: theme.subText + '44', minHeight: 80, textAlignVertical: 'top' }]}
-              value={aiNotes}
-              onChangeText={setAiNotes}
-              multiline
-              placeholder="Override AI analysis notes..."
-              placeholderTextColor={theme.subText}
-            />
-
-            {/* Team Assignment */}
+            <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44', minHeight: 80, textAlignVertical: 'top' }]} value={aiNotes} onChangeText={setAiNotes} multiline placeholder="Override AI analysis notes..." placeholderTextColor={theme.subText} />
             <Text style={modal.fieldLabel}>ASSIGN TEAM</Text>
-            <View style={modal.teamRow}>
+            <View style={modal.chipRow}>
               {[0, 1, 2, 3, 4, 5].map(t => (
-                <TouchableOpacity
-                  key={t}
-                  style={[modal.teamChip, { backgroundColor: teamId === t ? theme.navy : theme.bg, borderColor: theme.navy }]}
-                  onPress={() => setTeamId(t)}
-                >
-                  <Text style={[modal.teamChipText, { color: teamId === t ? '#fff' : theme.navy }]}>
-                    {t === 0 ? 'None' : `T${t}`}
-                  </Text>
+                <TouchableOpacity key={t} style={[modal.chip, { backgroundColor: teamId === t ? theme.navy : theme.bg, borderColor: theme.navy }]} onPress={() => setTeamId(t)}>
+                  <Text style={[modal.chipText, { color: teamId === t ? '#fff' : theme.navy }]}>{t === 0 ? 'None' : `T${t}`}</Text>
                 </TouchableOpacity>
               ))}
             </View>
-            {teamId > 0 && (
-              <Text style={{ fontSize: 11, color: theme.subText, marginTop: 4, marginBottom: 8 }}>
-                Team {teamId} — {TEAM_NAMES[teamId]}
-              </Text>
-            )}
+            {teamId > 0 && <Text style={{ fontSize: 11, color: theme.subText, marginTop: 4, marginBottom: 8 }}>Team {teamId} — {TEAM_NAMES[teamId]}</Text>}
           </ScrollView>
-
-          <View style={modal.editBtns}>
+          <View style={modal.modalBtns}>
             <TouchableOpacity style={[modal.cancelBtn, { borderColor: theme.accent }]} onPress={onClose} disabled={saving}>
               <Text style={[modal.cancelText, { color: theme.accent }]}>Cancel</Text>
             </TouchableOpacity>
@@ -266,6 +195,97 @@ function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () =
   );
 }
 
+// ─── Add Lead Modal ───────────────────────────────────────────────────────────
+function AddLeadModal({ onClose, onAdded, theme }: { onClose: () => void; onAdded: () => void; theme: any }) {
+  const [name,    setName]    = useState('');
+  const [email,   setEmail]   = useState('');
+  const [company, setCompany] = useState('');
+  const [title,   setTitle]   = useState('');
+  const [phone,   setPhone]   = useState('');
+  const [intent,  setIntent]  = useState('');
+  const [teamId,  setTeamId]  = useState(0);
+  const [saving,  setSaving]  = useState(false);
+
+  const handleAdd = async () => {
+    if (!name.trim() || !email.trim() || !company.trim() || !title.trim() || !phone.trim()) {
+      Alert.alert('Missing Fields', 'Please fill in all required fields (Name, Email, Company, Title, Phone).');
+      return;
+    }
+    setSaving(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${BACKEND_URL}/leads`, {
+        method: 'POST', headers,
+        body: JSON.stringify({
+          name, email, company, title,
+          phone_number: phone,
+          customer_intent: intent,
+          assigned_team_id: teamId || null,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.message || 'Failed to create lead');
+      Alert.alert('Success', `Lead for ${name} created successfully.`);
+      onAdded();
+      onClose();
+    } catch (e: any) {
+      Alert.alert('Error', e.message || 'Failed to create lead.');
+    } finally { setSaving(false); }
+  };
+
+  return (
+    <Modal visible animationType="slide" transparent>
+      <Pressable style={modal.backdrop} onPress={onClose}>
+        <Pressable style={[modal.sheet, { backgroundColor: theme.card }]} onPress={() => {}}>
+          <View style={modal.handle} />
+          <Text style={[modal.modalTitle, { color: theme.text }]}>Add New Lead</Text>
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+
+            {/* Required fields */}
+            <Text style={modal.fieldLabel}>FULL NAME *</Text>
+            <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={name} onChangeText={setName} placeholder="e.g. John Tan" placeholderTextColor={theme.subText} />
+
+            <Text style={modal.fieldLabel}>EMAIL *</Text>
+            <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={email} onChangeText={setEmail} placeholder="e.g. john@company.com" placeholderTextColor={theme.subText} keyboardType="email-address" autoCapitalize="none" />
+
+            <Text style={modal.fieldLabel}>COMPANY *</Text>
+            <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={company} onChangeText={setCompany} placeholder="e.g. ST Engineering" placeholderTextColor={theme.subText} />
+
+            <Text style={modal.fieldLabel}>JOB TITLE *</Text>
+            <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={title} onChangeText={setTitle} placeholder="e.g. IT Manager" placeholderTextColor={theme.subText} />
+
+            <Text style={modal.fieldLabel}>PHONE NUMBER *</Text>
+            <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={phone} onChangeText={setPhone} placeholder="e.g. +65 9123 4567" placeholderTextColor={theme.subText} keyboardType="phone-pad" />
+
+            <Text style={modal.fieldLabel}>CUSTOMER INTENT</Text>
+            <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={intent} onChangeText={setIntent} placeholder="e.g. Pricing Inquiry, Demo Request..." placeholderTextColor={theme.subText} />
+
+            <Text style={modal.fieldLabel}>ASSIGN TEAM</Text>
+            <View style={modal.chipRow}>
+              {[0, 1, 2, 3, 4, 5].map(t => (
+                <TouchableOpacity key={t} style={[modal.chip, { backgroundColor: teamId === t ? theme.navy : theme.bg, borderColor: theme.navy }]} onPress={() => setTeamId(t)}>
+                  <Text style={[modal.chipText, { color: teamId === t ? '#fff' : theme.navy }]}>{t === 0 ? 'None' : `T${t}`}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {teamId > 0 && <Text style={{ fontSize: 11, color: theme.subText, marginTop: 4, marginBottom: 8 }}>Team {teamId} — {TEAM_NAMES[teamId]}</Text>}
+          </ScrollView>
+
+          <View style={modal.modalBtns}>
+            <TouchableOpacity style={[modal.cancelBtn, { borderColor: theme.accent }]} onPress={onClose} disabled={saving}>
+              <Text style={[modal.cancelText, { color: theme.accent }]}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[modal.saveBtn, { backgroundColor: theme.navy, opacity: saving ? 0.7 : 1 }]} onPress={handleAdd} disabled={saving}>
+              {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={modal.saveBtnText}>Add Lead</Text>}
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+// ─── Main Screen ──────────────────────────────────────────────────────────────
 export default function AdminLeads() {
   const router = useRouter();
   const { theme } = useAppTheme();
@@ -275,6 +295,7 @@ export default function AdminLeads() {
   const [refreshing, setRefreshing] = useState(false);
   const [viewing,    setViewing]    = useState<Lead | null>(null);
   const [editing,    setEditing]    = useState<Lead | null>(null);
+  const [adding,     setAdding]     = useState(false);
   const [expanded,   setExpanded]   = useState<Record<number, boolean>>({});
 
   const fetchLeads = useCallback(async (isRefresh = false) => {
@@ -329,6 +350,7 @@ export default function AdminLeads() {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
+      {/* HEADER */}
       <View style={[styles.header, { backgroundColor: theme.navy, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
@@ -337,6 +359,13 @@ export default function AdminLeads() {
           <Text style={styles.headerTitle}>All Leads</Text>
           <Text style={styles.headerSub}>{leads.length} leads across {teamIds.length} teams</Text>
         </View>
+        <TouchableOpacity
+          style={[styles.addBtn, { backgroundColor: 'rgba(255,255,255,0.15)' }]}
+          onPress={() => setAdding(true)}
+        >
+          <Ionicons name="add" size={18} color="#fff" />
+          <Text style={styles.addBtnText}>Add</Text>
+        </TouchableOpacity>
       </View>
 
       <ScrollView
@@ -350,6 +379,10 @@ export default function AdminLeads() {
           <View style={styles.centered}>
             <Ionicons name="document-text-outline" size={48} color={theme.subText} />
             <Text style={[styles.emptyText, { color: theme.subText }]}>No leads yet</Text>
+            <TouchableOpacity style={[styles.emptyAddBtn, { backgroundColor: theme.navy }]} onPress={() => setAdding(true)}>
+              <Ionicons name="add" size={16} color="#fff" />
+              <Text style={styles.emptyAddBtnText}>Add First Lead</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           teamIds.map(teamId => {
@@ -428,6 +461,7 @@ export default function AdminLeads() {
 
       {viewing && <ViewModal lead={viewing} onClose={() => setViewing(null)} theme={theme} />}
       {editing  && <EditModal lead={editing} onClose={() => setEditing(null)} onSave={handleSave} theme={theme} />}
+      {adding   && <AddLeadModal onClose={() => setAdding(false)} onAdded={() => fetchLeads(true)} theme={theme} />}
     </SafeAreaView>
   );
 }
@@ -438,9 +472,13 @@ const styles = StyleSheet.create({
   backBtn: { padding: 4 },
   headerTitle: { color: '#fff', fontSize: 17, fontWeight: '700' },
   headerSub: { color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 1 },
+  addBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10 },
+  addBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   content: { padding: 16, gap: 12 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12 },
   emptyText: { fontSize: 15, fontWeight: '600' },
+  emptyAddBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: 10, paddingVertical: 10, paddingHorizontal: 20, marginTop: 8 },
+  emptyAddBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
   teamSection: { borderRadius: 16, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
   teamHeader: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 12 },
   teamIcon: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
@@ -469,6 +507,7 @@ const modal = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
   sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24, maxHeight: '90%' },
   handle: { width: 40, height: 4, backgroundColor: '#cbd5e1', borderRadius: 2, alignSelf: 'center', marginBottom: 20 },
+  modalTitle: { fontSize: 17, fontWeight: '700', marginBottom: 16, textAlign: 'center' },
   leadHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 },
   avatar: { width: 46, height: 46, borderRadius: 23, alignItems: 'center', justifyContent: 'center' },
   leadName: { fontSize: 16, fontWeight: '700' },
@@ -476,20 +515,19 @@ const modal = StyleSheet.create({
   divider: { height: 1, marginBottom: 14 },
   statusBadge: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
   statusBadgeText: { fontSize: 11, fontWeight: '700' },
-  fieldLabel: { fontSize: 11, fontWeight: '700', color: '#999', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 10, marginBottom: 3 },
+  fieldLabel: { fontSize: 11, fontWeight: '700', color: '#999', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 10, marginBottom: 6 },
   fieldValue: { fontSize: 13, fontWeight: '500', lineHeight: 20 },
   closeBtn: { borderRadius: 10, paddingVertical: 13, alignItems: 'center', marginTop: 16 },
   closeBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  editTitle: { fontSize: 17, fontWeight: '700', marginBottom: 16, textAlign: 'center' },
   input: { borderWidth: 1, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8, fontSize: 13, marginBottom: 4 },
-  teamRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
-  teamChip: { borderRadius: 8, borderWidth: 1.5, paddingHorizontal: 12, paddingVertical: 8, alignItems: 'center' },
-  teamChipText: { fontSize: 12, fontWeight: '700' },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  chip: { borderRadius: 8, borderWidth: 1.5, paddingHorizontal: 12, paddingVertical: 8, alignItems: 'center' },
+  chipText: { fontSize: 12, fontWeight: '700' },
   readOnlyCard: { borderRadius: 10, padding: 12, marginBottom: 12, gap: 8 },
   readOnlyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   readOnlyLabel: { fontSize: 11, fontWeight: '600' },
   readOnlyValue: { fontSize: 13, fontWeight: '500', maxWidth: '60%', textAlign: 'right' },
-  editBtns: { flexDirection: 'row', gap: 10, marginTop: 16 },
+  modalBtns: { flexDirection: 'row', gap: 10, marginTop: 16 },
   cancelBtn: { flex: 1, borderWidth: 1.5, borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
   cancelText: { fontSize: 14, fontWeight: '600' },
   saveBtn: { flex: 1, borderRadius: 10, paddingVertical: 13, alignItems: 'center' },
