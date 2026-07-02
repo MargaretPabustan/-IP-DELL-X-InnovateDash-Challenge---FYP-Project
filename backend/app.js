@@ -862,6 +862,8 @@ Return ONLY valid JSON in this exact format, no extra text:
     }
 });
 
+
+// ── MANUAL FOLLOW-UP EMAIL ROUTE ──────────────────────────────────────────────
 // ── MANUAL FOLLOW-UP EMAIL ROUTE ──────────────────────────────────────────────
 app.post('/send-followup/:id', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
@@ -881,32 +883,21 @@ app.post('/send-followup/:id', authenticateToken, authorizeRoles('admin', 'manag
         const scheduledAt = followupDate || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
         const existing = await pool.query(
-            `SELECT followup_status FROM lead_followups WHERE lead_id = $1`,
+            `SELECT followup_status FROM lead_followups WHERE lead_id = $1 AND followup_status = 'pending'`,
             [lead.lead_id]
         );
-        if (existing.rows.length > 0 && existing.rows[0].followup_status === 'done') {
-            return res.status(409).json({ success: false, message: 'Follow-up already completed for this lead.' });
+        if (existing.rows.length > 0) {
+            return res.status(409).json({ success: false, message: 'There is already a pending follow-up scheduled for this lead.' });
         }
-
-        const isUpdating = existing.rows.length > 0 && existing.rows[0].followup_status === 'pending';
 
         const followup = await pool.query(
             `INSERT INTO lead_followups (lead_id, followup_action, followup_status, due_date, scheduled_at, email_subject, notes)
              VALUES ($1, 'Manual Follow-up Email', 'pending', $2, $3, $4, $5)
-             ON CONFLICT (lead_id) DO UPDATE SET
-               followup_action = 'Manual Follow-up Email',
-               followup_status = 'pending',
-               due_date = EXCLUDED.due_date,
-               scheduled_at = EXCLUDED.scheduled_at,
-               email_subject = EXCLUDED.email_subject,
-               notes = EXCLUDED.notes
              RETURNING followup_id`,
             [lead.lead_id, scheduledAt.split('T')[0], scheduledAt, emailSubject, buildFollowUpEmail(lead, aiData, interests)]
         );
 
-        const logDescription = isUpdating 
-            ? `Manager updated/rescheduled follow-up email for ${scheduledAt}`
-            : `Manager scheduled follow-up email for ${scheduledAt}`;
+        const logDescription = `Manager scheduled follow-up email for ${scheduledAt}`;
 
         await pool.query(
             `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'FOLLOWUP_SCHEDULED', $2)`,
@@ -915,7 +906,8 @@ app.post('/send-followup/:id', authenticateToken, authorizeRoles('admin', 'manag
 
         res.json({ 
             success: true, 
-            message: `Follow-up successfully scheduled for ${new Date(scheduledAt).toLocaleString()}`, 
+            message: 'Follow-up successfully scheduled.', 
+            scheduled_at: scheduledAt,
             followup_id: followup.rows[0].followup_id 
         });
 
