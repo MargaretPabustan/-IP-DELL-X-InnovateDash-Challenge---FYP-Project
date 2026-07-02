@@ -392,12 +392,29 @@ app.get('/manager/me', authenticateToken, authorizeRoles('admin', 'manager'), as
 app.get('/manager/dashboard', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
         const teamId = req.user.team_id;
+
+        // 1. Core Lead counts filtered by Manager's team
         const totalLeads = await pool.query('SELECT COUNT(*) FROM leads WHERE assigned_team_id = $1', [teamId]);
         const qualified  = await pool.query("SELECT COUNT(*) FROM leads WHERE assigned_team_id = $1 AND status='QUALIFIED'", [teamId]);
         const contacted  = await pool.query("SELECT COUNT(*) FROM leads WHERE assigned_team_id = $1 AND status='CONTACTED'", [teamId]);
         const newLeads   = await pool.query("SELECT COUNT(*) FROM leads WHERE assigned_team_id = $1 AND status='NEW'", [teamId]);
-        const followups  = await pool.query("SELECT COUNT(*) FROM lead_activity_logs WHERE activity_type = 'FOLLOWUP_SENT'");
-        const emails     = await pool.query("SELECT COUNT(*) FROM lead_activity_logs WHERE activity_type = 'EMAIL_SENT'");
+        
+        // 2. Count followups ONLY for leads belonging to this manager's team
+        const followups  = await pool.query(`
+            SELECT COUNT(*) 
+            FROM lead_activity_logs la
+            JOIN leads l ON la.lead_id = l.lead_id
+            WHERE l.assigned_team_id = $1 AND la.activity_type = 'FOLLOWUP_SENT'
+        `, [teamId]);
+        
+        // 3. Count sent emails ONLY for leads belonging to this manager's team
+        const emails     = await pool.query(`
+            SELECT COUNT(*) 
+            FROM lead_activity_logs la
+            JOIN leads l ON la.lead_id = l.lead_id
+            WHERE l.assigned_team_id = $1 AND la.activity_type = 'EMAIL_SENT'
+        `, [teamId]);
+
         res.json({
             success: true,
             data: {
@@ -409,7 +426,9 @@ app.get('/manager/dashboard', authenticateToken, authorizeRoles('admin', 'manage
                 emails_sent:    +emails.rows[0].count,
             }
         });
-    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+    } catch (err) { 
+        res.status(500).json({ success: false, message: err.message }); 
+    }
 });
 
 app.get('/manager/leads', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
