@@ -985,3 +985,19 @@ app.listen(PORT, async () => {
         console.log('❌ DB check failed:', err.message);
     }
 });
+import { BrevoClient } from '@getbrevo/brevo';
+
+const brevo = new BrevoClient({ apiKey: 'your-api-key' });
+
+async function sendEmail() {
+  const result = await brevo.transactionalEmails.sendTransacEmail({
+    subject: 'Hello from Brevo!',
+    htmlContent: '<html><body><p>Welcome to our app!</p></body></html>',
+    sender: { name: 'Your App', email: 'noreply@yourapp.com' },
+    to: [{ email: 'user@example.com', name: 'User' }],
+  });
+
+  console.log('Email sent. Message ID:', result.messageId);
+}
+
+sendEmail();
