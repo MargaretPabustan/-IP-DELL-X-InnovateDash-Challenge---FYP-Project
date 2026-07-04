@@ -388,6 +388,54 @@ app.get('/manager/me', authenticateToken, authorizeRoles('admin', 'manager'), as
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
+import Brevo from "@getbrevo/brevo";
+import express from "express";
+
+const app = express();
+
+// Brevo setup
+const brevoClient = new Brevo.TransactionalEmailsApi();
+brevoClient.setApiKey(
+  Brevo.TransactionalEmailsApiApiKeys.apiKey,
+  process.env.BREVO_API_KEY
+);
+
+// Helper function
+async function sendFollowUpEmail(toEmail, subject, htmlContent) {
+  const email = {
+    sender: {
+      email: process.env.BREVO_SENDER_EMAIL,
+      name: process.env.BREVO_SENDER_NAME,
+    },
+    to: [{ email: toEmail }],
+    subject,
+    htmlContent,
+  };
+
+  try {
+    const response = await brevoClient.sendTransacEmail(email);
+    console.log("Email sent:", response);
+  } catch (error) {
+    console.error("Error sending email:", error);
+  }
+}
+
+// Example route
+app.post("/send-followup", async (req, res) => {
+  const { email } = req.body;
+  await sendFollowUpEmail(
+    email,
+    "Thanks for visiting!",
+    "<p>We’ll follow up soon.</p>"
+  );
+  res.json({ success: true });
+});
+
+// Server start
+app.listen(3000, () => {
+  console.log("Server running on port 3000");
+});
+
 // ── MANAGER ROUTES ────────────────────────────────────────────────────────────
 app.get('/manager/dashboard', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
@@ -977,19 +1025,10 @@ app.listen(PORT, async () => {
         console.log('❌ DB check failed:', err.message);
     }
 });
-import { BrevoClient } from '@getbrevo/brevo';
+import { sendFollowUpEmail } from "./email.js";
 
-const brevo = new BrevoClient({ apiKey: 'your-api-key' });
-
-async function sendEmail() {
-  const result = await brevo.transactionalEmails.sendTransacEmail({
-    subject: 'Hello from Brevo!',
-    htmlContent: '<html><body><p>Welcome to our app!</p></body></html>',
-    sender: { name: 'Your App', email: 'noreply@yourapp.com' },
-    to: [{ email: 'user@example.com', name: 'User' }],
-  });
-
-  console.log('Email sent. Message ID:', result.messageId);
-}
-
-sendEmail();
+app.post("/send-followup", async (req, res) => {
+  const { email } = req.body;
+  await sendFollowUpEmail(email, "Thanks for visiting!", "<p>We’ll follow up soon.</p>");
+  res.json({ success: true });
+});
