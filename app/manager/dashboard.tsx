@@ -40,25 +40,27 @@ function CustomBarChart({ datasets, labels, maxVal }: any) {
   }));
 
   return (
-    <View>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: BAR_H, gap: 6 }}>
+    <View style={{ paddingVertical: 10 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: BAR_H, gap: 16, paddingHorizontal: 10 }}>
         {barGroups.map((group: any, gi: number) => (
-          <View key={gi} style={{ flex: 1, flexDirection: 'row', alignItems: 'flex-end', gap: 3 }}>
-            {group.values.map((val: number, vi: number) => {
-              const h = maxVal > 0 ? (val / maxVal) * BAR_H : 0;
-              return (
-                <View key={vi} style={{ flex: 1, alignItems: 'center' }}>
-                  <Text style={{ fontSize: 9, color: '#888', marginBottom: 2 }}>{val}</Text>
-                  <View style={{ width: '100%', height: h, backgroundColor: group.colors[vi], borderRadius: 4 }} />
-                </View>
-              );
-            })}
+          <View key={gi} style={{ flex: 1, alignItems: 'center' }}>
+            <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6, justifyContent: 'center', width: '100%' }}>
+              {group.values.map((val: number, vi: number) => {
+                const h = maxVal > 0 ? (val / maxVal) * (BAR_H - 20) : 0;
+                return (
+                  <View key={vi} style={{ alignItems: 'center', flex: 1, maxWidth: 32 }}>
+                    <Text style={{ fontSize: 10, fontWeight: '600', color: '#64748b', marginBottom: 4 }}>{val}</Text>
+                    <View style={{ width: '100%', height: Math.max(h, 4), backgroundColor: group.colors[vi], borderRadius: 6 }} />
+                  </View>
+                );
+              })}
+            </View>
           </View>
         ))}
       </View>
-      <View style={{ flexDirection: 'row', marginTop: 6, gap: 6 }}>
+      <View style={{ flexDirection: 'row', marginTop: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingTop: 8 }}>
         {labels.map((label: string, i: number) => (
-          <Text key={i} style={{ flex: 1, textAlign: 'center', fontSize: 10, color: '#888' }}>{label}</Text>
+          <Text key={i} style={{ flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '600', color: '#64748b' }}>{label}</Text>
         ))}
       </View>
     </View>
@@ -67,9 +69,9 @@ function CustomBarChart({ datasets, labels, maxVal }: any) {
 
 // ── CUSTOM LINE CHART ─────────────────────────────────────────────────────────
 function CustomLineChart({ datasets, labels, maxVal }: any) {
-  const W = SCREEN_WIDTH - 80;
+  const W = SCREEN_WIDTH - 70;
   const H = 140;
-  const PAD = 10;
+  const PAD = 24;
 
   const pts = (data: number[]) => data.map((v, i) => ({
     x: data.length > 1 ? PAD + (i / (data.length - 1)) * (W - PAD * 2) : W / 2,
@@ -77,8 +79,8 @@ function CustomLineChart({ datasets, labels, maxVal }: any) {
   }));
 
   return (
-    <View>
-      <View style={{ height: H }}>
+    <View style={{ paddingVertical: 10 }}>
+      <View style={{ height: H, width: W }}>
         {datasets.map((ds: any, di: number) => {
           const points = pts(ds.data);
           return (
@@ -90,20 +92,56 @@ function CustomLineChart({ datasets, labels, maxVal }: any) {
                 const len = Math.sqrt(dx * dx + dy * dy);
                 const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
                 return (
-                  <View key={`line-${pi}`} style={{ position: 'absolute', left: pt.x, top: pt.y - 1, width: len, height: 2.5, backgroundColor: ds.color, transform: [{ rotate: `${angle}deg` }] }} />
+                  <View key={`line-${pi}`} style={{ position: 'absolute', left: pt.x, top: pt.y - 1.5, width: len, height: 3, backgroundColor: ds.color, transform: [{ rotate: `${angle}deg` }], transformOrigin: 'left' }} />
                 );
               })}
               {points.map((pt, pi) => (
-                <View key={`dot-${pi}`} style={{ position: 'absolute', left: pt.x - 4, top: pt.y - 4, width: 8, height: 8, borderRadius: 4, backgroundColor: ds.color, borderWidth: 2, borderColor: '#fff' }} />
+                <View key={`dot-${pi}`} style={{ position: 'absolute', left: pt.x - 5, top: pt.y - 5, width: 10, height: 10, borderRadius: 5, backgroundColor: '#fff', borderWidth: 3, borderColor: ds.color, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 1 }} />
+              ))}
+              {points.map((pt, pi) => (
+                <Text key={`val-${pi}`} style={{ position: 'absolute', left: pt.x - 12, top: pt.y - 22, width: 24, textAlign: 'center', fontSize: 10, fontWeight: '700', color: '#64748b' }}>{ds.data[pi]}</Text>
               ))}
             </View>
           );
         })}
       </View>
-      <View style={{ flexDirection: 'row', marginTop: 6 }}>
+      <View style={{ flexDirection: 'row', marginTop: 10, borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingTop: 8 }}>
         {labels.map((label: string, i: number) => (
-          <Text key={i} style={{ flex: 1, textAlign: 'center', fontSize: 10, color: '#888' }}>{label}</Text>
+          <Text key={i} style={{ flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '600', color: '#64748b' }}>{label}</Text>
         ))}
+      </View>
+    </View>
+  );
+}
+
+// ── CUSTOM PIE CHART ──────────────────────────────────────────────────────────
+function CustomPieChart({ data }: { data: { label: string; value: number; color: string }[] }) {
+  const total = data.reduce((sum, item) => sum + item.value, 0);
+  
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'center', height: 140, paddingHorizontal: 10, paddingVertical: 10 }}>
+      {/* Visual Indicator Container Stack */}
+      <View style={{ width: 110, height: 110, justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
+        <View style={{ width: 100, height: 100, borderRadius: 50, borderWidth: 12, borderColor: '#f1f5f9', position: 'absolute', alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 16, fontWeight: '800', color: '#1e293b' }}>{total}</Text>
+          <Text style={{ fontSize: 8, fontWeight: '600', color: '#94a3b8' }}>LEADS</Text>
+        </View>
+      </View>
+
+      {/* Legend list */}
+      <View style={{ flex: 1, gap: 8, paddingLeft: 20 }}>
+        {data.map((item, index) => {
+          const percentage = total > 0 ? ((item.value / total) * 100).toFixed(0) : '0';
+          return (
+            <View key={index} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: item.color }} />
+                <Text style={{ fontSize: 12, fontWeight: '600', color: '#334155' }}>{item.label}</Text>
+              </View>
+              <Text style={{ fontSize: 12, fontWeight: '700', color: '#64748b' }}>{item.value} ({percentage}%)</Text>
+            </View>
+          );
+        })}
       </View>
     </View>
   );
@@ -114,12 +152,12 @@ export default function ManagerDashboard() {
   const router = useRouter();
   const { theme, themeIndex, setThemeIndex } = useAppTheme();
 
-  const [data,            setData]            = useState<any>(null);
-  const [loading,         setLoading]         = useState(true);
+  const [data,             setData]            = useState<any>(null);
+  const [loading,          setLoading]         = useState(true);
   const [refreshing,      setRefreshing]      = useState(false);
   const [showProfile,     setShowProfile]     = useState(false);
   const [showThemePicker, setShowThemePicker] = useState(false);
-  const [profile,         setProfile]         = useState<any>(null);
+  const [profile,          setProfile]         = useState<any>(null);
   const [loadingProfile,  setLoadingProfile]  = useState(false);
 
   const fetchDashboard = useCallback(async (isRefresh = false) => {
@@ -208,6 +246,18 @@ export default function ManagerDashboard() {
           labels={['New', 'Contacted', 'Qualified']}
           maxVal={Math.max(newLeads, contacted, qualified, 1)}
           datasets={[{ data: [newLeads, contacted, qualified], color: theme.navy }]}
+        />
+      ),
+    },
+    {
+      id: 'pie', title: 'Leads Distribution (Pie)',
+      component: (
+        <CustomPieChart
+          data={[
+            { label: 'New', value: newLeads, color: COLORS.new },
+            { label: 'Contacted', value: contacted, color: COLORS.contacted },
+            { label: 'Qualified', value: qualified, color: COLORS.qualified },
+          ]}
         />
       ),
     },
