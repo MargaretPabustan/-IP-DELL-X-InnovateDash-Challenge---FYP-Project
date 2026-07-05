@@ -28,7 +28,6 @@ spec:
           ports:
             - containerPort: 3000
 
-          # Health checks (IMPORTANT for production + marks)
           readinessProbe:
             httpGet:
               path: /
@@ -47,9 +46,12 @@ spec:
             runAsNonRoot: true
             runAsUser: 1000
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop:
                 - ALL
+            seccompProfile:
+              type: RuntimeDefault
 
           resources:
             requests:
