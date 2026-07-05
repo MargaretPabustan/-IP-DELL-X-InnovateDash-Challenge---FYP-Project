@@ -589,11 +589,22 @@ app.post('/admin/users', authenticateToken, authorizeRoles('admin'), async (req,
 });
 
 app.put('/admin/users/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
-    const { full_name, email, role, team_id, is_active } = req.body;
-    try {
-        await pool.query('UPDATE users SET full_name=$1, email=$2, role=$3, team_id=$4, is_active=$5 WHERE user_id=$6', [full_name, email, role, team_id, is_active, req.params.id]);
-        res.json({ success: true, message: 'User updated' });
-    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+  const { full_name, email, role, team_id, is_active, password } = req.body;
+  try {
+    if (password) {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      await pool.query(
+        'UPDATE users SET full_name=$1, email=$2, role=$3, team_id=$4, is_active=$5, password_hash=$6 WHERE user_id=$7',
+        [full_name, email, role, team_id, is_active, hashedPassword, req.params.id]
+      );
+    } else {
+      await pool.query(
+        'UPDATE users SET full_name=$1, email=$2, role=$3, team_id=$4, is_active=$5 WHERE user_id=$6',
+        [full_name, email, role, team_id, is_active, req.params.id]
+      );
+    }
+    res.json({ success: true, message: 'User updated' });
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 app.delete('/admin/users/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {

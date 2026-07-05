@@ -55,10 +55,11 @@ export default function AdminUsers() {
   const [newRole,     setNewRole]     = useState('rep');
   const [newTeamId,   setNewTeamId]   = useState<number | null>(null);
 
-  const [editName,   setEditName]   = useState('');
-  const [editEmail,  setEditEmail]  = useState('');
-  const [editRole,   setEditRole]   = useState('rep');
-  const [editTeamId, setEditTeamId] = useState<number | null>(null);
+  const [editName,     setEditName]     = useState('');
+  const [editEmail,    setEditEmail]    = useState('');
+  const [editRole,     setEditRole]     = useState('rep');
+  const [editTeamId,   setEditTeamId]   = useState<number | null>(null);
+  const [editPassword, setEditPassword] = useState('');
 
   const fetchUsers = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -80,6 +81,7 @@ export default function AdminUsers() {
     setEditEmail(user.email);
     setEditRole(user.role);
     setEditTeamId(user.team_id);
+    setEditPassword('');
   };
 
   const handleCreate = async () => {
@@ -130,6 +132,7 @@ export default function AdminUsers() {
           full_name: editName, email: editEmail, role: editRole,
           team_id: editRole === 'manager' ? editTeamId : null,
           is_active: editUser.is_active,
+          ...(editPassword.trim() ? { password: editPassword } : {}),
         }),
       });
       if (!res.ok) throw new Error('Failed to update user');
@@ -323,6 +326,8 @@ export default function AdminUsers() {
             <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: theme.bg }]} value={editName} onChangeText={setEditName} placeholder="Full name" placeholderTextColor={theme.subText} />
             <Text style={styles.fieldLabel}>EMAIL</Text>
             <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: theme.bg }]} value={editEmail} onChangeText={setEditEmail} placeholder="Email address" placeholderTextColor={theme.subText} autoCapitalize="none" keyboardType="email-address" />
+            <Text style={styles.fieldLabel}>NEW PASSWORD</Text>
+            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: theme.bg }]} value={editPassword} onChangeText={setEditPassword} placeholder="Enter new password to change" placeholderTextColor={theme.subText} secureTextEntry />
             <Text style={styles.fieldLabel}>ROLE</Text>
             <View style={styles.roleRow}>
               {['rep', 'manager', 'admin'].map(r => (

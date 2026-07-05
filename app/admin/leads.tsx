@@ -443,7 +443,6 @@ export default function AdminLeads() {
         )}
       </ScrollView>
 
-      {/* BOTTOM NAV */}
       <View style={[styles.bottomNav, { backgroundColor: theme.navBg, borderTopColor: theme.subText + '22', paddingBottom: Platform.OS === 'ios' ? 28 : 12 }]}>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/admin/dashboard' as any)}>
           <Ionicons name="grid-outline" size={24} color={theme.subText} />
@@ -452,6 +451,10 @@ export default function AdminLeads() {
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/admin/users' as any)}>
           <Ionicons name="people-outline" size={24} color={theme.subText} />
           <Text style={[styles.navLabel, { color: theme.subText }]}>Users</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/admin/leads' as any)}>
+          <Ionicons name="document-text" size={24} color={theme.accent} />
+          <Text style={[styles.navLabel, { color: theme.accent }]}>Leads</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/admin/teams' as any)}>
           <Ionicons name="business-outline" size={24} color={theme.subText} />
