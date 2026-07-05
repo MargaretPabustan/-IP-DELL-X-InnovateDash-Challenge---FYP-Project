@@ -127,10 +127,10 @@ async function sendEmail({ to, subject, text }) {
 function buildFollowUpEmail(lead, aiData, interests) {
     let body = `Hi ${lead.name},\n\n`;
 
-    if (aiData.intent === 'High' || lead.status === 'QUALIFIED') {
+    if (aiData.intent === 'High' || lead.status === 'URGENT') {
         body += `We noticed your strong interest in ${interests}. ${aiData.notes}\n\n`;
         body += `We'd love to schedule a call with you this week to discuss Dell solutions in detail. Please reply to this email or contact your assigned Dell representative to arrange a time.\n`;
-    } else if (aiData.intent === 'Medium' || lead.status === 'CONTACTED') {
+    } else if (aiData.intent === 'Medium' || lead.status === 'FOLLOW-UP') {
         if (lead.customer_intent?.toLowerCase().includes('pricing')) {
             body += `You mentioned pricing for ${interests}. ${aiData.notes}\n\n`;
             body += `We'll send you tailored pricing information shortly. In the meantime, feel free to reply if you'd like to arrange a personalised demo.\n`;
@@ -182,10 +182,10 @@ function generateRuleBasedAnalysis(customerIntent, interests) {
     const intentLower = (customerIntent || '').toLowerCase();
 
     if (intentLower.includes('high') || intentLower.includes('ready for follow-up')) {
-        intent = 'High'; confidence = 0.85; follow_up_required = true; status = 'QUALIFIED';
+        intent = 'High'; confidence = 0.85; follow_up_required = true; status = 'URGENT';
         notes = `High intent lead interested in ${interests}. Recommend immediate follow-up to discuss ${interests} solutions and schedule a product demonstration.`;
     } else if (intentLower.includes('medium') || intentLower.includes('pricing') || intentLower.includes('demo')) {
-        intent = 'Medium'; confidence = 0.65; follow_up_required = true; status = 'CONTACTED';
+        intent = 'Medium'; confidence = 0.65; follow_up_required = true; status = 'FOLLOW-UP';
         if (intentLower.includes('pricing')) {
             notes = `Lead is exploring pricing options for ${interests}. Follow up within 3 days with a tailored quote or pricing overview.`;
         } else if (intentLower.includes('demo')) {
@@ -198,7 +198,7 @@ function generateRuleBasedAnalysis(customerIntent, interests) {
         notes = `Lead is currently browsing and interested in ${interests}. Add to the mailing list and follow up with relevant product information in 1-2 weeks.`;
     }
 
-    const statusDisplay = { 'QUALIFIED': 'Ready for Follow-up', 'CONTACTED': 'Review for Follow-up', 'NEW': 'No Follow-up Needed' };
+    const statusDisplay = { 'URGENT': 'Ready for Follow-up', 'FOLLOW-UP': 'Review for Follow-up', 'NEW': 'No Follow-up Needed' };
     return { intent, confidence, follow_up_required, notes, status, follow_up_status: statusDisplay[status] };
 }
 
@@ -408,8 +408,8 @@ app.get('/manager/dashboard', authenticateToken, authorizeRoles('admin', 'manage
     try {
         const teamId = req.user.team_id;
         const totalLeads = await pool.query('SELECT COUNT(*) FROM leads WHERE assigned_team_id = $1', [teamId]);
-        const qualified  = await pool.query("SELECT COUNT(*) FROM leads WHERE assigned_team_id = $1 AND status='QUALIFIED'", [teamId]);
-        const contacted  = await pool.query("SELECT COUNT(*) FROM leads WHERE assigned_team_id = $1 AND status='CONTACTED'", [teamId]);
+        const qualified  = await pool.query("SELECT COUNT(*) FROM leads WHERE assigned_team_id = $1 AND status='URGENT'", [teamId]);
+        const contacted  = await pool.query("SELECT COUNT(*) FROM leads WHERE assigned_team_id = $1 AND status='FOLLOW-UP'", [teamId]);
         const newLeads   = await pool.query("SELECT COUNT(*) FROM leads WHERE assigned_team_id = $1 AND status='NEW'", [teamId]);
         const followups  = await pool.query(`
             SELECT COUNT(*) FROM lead_activity_logs la
@@ -606,8 +606,8 @@ app.delete('/admin/users/:id', authenticateToken, authorizeRoles('admin'), async
 app.get('/admin/dashboard', authenticateToken, authorizeRoles('admin'), async (req, res) => {
     try {
         const totalLeads = await pool.query('SELECT COUNT(*) FROM leads');
-        const qualified  = await pool.query("SELECT COUNT(*) FROM leads WHERE status='QUALIFIED'");
-        const contacted  = await pool.query("SELECT COUNT(*) FROM leads WHERE status='CONTACTED'");
+        const qualified  = await pool.query("SELECT COUNT(*) FROM leads WHERE status='URGENT'");
+        const contacted  = await pool.query("SELECT COUNT(*) FROM leads WHERE status='FOLLOW-UP'");
         const newLeads   = await pool.query("SELECT COUNT(*) FROM leads WHERE status='NEW'");
         const followups  = await pool.query("SELECT COUNT(*) FROM lead_activity_logs WHERE activity_type = 'FOLLOWUP_SENT'");
         const emails     = await pool.query("SELECT COUNT(*) FROM lead_activity_logs WHERE activity_type = 'EMAIL_SENT'");
@@ -772,12 +772,12 @@ Return ONLY valid JSON in this exact format, no extra text:
 
         let status = 'NEW';
         if (aiData.intent === 'High') {
-            status = (aiData.confidence >= 0.8 && aiData.follow_up_required) ? 'QUALIFIED' : 'CONTACTED';
+            status = (aiData.confidence >= 0.8 && aiData.follow_up_required) ? 'URGENT' : 'FOLLOW-UP';
         } else if (aiData.intent === 'Medium' && aiData.follow_up_required) {
-            status = 'CONTACTED';
+            status = 'FOLLOW-UP';
         }
 
-        const statusDisplay = { 'QUALIFIED': 'Ready for Follow-up', 'CONTACTED': 'Review for Follow-up', 'NEW': 'No Follow-up Needed' };
+        const statusDisplay = { 'URGENT': 'Ready for Follow-up', 'FOLLOW-UP': 'Review for Follow-up', 'NEW': 'No Follow-up Needed' };
 
         await pool.query(
             'UPDATE leads SET ai_notes=$1, status=$2, confidence_score=$3, follow_up_required=$4 WHERE lead_id=$5',
@@ -832,7 +832,7 @@ app.post('/send-followup/:id', authenticateToken, authorizeRoles('admin', 'manag
 
         const lead = leadResult.rows[0];
         const aiData = {
-            intent: lead.status === 'QUALIFIED' ? 'High' : lead.status === 'CONTACTED' ? 'Medium' : 'Low',
+            intent: lead.status === 'URGENT' ? 'High' : lead.status === 'FOLLOW-UP' ? 'Medium' : 'Low',
             notes:  lead.ai_notes || 'Thank you for visiting our booth.',
         };
         const interests = lead.customer_intent || 'Dell Technologies solutions';

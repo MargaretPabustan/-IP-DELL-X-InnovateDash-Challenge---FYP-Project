@@ -2,18 +2,21 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
   StatusBar, Platform, ScrollView, ActivityIndicator, RefreshControl,
-  Pressable, Alert,
+  Pressable, Alert, Dimensions, Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme, THEMES } from '../../src/constants/useAppTheme';
 import * as SecureStore from 'expo-secure-store';
 import NetInfo from '@react-native-community/netinfo';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 
 const BACKEND_URL   = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 const API_URL       = process.env.EXPO_PUBLIC_API_URL || '';
 const ANON_KEY      = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const SUPABASE_BASE = API_URL.replace(/\/[^/]+$/, '');
+const SCREEN_WIDTH  = Dimensions.get('window').width;
 
 const SUPABASE_HEADERS = {
   'apikey':        ANON_KEY,
@@ -45,8 +48,11 @@ export default function AdminDashboard() {
   const [stats,           setStats]          = useState<any>(null);
   const [showProfile,     setShowProfile]    = useState(false);
   const [showThemePicker, setShowThemePicker] = useState(false);
+  const [showExport,      setShowExport]     = useState(false);
   const [profile,         setProfile]        = useState<any>(null);
   const [loadingProfile,  setLoadingProfile] = useState(false);
+  const [exporting,       setExporting]      = useState(false);
+  const [previewing,      setPreviewing]     = useState(false);
 
   const fetchStats = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -79,6 +85,65 @@ export default function AdminDashboard() {
   useEffect(() => { fetchStats(); }, [fetchStats]);
 
   const handleOpenProfile = () => { setShowProfile(true); fetchProfile(); };
+
+  const handlePreview = async () => {
+    setPreviewing(true);
+    try {
+      const headers = await getAuthHeaders();
+      const res = await fetch(`${BACKEND_URL}/manager/export/leads`, { headers });
+      const json = await res.json();
+      if (json.success) {
+        Alert.alert('Preview', `${json.data.length} leads found across all teams.`);
+      } else {
+        Alert.alert('Error', 'Failed to fetch leads.');
+      }
+    } catch {
+      Alert.alert('Error', 'Failed to fetch preview.');
+    } finally { setPreviewing(false); }
+  };
+
+  const handleExportExcel = async () => {
+    setExporting(true);
+    try {
+      const token = await SecureStore.getItemAsync('token');
+      const fileName = `leads-${Date.now()}.xlsx`;
+      const directory = Platform.OS === 'android' ? FileSystem.documentDirectory : FileSystem.cacheDirectory;
+      const fileUri = `${directory}${fileName}`;
+      const result = await FileSystem.downloadAsync(
+        `${BACKEND_URL}/export/leads/excel`,
+        fileUri,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const available = await Sharing.isAvailableAsync();
+      if (!available) {
+        Alert.alert('Sharing unavailable', 'This device does not support file sharing.');
+        return;
+      }
+      if (Platform.OS === 'android') {
+        Alert.alert('Export Success', `File downloaded successfully.`, [
+          { text: 'Open / Share', onPress: async () => {
+            await Sharing.shareAsync(result.uri, {
+              mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              dialogTitle: 'Open Exported Leads',
+              UTI: 'org.openxmlformats.spreadsheetml.sheet',
+            });
+          }},
+          { text: 'Cancel', style: 'cancel' },
+        ]);
+      } else {
+        await Sharing.shareAsync(result.uri, {
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          dialogTitle: 'Export Leads',
+          UTI: 'org.openxmlformats.spreadsheetml.sheet',
+        });
+      }
+    } catch (err) {
+      console.error('Export error:', err);
+      Alert.alert('Error', 'Failed to export leads.');
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const handleLogout = async () => {
     try {
@@ -153,6 +218,16 @@ export default function AdminDashboard() {
                 <Text style={styles.welcomeTitle}>Admin Dashboard</Text>
                 <Text style={styles.welcomeSub}>System overview & management</Text>
               </View>
+              <TouchableOpacity
+                onPress={handleExportExcel}
+                disabled={exporting}
+                style={styles.welcomeExportBtn}
+              >
+                {exporting
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Ionicons name="download-outline" size={20} color="#fff" />
+                }
+              </TouchableOpacity>
             </View>
 
             <Text style={[styles.sectionLabel, { color: theme.subText }]}>OVERVIEW</Text>
@@ -211,6 +286,10 @@ export default function AdminDashboard() {
           <Ionicons name="people-outline" size={24} color={theme.subText} />
           <Text style={[styles.navLabel, { color: theme.subText }]}>Users</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/admin/leads' as any)}>
+          <Ionicons name="document-text-outline" size={24} color={theme.subText} />
+          <Text style={[styles.navLabel, { color: theme.subText }]}>Leads</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/admin/teams' as any)}>
           <Ionicons name="business-outline" size={24} color={theme.subText} />
           <Text style={[styles.navLabel, { color: theme.subText }]}>Teams</Text>
@@ -257,11 +336,10 @@ export default function AdminDashboard() {
         </Pressable>
       )}
 
-      {/* THEME DROPDOWN */}
+      {/* THEME PICKER — positioned left to avoid overlapping profile dropdown */}
       {showThemePicker && (
         <Pressable style={styles.dropdownBackdrop} onPress={() => setShowThemePicker(false)}>
-          <Pressable style={styles.dropdown} onPress={() => {}}>
-            <View style={styles.dropdownArrow} />
+          <Pressable style={[styles.dropdown, { right: undefined, left: 16, width: SCREEN_WIDTH - 32 }]} onPress={() => {}}>
             <Text style={styles.themeDropdownTitle}>Appearance</Text>
             <View style={styles.themeGrid}>
               {THEMES.map((t, index) => (
@@ -282,6 +360,61 @@ export default function AdminDashboard() {
           </Pressable>
         </Pressable>
       )}
+      {/* EXPORT BOTTOM SHEET */}
+      <Modal visible={showExport} transparent animationType="slide">
+        <Pressable style={styles.modalBackdrop} onPress={() => setShowExport(false)}>
+          <Pressable style={[styles.exportSheet, { backgroundColor: theme.card }]} onPress={() => {}}>
+            <View style={styles.modalHandle} />
+            <Text style={[styles.exportTitle, { color: theme.text }]}>Export Leads</Text>
+            <Text style={[styles.exportSub, { color: theme.subText }]}>Choose how you want to access all leads data</Text>
+
+            {/* Preview card */}
+            <TouchableOpacity
+              style={[styles.exportCard, { backgroundColor: theme.bg }]}
+              onPress={handlePreview}
+              disabled={previewing}
+            >
+              <View style={[styles.exportIconBox, { backgroundColor: '#3b82f618' }]}>
+                <Ionicons name="eye-outline" size={24} color="#3b82f6" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.exportCardTitle, { color: theme.text }]}>Preview Data</Text>
+                <Text style={[styles.exportCardSub, { color: theme.subText }]}>See how many leads are available</Text>
+              </View>
+              {previewing
+                ? <ActivityIndicator size="small" color="#3b82f6" />
+                : <Ionicons name="chevron-forward" size={16} color={theme.subText} />
+              }
+            </TouchableOpacity>
+
+            {/* Download card */}
+            <TouchableOpacity
+              style={[styles.exportCard, { backgroundColor: theme.bg }]}
+              onPress={handleExportExcel}
+              disabled={exporting}
+            >
+              <View style={[styles.exportIconBox, { backgroundColor: '#22c55e18' }]}>
+                <Ionicons name="document-text-outline" size={24} color="#22c55e" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.exportCardTitle, { color: theme.text }]}>Download Excel</Text>
+                <Text style={[styles.exportCardSub, { color: theme.subText }]}>Export all leads as .xlsx file</Text>
+              </View>
+              {exporting
+                ? <ActivityIndicator size="small" color="#22c55e" />
+                : <Ionicons name="chevron-forward" size={16} color={theme.subText} />
+              }
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.exportCancelBtn, { borderColor: theme.subText + '44' }]}
+              onPress={() => setShowExport(false)}
+            >
+              <Text style={[styles.exportCancelText, { color: theme.subText }]}>Cancel</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -301,6 +434,7 @@ const styles = StyleSheet.create({
   welcomeCard: { borderRadius: 16, padding: 20, flexDirection: 'row', alignItems: 'center', gap: 14 },
   welcomeTitle: { color: '#fff', fontSize: 18, fontWeight: '800' },
   welcomeSub: { color: 'rgba(255,255,255,0.6)', fontSize: 12, marginTop: 2 },
+  welcomeExportBtn: { padding: 8, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.15)' },
   sectionLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1.5, marginTop: 8 },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   statCard: { width: '47%', borderRadius: 14, padding: 16, gap: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
@@ -311,7 +445,7 @@ const styles = StyleSheet.create({
   navIcon: { width: 48, height: 48, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   navCardTitle: { fontSize: 15, fontWeight: '700' },
   navCardSub: { fontSize: 12, marginTop: 2 },
-  bottomNav: { flexDirection: 'row', borderTopWidth: 1, paddingTop: 10, paddingHorizontal: 24, justifyContent: 'space-around', alignItems: 'center' },
+  bottomNav: { flexDirection: 'row', borderTopWidth: 1, paddingTop: 10, paddingHorizontal: 16, justifyContent: 'space-around', alignItems: 'center' },
   navItem: { alignItems: 'center', gap: 3, flex: 1 },
   navLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 0.3 },
   profileError: { color: '#94a3b8', textAlign: 'center', paddingVertical: 16, fontSize: 13 },
@@ -338,4 +472,15 @@ const styles = StyleSheet.create({
   swatchLarge: { width: 28, height: 28, borderRadius: 8, position: 'absolute', top: 0, left: 0 },
   swatchSmall: { width: 16, height: 16, borderRadius: 5, position: 'absolute', right: 0, bottom: 0, borderWidth: 2, borderColor: '#fff' },
   themeName: { fontSize: 10, color: '#64748b', fontWeight: '600', textAlign: 'center' },
+  modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'flex-end' },
+  modalHandle: { width: 40, height: 4, backgroundColor: '#cbd5e1', borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
+  exportSheet: { borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24, gap: 12 },
+  exportTitle: { fontSize: 20, fontWeight: '800' },
+  exportSub: { fontSize: 13, marginBottom: 4 },
+  exportCard: { borderRadius: 14, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
+  exportIconBox: { width: 46, height: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  exportCardTitle: { fontSize: 14, fontWeight: '700' },
+  exportCardSub: { fontSize: 12, marginTop: 2 },
+  exportCancelBtn: { borderWidth: 1, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 4 },
+  exportCancelText: { fontSize: 14, fontWeight: '600' },
 });

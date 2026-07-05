@@ -11,6 +11,10 @@ import * as SecureStore from 'expo-secure-store';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
+const TEAM_NAMES: Record<number, string> = {
+  1: 'AI PCs', 2: 'Multi-cloud', 3: 'Storage', 4: 'Service', 5: 'Others',
+};
+
 async function getAuthHeaders() {
   const token = await SecureStore.getItemAsync('token');
   return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
@@ -45,16 +49,16 @@ export default function AdminUsers() {
   const [viewUser,   setViewUser]   = useState<User | null>(null);
   const [saving,     setSaving]     = useState(false);
 
-  // Create form
   const [newName,     setNewName]     = useState('');
   const [newEmail,    setNewEmail]    = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newRole,     setNewRole]     = useState('rep');
+  const [newTeamId,   setNewTeamId]   = useState<number | null>(null);
 
-  // Edit form
   const [editName,   setEditName]   = useState('');
   const [editEmail,  setEditEmail]  = useState('');
   const [editRole,   setEditRole]   = useState('rep');
+  const [editTeamId, setEditTeamId] = useState<number | null>(null);
 
   const fetchUsers = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -75,6 +79,7 @@ export default function AdminUsers() {
     setEditName(user.full_name);
     setEditEmail(user.email);
     setEditRole(user.role);
+    setEditTeamId(user.team_id);
   };
 
   const handleCreate = async () => {
@@ -82,18 +87,24 @@ export default function AdminUsers() {
       Alert.alert('Missing Fields', 'Please fill in all fields.');
       return;
     }
+    if (newRole === 'manager' && !newTeamId) {
+      Alert.alert('Missing Team', 'Please assign a team to this manager.');
+      return;
+    }
     setSaving(true);
     try {
       const headers = await getAuthHeaders();
       const res = await fetch(`${BACKEND_URL}/admin/users`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ full_name: newName, email: newEmail, password: newPassword, role: newRole, team_id: null }),
+        method: 'POST', headers,
+        body: JSON.stringify({
+          full_name: newName, email: newEmail, password: newPassword, role: newRole,
+          team_id: newRole === 'manager' ? newTeamId : null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
       setShowCreate(false);
-      setNewName(''); setNewEmail(''); setNewPassword(''); setNewRole('rep');
+      setNewName(''); setNewEmail(''); setNewPassword(''); setNewRole('rep'); setNewTeamId(null);
       fetchUsers();
     } catch (e: any) {
       Alert.alert('Error', e.message || 'Failed to create user.');
@@ -105,24 +116,25 @@ export default function AdminUsers() {
       Alert.alert('Missing Fields', 'Name and email are required.');
       return;
     }
+    if (editRole === 'manager' && !editTeamId) {
+      Alert.alert('Missing Team', 'Please assign a team to this manager.');
+      return;
+    }
     if (!editUser) return;
     setSaving(true);
     try {
       const headers = await getAuthHeaders();
       const res = await fetch(`${BACKEND_URL}/admin/users/${editUser.user_id}`, {
-        method: 'PUT',
-        headers,
+        method: 'PUT', headers,
         body: JSON.stringify({
-          full_name: editName,
-          email: editEmail,
-          role: editRole,
-          team_id: editUser.team_id,
+          full_name: editName, email: editEmail, role: editRole,
+          team_id: editRole === 'manager' ? editTeamId : null,
           is_active: editUser.is_active,
         }),
       });
       if (!res.ok) throw new Error('Failed to update user');
       setUsers(prev => prev.map(u => u.user_id === editUser.user_id
-        ? { ...u, full_name: editName, email: editEmail, role: editRole }
+        ? { ...u, full_name: editName, email: editEmail, role: editRole, team_id: editRole === 'manager' ? editTeamId : null }
         : u
       ));
       setEditUser(null);
@@ -141,12 +153,35 @@ export default function AdminUsers() {
           const res = await fetch(`${BACKEND_URL}/admin/users/${user.user_id}`, { method: 'DELETE', headers });
           if (!res.ok) throw new Error('Failed');
           setUsers(prev => prev.filter(u => u.user_id !== user.user_id));
-        } catch {
-          Alert.alert('Error', 'Failed to delete user.');
-        }
+        } catch { Alert.alert('Error', 'Failed to delete user.'); }
       }},
     ]);
   };
+
+  const TeamPicker = ({ teamId, onSelect }: { teamId: number | null; onSelect: (id: number | null) => void }) => (
+    <View>
+      <Text style={styles.fieldLabel}>ASSIGN TEAM</Text>
+      <View style={styles.roleRow}>
+        {[1, 2, 3, 4, 5].map(t => (
+          <TouchableOpacity
+            key={t}
+            style={[styles.teamChip, {
+              backgroundColor: teamId === t ? theme.accent : theme.bg,
+              borderColor: theme.accent,
+            }]}
+            onPress={() => onSelect(teamId === t ? null : t)}
+          >
+            <Text style={[styles.roleChipText, { color: teamId === t ? '#fff' : theme.accent }]}>T{t}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      {teamId && (
+        <Text style={{ fontSize: 11, color: theme.subText, marginTop: 4 }}>
+          Team {teamId} — {TEAM_NAMES[teamId]}
+        </Text>
+      )}
+    </View>
+  );
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
@@ -194,6 +229,11 @@ export default function AdminUsers() {
                   </View>
                 </View>
                 <Text style={[styles.userEmail, { color: theme.subText }]} numberOfLines={1}>{user.email}</Text>
+                {user.role === 'manager' && user.team_id && (
+                  <Text style={[styles.teamLabel, { color: theme.subText }]}>
+                    Team {user.team_id} — {TEAM_NAMES[user.team_id] || ''}
+                  </Text>
+                )}
                 <View style={[styles.statusBadge, { backgroundColor: user.is_active ? '#22c55e20' : '#ef444420' }]}>
                   <Text style={[styles.statusText, { color: user.is_active ? '#22c55e' : '#ef4444' }]}>
                     {user.is_active ? 'Active' : 'Inactive'}
@@ -201,8 +241,8 @@ export default function AdminUsers() {
                 </View>
               </View>
               <View style={styles.actions}>
-                <TouchableOpacity style={[styles.actionBtn, { borderColor: theme.navy }]} onPress={() => openEdit(user)}>
-                  <Ionicons name="pencil" size={13} color={theme.navy} />
+                <TouchableOpacity style={[styles.actionBtn, { borderColor: theme.accent }]} onPress={() => openEdit(user)}>
+                  <Ionicons name="pencil" size={13} color={theme.accent} />
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.actionBtn, { borderColor: theme.accent }]} onPress={() => setViewUser(user)}>
                   <Ionicons name="eye-outline" size={13} color={theme.accent} />
@@ -226,6 +266,10 @@ export default function AdminUsers() {
           <Ionicons name="people" size={24} color={theme.accent} />
           <Text style={[styles.navLabel, { color: theme.accent }]}>Users</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/admin/leads' as any)}>
+          <Ionicons name="document-text-outline" size={24} color={theme.subText} />
+          <Text style={[styles.navLabel, { color: theme.subText }]}>Leads</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/admin/teams' as any)}>
           <Ionicons name="business-outline" size={24} color={theme.subText} />
           <Text style={[styles.navLabel, { color: theme.subText }]}>Teams</Text>
@@ -238,34 +282,30 @@ export default function AdminUsers() {
           <Pressable style={[styles.modalSheet, { backgroundColor: theme.card }]} onPress={() => {}}>
             <View style={styles.modalHandle} />
             <Text style={[styles.modalTitle, { color: theme.text }]}>Create User</Text>
-
             <Text style={styles.fieldLabel}>FULL NAME</Text>
-            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={newName} onChangeText={setNewName} placeholder="Full name" placeholderTextColor={theme.subText} />
-
+            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: theme.bg }]} value={newName} onChangeText={setNewName} placeholder="Full name" placeholderTextColor={theme.subText} />
             <Text style={styles.fieldLabel}>EMAIL</Text>
-            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={newEmail} onChangeText={setNewEmail} placeholder="Email address" placeholderTextColor={theme.subText} autoCapitalize="none" keyboardType="email-address" />
-
+            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: theme.bg }]} value={newEmail} onChangeText={setNewEmail} placeholder="Email address" placeholderTextColor={theme.subText} autoCapitalize="none" keyboardType="email-address" />
             <Text style={styles.fieldLabel}>PASSWORD</Text>
-            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={newPassword} onChangeText={setNewPassword} placeholder="Password" placeholderTextColor={theme.subText} secureTextEntry />
-
+            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: theme.bg }]} value={newPassword} onChangeText={setNewPassword} placeholder="Password" placeholderTextColor={theme.subText} secureTextEntry />
             <Text style={styles.fieldLabel}>ROLE</Text>
             <View style={styles.roleRow}>
               {['rep', 'manager', 'admin'].map(r => (
                 <TouchableOpacity
                   key={r}
-                  style={[styles.roleChip, { backgroundColor: newRole === r ? theme.navy : theme.bg, borderColor: theme.navy }]}
-                  onPress={() => setNewRole(r)}
+                  style={[styles.roleChip, { backgroundColor: newRole === r ? theme.accent : theme.bg, borderColor: theme.accent }]}
+                  onPress={() => { setNewRole(r); if (r !== 'manager') setNewTeamId(null); }}
                 >
-                  <Text style={[styles.roleChipText, { color: newRole === r ? '#fff' : theme.navy }]}>{r.toUpperCase()}</Text>
+                  <Text style={[styles.roleChipText, { color: newRole === r ? '#fff' : theme.accent }]}>{r.toUpperCase()}</Text>
                 </TouchableOpacity>
               ))}
             </View>
-
+            {newRole === 'manager' && <TeamPicker teamId={newTeamId} onSelect={setNewTeamId} />}
             <View style={styles.modalBtns}>
-              <TouchableOpacity style={[styles.cancelBtn, { borderColor: theme.navy }]} onPress={() => setShowCreate(false)}>
-                <Text style={[styles.cancelText, { color: theme.navy }]}>Cancel</Text>
+              <TouchableOpacity style={[styles.cancelBtn, { borderColor: theme.accent }]} onPress={() => setShowCreate(false)}>
+                <Text style={[styles.cancelText, { color: theme.accent }]}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.navy, opacity: saving ? 0.7 : 1 }]} onPress={handleCreate} disabled={saving}>
+              <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.accent, opacity: saving ? 0.7 : 1 }]} onPress={handleCreate} disabled={saving}>
                 {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveBtnText}>Create</Text>}
               </TouchableOpacity>
             </View>
@@ -279,37 +319,35 @@ export default function AdminUsers() {
           <Pressable style={[styles.modalSheet, { backgroundColor: theme.card }]} onPress={() => {}}>
             <View style={styles.modalHandle} />
             <Text style={[styles.modalTitle, { color: theme.text }]}>Edit User</Text>
-
             <Text style={styles.fieldLabel}>FULL NAME</Text>
-            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={editName} onChangeText={setEditName} placeholder="Full name" placeholderTextColor={theme.subText} />
-
+            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: theme.bg }]} value={editName} onChangeText={setEditName} placeholder="Full name" placeholderTextColor={theme.subText} />
             <Text style={styles.fieldLabel}>EMAIL</Text>
-            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={editEmail} onChangeText={setEditEmail} placeholder="Email address" placeholderTextColor={theme.subText} autoCapitalize="none" keyboardType="email-address" />
-
+            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: theme.bg }]} value={editEmail} onChangeText={setEditEmail} placeholder="Email address" placeholderTextColor={theme.subText} autoCapitalize="none" keyboardType="email-address" />
             <Text style={styles.fieldLabel}>ROLE</Text>
             <View style={styles.roleRow}>
               {['rep', 'manager', 'admin'].map(r => (
                 <TouchableOpacity
                   key={r}
-                  style={[styles.roleChip, { backgroundColor: editRole === r ? theme.navy : theme.bg, borderColor: theme.navy }]}
-                  onPress={() => setEditRole(r)}
+                  style={[styles.roleChip, { backgroundColor: editRole === r ? theme.accent : theme.bg, borderColor: theme.accent }]}
+                  onPress={() => { setEditRole(r); if (r !== 'manager') setEditTeamId(null); }}
                 >
-                  <Text style={[styles.roleChipText, { color: editRole === r ? '#fff' : theme.navy }]}>{r.toUpperCase()}</Text>
+                  <Text style={[styles.roleChipText, { color: editRole === r ? '#fff' : theme.accent }]}>{r.toUpperCase()}</Text>
                 </TouchableOpacity>
               ))}
             </View>
-
+            {editRole === 'manager' && <TeamPicker teamId={editTeamId} onSelect={setEditTeamId} />}
             <View style={styles.modalBtns}>
-              <TouchableOpacity style={[styles.cancelBtn, { borderColor: theme.navy }]} onPress={() => setEditUser(null)}>
-                <Text style={[styles.cancelText, { color: theme.navy }]}>Cancel</Text>
+              <TouchableOpacity style={[styles.cancelBtn, { borderColor: theme.accent }]} onPress={() => setEditUser(null)}>
+                <Text style={[styles.cancelText, { color: theme.accent }]}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.navy, opacity: saving ? 0.7 : 1 }]} onPress={handleEdit} disabled={saving}>
+              <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.accent, opacity: saving ? 0.7 : 1 }]} onPress={handleEdit} disabled={saving}>
                 {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveBtnText}>Save</Text>}
               </TouchableOpacity>
             </View>
           </Pressable>
         </Pressable>
       </Modal>
+
       {/* VIEW MODAL */}
       <Modal visible={!!viewUser} transparent animationType="slide">
         <Pressable style={styles.modalBackdrop} onPress={() => setViewUser(null)}>
@@ -331,6 +369,14 @@ export default function AdminUsers() {
                 <View style={[styles.roleBadge, { backgroundColor: getRoleColor(viewUser.role) + '20', alignSelf: 'flex-start' }]}>
                   <Text style={[styles.roleText, { color: getRoleColor(viewUser.role) }]}>{viewUser.role.toUpperCase()}</Text>
                 </View>
+                {viewUser.role === 'manager' && (
+                  <>
+                    <Text style={styles.fieldLabel}>ASSIGNED TEAM</Text>
+                    <Text style={[styles.viewValue, { color: theme.text }]}>
+                      {viewUser.team_id ? `Team ${viewUser.team_id} — ${TEAM_NAMES[viewUser.team_id] || ''}` : 'No team assigned'}
+                    </Text>
+                  </>
+                )}
                 <Text style={styles.fieldLabel}>STATUS</Text>
                 <View style={[styles.statusBadge, { backgroundColor: viewUser.is_active ? '#22c55e20' : '#ef444420' }]}>
                   <Text style={[styles.statusText, { color: viewUser.is_active ? '#22c55e' : '#ef4444' }]}>
@@ -341,7 +387,7 @@ export default function AdminUsers() {
                 <Text style={[styles.viewValue, { color: theme.subText }]}>#{viewUser.user_id}</Text>
               </>
             )}
-            <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.navy, marginTop: 20 }]} onPress={() => setViewUser(null)}>
+            <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.accent, marginTop: 20 }]} onPress={() => setViewUser(null)}>
               <Text style={styles.saveBtnText}>Close</Text>
             </TouchableOpacity>
           </Pressable>
@@ -368,7 +414,8 @@ const styles = StyleSheet.create({
   userName: { fontSize: 14, fontWeight: '700', flex: 1 },
   roleBadge: { borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   roleText: { fontSize: 10, fontWeight: '700' },
-  userEmail: { fontSize: 12, marginBottom: 4 },
+  userEmail: { fontSize: 12, marginBottom: 2 },
+  teamLabel: { fontSize: 11, marginBottom: 4, fontStyle: 'italic' },
   statusBadge: { alignSelf: 'flex-start', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 },
   statusText: { fontSize: 10, fontWeight: '700' },
   actions: { flexDirection: 'row', gap: 6 },
@@ -381,13 +428,14 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14 },
   roleRow: { flexDirection: 'row', gap: 8 },
   roleChip: { flex: 1, borderRadius: 10, borderWidth: 1.5, paddingVertical: 10, alignItems: 'center' },
+  teamChip: { flex: 1, borderRadius: 10, borderWidth: 1.5, paddingVertical: 10, alignItems: 'center' },
   roleChipText: { fontSize: 12, fontWeight: '700' },
   modalBtns: { flexDirection: 'row', gap: 10, marginTop: 20 },
   cancelBtn: { flex: 1, borderWidth: 1.5, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   cancelText: { fontSize: 14, fontWeight: '600' },
   saveBtn: { flex: 1, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   saveBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  bottomNav: { flexDirection: 'row', borderTopWidth: 1, paddingTop: 10, paddingHorizontal: 24, justifyContent: 'space-around', alignItems: 'center' },
+  bottomNav: { flexDirection: 'row', borderTopWidth: 1, paddingTop: 10, paddingHorizontal: 16, justifyContent: 'space-around', alignItems: 'center' },
   navItem: { alignItems: 'center', gap: 3, flex: 1 },
   navLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 0.3 },
   viewAvatar: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', alignSelf: 'center', marginBottom: 16 },

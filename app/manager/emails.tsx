@@ -1,16 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  SafeAreaView,
-  ScrollView,
-  ActivityIndicator,
-  RefreshControl,
-  TouchableOpacity,
-  Platform,
-  StatusBar,
-  Alert,
+  View, Text, StyleSheet, SafeAreaView, ScrollView,
+  ActivityIndicator, RefreshControl, TouchableOpacity,
+  Platform, StatusBar, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -22,10 +14,7 @@ const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
 async function getAuthHeaders() {
   const token = await SecureStore.getItemAsync('token');
-  return {
-    'Content-Type': 'application/json',
-    Authorization: `Bearer ${token}`,
-  };
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
 }
 
 async function apiFetch(path: string, headers: any) {
@@ -34,21 +23,30 @@ async function apiFetch(path: string, headers: any) {
   return res.json();
 }
 
+function getStatusColor(status: string) {
+  switch (status?.toUpperCase()) {
+    case 'URGENT': return '#22c55e';
+    case 'FOLLOW-UP': return '#f59e0b';
+    case 'CLOSED':    return '#6366f1';
+    default:          return '#ef4444';
+  }
+}
+
 export default function EmailsScreen() {
   const router = useRouter();
   const { theme } = useAppTheme();
-
   const isMounted = useRef(true);
 
-  const [loading,       setLoading]       = useState(true);
-  const [refreshing,    setRefreshing]    = useState(false);
-  const [leads,         setLeads]         = useState<any[]>([]);
-  const [selectedLead,  setSelectedLead]  = useState<any>(null);
-  const [followupDate,  setFollowupDate]  = useState(new Date());
-  const [pickerMode, setPickerMode] = useState<'date' | 'time'>('date');
-  const [showPicker,  setShowPicker]  = useState(false);
-  const [followupTime,  setFollowupTime]  = useState(new Date());
-  const [metrics,       setMetrics]       = useState({ sentCount: 0, sentThisWeek: 0, overdue: 0 });
+  const [loading,      setLoading]      = useState(true);
+  const [refreshing,   setRefreshing]   = useState(false);
+  const [leads,        setLeads]        = useState<any[]>([]);
+  const [selectedLead, setSelectedLead] = useState<any>(null);
+  const [followupDate, setFollowupDate] = useState(new Date());
+  const [followupTime, setFollowupTime] = useState(new Date());
+  const [pickerMode,   setPickerMode]   = useState<'date' | 'time'>('date');
+  const [showPicker,   setShowPicker]   = useState(false);
+  const [metrics,      setMetrics]      = useState({ sentCount: 0, sentThisWeek: 0, overdue: 0 });
+  const [scheduling,   setScheduling]   = useState(false);
 
   const fetchLeads = useCallback(async () => {
     try {
@@ -83,26 +81,37 @@ export default function EmailsScreen() {
   const onRefresh = () => { setRefreshing(true); fetchLeads(); };
 
   const sendFollowup = async () => {
-    if (!selectedLead) { Alert.alert('No Lead', 'Please select a lead.'); return; }
-    const scheduledDate = new Date(followupDate);
-    scheduledDate.setHours(followupTime.getHours(), followupTime.getMinutes(), 0, 0);
+    if (!selectedLead) { Alert.alert('No Lead', 'Please select a lead first.'); return; }
+
+    // Construct date in local timezone to avoid UTC shift
+    const scheduledDate = new Date(
+      followupDate.getFullYear(),
+      followupDate.getMonth(),
+      followupDate.getDate(),
+      followupTime.getHours(),
+      followupTime.getMinutes(),
+      0,
+      0
+    );
+    setScheduling(true);
     try {
       const headers = await getAuthHeaders();
       const response = await fetch(`${BACKEND_URL}/send-followup/${selectedLead.lead_id}`, {
-        method: 'POST',
-        headers,
+        method: 'POST', headers,
         body: JSON.stringify({ followupDate: scheduledDate.toISOString() }),
       });
       const data = await response.json();
       if (response.ok && data.success) {
-        Alert.alert('Success', data.message);
+        Alert.alert('✅ Scheduled', `Follow-up email for ${selectedLead.name} has been scheduled.`);
         setSelectedLead(null);
         fetchLeads();
       } else {
         Alert.alert('Error', data.message || 'Failed to schedule follow-up.');
       }
-    } catch (error) {
+    } catch {
       Alert.alert('Error', 'Unable to connect to server.');
+    } finally {
+      setScheduling(false);
     }
   };
 
@@ -136,117 +145,149 @@ export default function EmailsScreen() {
           <Text style={styles.logo}>Email Follow-ups</Text>
         </View>
         <TouchableOpacity onPress={onRefresh} style={styles.headerBtn}>
-          <Ionicons name="refresh-outline" size={18} color="#fff" />
+          <Ionicons name="refresh-outline" size={20} color="#fff" />
         </TouchableOpacity>
       </View>
 
-      {/* BODY */}
       <ScrollView
-        contentContainerStyle={[styles.container, { paddingBottom: 24 }]}
+        contentContainerStyle={[styles.container, { paddingBottom: 32 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.navy} />}
       >
         {/* KPI Cards */}
         <View style={styles.metricsRow}>
           <View style={[styles.metricCard, { backgroundColor: theme.card }]}>
-            <Text style={[styles.metricLabel, { color: theme.subText }]}>TOTAL SENT</Text>
+            <View style={[styles.metricIcon, { backgroundColor: '#3b82f618' }]}>
+              <Ionicons name="mail" size={18} color="#3b82f6" />
+            </View>
             <Text style={[styles.metricValue, { color: theme.text }]}>{metrics.sentCount}</Text>
+            <Text style={[styles.metricLabel, { color: theme.subText }]}>Total Sent</Text>
           </View>
           <View style={[styles.metricCard, { backgroundColor: theme.card }]}>
-            <Text style={[styles.metricLabel, { color: theme.subText }]}>THIS WEEK</Text>
+            <View style={[styles.metricIcon, { backgroundColor: '#22c55e18' }]}>
+              <Ionicons name="calendar" size={18} color="#22c55e" />
+            </View>
             <Text style={[styles.metricValue, { color: theme.text }]}>{metrics.sentThisWeek}</Text>
+            <Text style={[styles.metricLabel, { color: theme.subText }]}>This Week</Text>
           </View>
           <View style={[styles.metricCard, { backgroundColor: theme.card }]}>
-            <Text style={[styles.metricLabel, { color: '#ef4444' }]}>OVERDUE</Text>
+            <View style={[styles.metricIcon, { backgroundColor: '#ef444418' }]}>
+              <Ionicons name="alert-circle" size={18} color="#ef4444" />
+            </View>
             <Text style={[styles.metricValue, { color: '#ef4444' }]}>{metrics.overdue}</Text>
+            <Text style={[styles.metricLabel, { color: '#ef4444' }]}>Overdue</Text>
           </View>
         </View>
 
         {/* Select Lead */}
-        <Text style={[styles.sectionLabel, { color: theme.subText }]}>SCHEDULE FOLLOW-UP</Text>
-        <Text style={[styles.fieldLabel, { color: theme.text }]}>Select Lead</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginVertical: 8 }}>
-          {leads.length === 0 ? (
-            <Text style={{ color: theme.subText, padding: 10 }}>No leads found</Text>
-          ) : leads.map(lead => (
-            <TouchableOpacity
-              key={lead.lead_id}
-              onPress={() => setSelectedLead(lead)}
-              style={[styles.leadChip, { backgroundColor: selectedLead?.lead_id === lead.lead_id ? theme.navy : theme.card }]}
-            >
-              <Text style={{ color: selectedLead?.lead_id === lead.lead_id ? '#fff' : theme.text, fontWeight: '600' }}>
-                {lead.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-
-        {/* Selected lead info */}
-        {selectedLead && (
-          <View style={[styles.leadInfoCard, { backgroundColor: theme.card }]}>
-            <View style={styles.leadInfoRow}>
-              <Text style={[styles.leadInfoLabel, { color: theme.subText }]}>Email</Text>
-              <Text style={[styles.leadInfoValue, { color: theme.text }]}>{selectedLead.email}</Text>
-            </View>
-            <View style={styles.leadInfoRow}>
-              <Text style={[styles.leadInfoLabel, { color: theme.subText }]}>Company</Text>
-              <Text style={[styles.leadInfoValue, { color: theme.text }]}>{selectedLead.company}</Text>
-            </View>
-            <View style={styles.leadInfoRow}>
-              <Text style={[styles.leadInfoLabel, { color: theme.subText }]}>Status</Text>
-              <Text style={[styles.leadInfoValue, { color: theme.text }]}>{selectedLead.status}</Text>
-            </View>
+        <View style={[styles.section, { backgroundColor: theme.card }]}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="person-outline" size={16} color={theme.navy} />
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Select Lead</Text>
           </View>
-        )}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
+            {leads.length === 0 ? (
+              <Text style={{ color: theme.subText, fontSize: 13 }}>No leads found</Text>
+            ) : leads.map(lead => (
+              <TouchableOpacity
+                key={lead.lead_id}
+                onPress={() => setSelectedLead(lead)}
+                style={[styles.leadChip, {
+                  backgroundColor: selectedLead?.lead_id === lead.lead_id ? theme.navy : theme.bg,
+                  borderColor: selectedLead?.lead_id === lead.lead_id ? theme.navy : theme.subText + '33',
+                }]}
+              >
+                <Text style={{ color: selectedLead?.lead_id === lead.lead_id ? '#fff' : theme.text, fontWeight: '600', fontSize: 13 }}>
+                  {lead.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
 
-        {/* Date picker */}
-        <Text style={[styles.fieldLabel, { color: theme.text, marginTop: 8 }]}>Follow-up Date</Text>
-        <TouchableOpacity
-          onPress={() => { setPickerMode('date'); setShowPicker(true); }}
-          style={[styles.pickerBtn, { backgroundColor: theme.card }]}
-        >
-          <Ionicons name="calendar-outline" size={18} color={theme.navy} />
-          <Text style={[styles.pickerBtnText, { color: theme.text }]}>{followupDate.toDateString()}</Text>
-          <Ionicons name="chevron-forward" size={16} color={theme.subText} />
-        </TouchableOpacity>
+          {/* Selected lead info */}
+          {selectedLead && (
+            <View style={[styles.leadInfo, { backgroundColor: theme.bg }]}>
+              <View style={styles.leadInfoRow}>
+                <Ionicons name="mail-outline" size={13} color={theme.subText} />
+                <Text style={[styles.leadInfoLabel, { color: theme.subText }]}>Email</Text>
+                <Text style={[styles.leadInfoValue, { color: theme.text }]} numberOfLines={1}>{selectedLead.email}</Text>
+              </View>
+              <View style={styles.leadInfoRow}>
+                <Ionicons name="business-outline" size={13} color={theme.subText} />
+                <Text style={[styles.leadInfoLabel, { color: theme.subText }]}>Company</Text>
+                <Text style={[styles.leadInfoValue, { color: theme.text }]}>{selectedLead.company}</Text>
+              </View>
+              <View style={styles.leadInfoRow}>
+                <Ionicons name="pulse-outline" size={13} color={theme.subText} />
+                <Text style={[styles.leadInfoLabel, { color: theme.subText }]}>Status</Text>
+                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(selectedLead.status) + '18' }]}>
+                  <Text style={[styles.statusBadgeText, { color: getStatusColor(selectedLead.status) }]}>{selectedLead.status}</Text>
+                </View>
+              </View>
+            </View>
+          )}
+        </View>
 
-        {/* Time picker */}
-        <Text style={[styles.fieldLabel, { color: theme.text, marginTop: 12 }]}>Follow-up Time</Text>
-        <TouchableOpacity
-          onPress={() => { setPickerMode('time'); setShowPicker(true); }}
-          style={[styles.pickerBtn, { backgroundColor: theme.card }]}
-        >
-          <Ionicons name="time-outline" size={18} color={theme.navy} />
-          <Text style={[styles.pickerBtnText, { color: theme.text }]}>
-            {followupTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </Text>
-          <Ionicons name="chevron-forward" size={16} color={theme.subText} />
-        </TouchableOpacity>
+        {/* Date & Time Section — wrapped in card */}
+        <View style={[styles.section, { backgroundColor: theme.card }]}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="time-outline" size={16} color={theme.navy} />
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Schedule</Text>
+          </View>
 
-        {/* Modal Date/Time Picker */}
-        <DateTimePickerModal
-          isVisible={showPicker}
-          mode={pickerMode}
-          date={pickerMode === 'date' ? followupDate : followupTime}
-          onConfirm={(selected) => {
-            setShowPicker(false);
-            if (pickerMode === 'date') setFollowupDate(selected);
-            else setFollowupTime(selected);
-          }}
-          onCancel={() => setShowPicker(false)}
-          display={pickerMode === 'time' ? 'spinner' : 'inline'}
-          is24Hour={false}
-        />
+          {/* Date row */}
+          <TouchableOpacity
+            onPress={() => { setPickerMode('date'); setShowPicker(true); }}
+            style={styles.pickerRow}
+          >
+            <View style={[styles.pickerIconBox, { backgroundColor: theme.navy + '15' }]}>
+              <Ionicons name="calendar-outline" size={18} color={theme.navy} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.pickerRowLabel, { color: theme.subText }]}>Date</Text>
+              <Text style={[styles.pickerRowValue, { color: theme.text }]}>{followupDate.toDateString()}</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={theme.subText} />
+          </TouchableOpacity>
 
-        {/* Schedule button */}
+          <View style={[styles.divider, { backgroundColor: theme.subText + '18' }]} />
+
+          {/* Time row */}
+          <TouchableOpacity
+            onPress={() => { setPickerMode('time'); setShowPicker(true); }}
+            style={styles.pickerRow}
+          >
+            <View style={[styles.pickerIconBox, { backgroundColor: theme.navy + '15' }]}>
+              <Ionicons name="alarm-outline" size={18} color={theme.navy} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.pickerRowLabel, { color: theme.subText }]}>Time</Text>
+              <Text style={[styles.pickerRowValue, { color: theme.text }]}>
+                {followupTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </Text>
+            </View>
+            <Ionicons name="chevron-forward" size={16} color={theme.subText} />
+          </TouchableOpacity>
+        </View>
+
+        {/* Schedule Button */}
         <TouchableOpacity
           onPress={sendFollowup}
-          style={[styles.scheduleBtn, { backgroundColor: theme.navy, opacity: !selectedLead ? 0.5 : 1 }]}
-          disabled={!selectedLead}
+          disabled={!selectedLead || scheduling}
+          style={[styles.scheduleBtn, { backgroundColor: theme.navy, opacity: !selectedLead || scheduling ? 0.5 : 1 }]}
         >
-          <Ionicons name="send-outline" size={18} color="#fff" />
-          <Text style={styles.scheduleBtnText}>Schedule Follow-up</Text>
+          {scheduling
+            ? <ActivityIndicator color="#fff" size="small" />
+            : <>
+                <Ionicons name="send" size={18} color="#fff" />
+                <Text style={styles.scheduleBtnText}>Schedule Follow-up</Text>
+              </>
+          }
         </TouchableOpacity>
+
+        {!selectedLead && (
+          <Text style={[styles.hint, { color: theme.subText }]}>Select a lead above to schedule a follow-up email</Text>
+        )}
       </ScrollView>
 
       {/* BOTTOM NAV */}
@@ -257,9 +298,7 @@ export default function EmailsScreen() {
             <TouchableOpacity
               key={tab.key}
               style={styles.navItem}
-              onPress={() => {
-                if (tab.key !== 'Emails') router.replace(`/manager/${tab.key.toLowerCase()}` as any);
-              }}
+              onPress={() => { if (tab.key !== 'Emails') router.replace(`/manager/${tab.key.toLowerCase()}` as any); }}
             >
               <Ionicons name={isActive ? tab.icon as any : tab.iconOff as any} size={22} color={isActive ? theme.accent : theme.subText} />
               <Text style={[styles.navLabel, { color: isActive ? theme.accent : theme.subText }]}>{tab.key}</Text>
@@ -267,6 +306,22 @@ export default function EmailsScreen() {
           );
         })}
       </View>
+
+      {/* Picker Modal */}
+      <DateTimePickerModal
+        isVisible={showPicker}
+        mode={pickerMode}
+        date={pickerMode === 'date' ? followupDate : followupTime}
+        onConfirm={(selected) => {
+          setShowPicker(false);
+          if (pickerMode === 'date') setFollowupDate(selected);
+          else setFollowupTime(selected);
+        }}
+        onCancel={() => setShowPicker(false)}
+        display={pickerMode === 'time' ? 'spinner' : 'inline'}
+        is24Hour={false}
+        themeVariant={theme.bg === '#020617' || theme.bg === '#0d0d1f' ? 'dark' : 'light'}
+      />
     </SafeAreaView>
   );
 }
@@ -277,23 +332,31 @@ const styles = StyleSheet.create({
   logo: { color: '#fff', fontSize: 18, fontWeight: '800' },
   logoSub: { color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: '600', letterSpacing: 2 },
   headerBtn: { padding: 6 },
-  container: { padding: 16, gap: 12 },
+  container: { padding: 16, gap: 14 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   metricsRow: { flexDirection: 'row', gap: 10 },
-  metricCard: { flex: 1, borderRadius: 12, padding: 12 },
-  metricLabel: { fontSize: 10, fontWeight: '700', letterSpacing: 0.5 },
-  metricValue: { fontSize: 22, fontWeight: '800', marginTop: 4 },
-  sectionLabel: { fontSize: 11, fontWeight: '700', letterSpacing: 1.5, marginTop: 8 },
-  fieldLabel: { fontSize: 13, fontWeight: '700', marginBottom: 4 },
-  leadChip: { paddingHorizontal: 16, paddingVertical: 10, marginRight: 8, borderRadius: 10 },
-  leadInfoCard: { borderRadius: 12, padding: 14, gap: 8 },
-  leadInfoRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  leadInfoLabel: { fontSize: 12, fontWeight: '600' },
-  leadInfoValue: { fontSize: 12, fontWeight: '500', maxWidth: '60%', textAlign: 'right' },
-  pickerBtn: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 12, padding: 14 },
-  pickerBtnText: { fontSize: 14, fontWeight: '500' },
-  scheduleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: 12, padding: 15, marginTop: 8 },
+  metricCard: { flex: 1, borderRadius: 14, padding: 14, alignItems: 'center', gap: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
+  metricIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  metricValue: { fontSize: 22, fontWeight: '800' },
+  metricLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center' },
+  section: { borderRadius: 16, padding: 16, gap: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
+  sectionTitle: { fontSize: 14, fontWeight: '700' },
+  leadChip: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 10, borderWidth: 1.5 },
+  leadInfo: { borderRadius: 10, padding: 12, gap: 10, marginTop: 4 },
+  leadInfoRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  leadInfoLabel: { fontSize: 12, fontWeight: '600', width: 60 },
+  leadInfoValue: { flex: 1, fontSize: 12, fontWeight: '500', textAlign: 'right' },
+  statusBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  statusBadgeText: { fontSize: 11, fontWeight: '700' },
+  pickerRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 4 },
+  pickerIconBox: { width: 38, height: 38, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  pickerRowLabel: { fontSize: 11, fontWeight: '600' },
+  pickerRowValue: { fontSize: 15, fontWeight: '700', marginTop: 2 },
+  divider: { height: 1, marginVertical: 4 },
+  scheduleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, borderRadius: 14, padding: 16 },
   scheduleBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
+  hint: { fontSize: 12, textAlign: 'center', marginTop: -6 },
   bottomNav: { flexDirection: 'row', borderTopWidth: 1, paddingTop: 10, paddingHorizontal: 24, justifyContent: 'space-around', alignItems: 'center' },
   navItem: { flex: 1, alignItems: 'center', gap: 2 },
   navLabel: { fontSize: 10, fontWeight: '600' },
