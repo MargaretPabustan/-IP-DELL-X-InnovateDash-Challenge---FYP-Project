@@ -478,11 +478,16 @@ app.get('/manager/export/leads', authenticateToken, authorizeRoles('admin', 'man
 
 app.get('/export/leads/excel', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM leads ORDER BY created_at DESC');
+        // Feature added: Get the authenticated manager's team ID
+        const teamId = req.user.team_id;
+        
+        // Feature added: Filter leads by the assigned_team_id
+        const result = await pool.query('SELECT * FROM leads WHERE assigned_team_id = $1 ORDER BY created_at DESC', [teamId]);
+        
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Leads');
         worksheet.columns = [
-            { header: 'Lead ID',    key: 'lead_id',      width: 10 },
+            { header: 'Lead ID',    key: 'lead_id',       width: 10 },
             { header: 'Name',       key: 'name',          width: 20 },
             { header: 'Company',    key: 'company',       width: 20 },
             { header: 'Title',      key: 'title',         width: 20 },
