@@ -60,6 +60,7 @@ export default function AdminUsers() {
   const [editRole,     setEditRole]     = useState('rep');
   const [editTeamId,   setEditTeamId]   = useState<number | null>(null);
   const [editPassword, setEditPassword] = useState('');
+  const [editIsActive, setEditIsActive] = useState(true);
 
   const fetchUsers = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -82,6 +83,7 @@ export default function AdminUsers() {
     setEditRole(user.role);
     setEditTeamId(user.team_id);
     setEditPassword('');
+    setEditIsActive(user.is_active);
   };
 
   const handleCreate = async () => {
@@ -131,13 +133,13 @@ export default function AdminUsers() {
         body: JSON.stringify({
           full_name: editName, email: editEmail, role: editRole,
           team_id: editRole === 'manager' ? editTeamId : null,
-          is_active: editUser.is_active,
+          is_active: editIsActive,
           ...(editPassword.trim() ? { password: editPassword } : {}),
         }),
       });
       if (!res.ok) throw new Error('Failed to update user');
       setUsers(prev => prev.map(u => u.user_id === editUser.user_id
-        ? { ...u, full_name: editName, email: editEmail, role: editRole, team_id: editRole === 'manager' ? editTeamId : null }
+        ? { ...u, full_name: editName, email: editEmail, role: editRole, team_id: editRole === 'manager' ? editTeamId : null, is_active: editIsActive }
         : u
       ));
       setEditUser(null);
@@ -328,6 +330,21 @@ export default function AdminUsers() {
             <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: theme.bg }]} value={editEmail} onChangeText={setEditEmail} placeholder="Email address" placeholderTextColor={theme.subText} autoCapitalize="none" keyboardType="email-address" />
             <Text style={styles.fieldLabel}>NEW PASSWORD</Text>
             <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: theme.bg }]} value={editPassword} onChangeText={setEditPassword} placeholder="Enter new password to change" placeholderTextColor={theme.subText} secureTextEntry />
+            <Text style={styles.fieldLabel}>STATUS</Text>
+            <View style={styles.roleRow}>
+              <TouchableOpacity
+                style={[styles.roleChip, { backgroundColor: editIsActive ? '#22c55e' : theme.bg, borderColor: '#22c55e' }]}
+                onPress={() => setEditIsActive(true)}
+              >
+                <Text style={[styles.roleChipText, { color: editIsActive ? '#fff' : '#22c55e' }]}>ACTIVE</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.roleChip, { backgroundColor: !editIsActive ? '#ef4444' : theme.bg, borderColor: '#ef4444' }]}
+                onPress={() => setEditIsActive(false)}
+              >
+                <Text style={[styles.roleChipText, { color: !editIsActive ? '#fff' : '#ef4444' }]}>INACTIVE</Text>
+              </TouchableOpacity>
+            </View>
             <Text style={styles.fieldLabel}>ROLE</Text>
             <View style={styles.roleRow}>
               {['rep', 'manager', 'admin'].map(r => (

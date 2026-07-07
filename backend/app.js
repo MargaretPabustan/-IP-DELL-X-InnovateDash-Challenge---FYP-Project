@@ -240,6 +240,7 @@ app.post("/auth/login", async (req, res) => {
         const result = await pool.query('SELECT * FROM users WHERE email = $1', [email]);
         if (result.rows.length === 0) return res.status(401).json({ message: 'Invalid credentials' });
         const user = result.rows[0];
+        if (!user.is_active) return res.status(403).json({ message: 'Your account has been deactivated. Please contact your administrator.' });
         const validPassword = await bcrypt.compare(password, user.password_hash);
         if (!validPassword) return res.status(401).json({ message: 'Invalid credentials' });
         const token = jwt.sign(
@@ -478,16 +479,11 @@ app.get('/manager/export/leads', authenticateToken, authorizeRoles('admin', 'man
 
 app.get('/export/leads/excel', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
-        // Feature added: Get the authenticated manager's team ID
-        const teamId = req.user.team_id;
-        
-        // Feature added: Filter leads by the assigned_team_id
-        const result = await pool.query('SELECT * FROM leads WHERE assigned_team_id = $1 ORDER BY created_at DESC', [teamId]);
-        
+        const result = await pool.query('SELECT * FROM leads ORDER BY created_at DESC');
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet('Leads');
         worksheet.columns = [
-            { header: 'Lead ID',    key: 'lead_id',       width: 10 },
+            { header: 'Lead ID',    key: 'lead_id',      width: 10 },
             { header: 'Name',       key: 'name',          width: 20 },
             { header: 'Company',    key: 'company',       width: 20 },
             { header: 'Title',      key: 'title',         width: 20 },
