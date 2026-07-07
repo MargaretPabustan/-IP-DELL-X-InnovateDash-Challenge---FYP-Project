@@ -9,9 +9,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme, THEMES } from '../../src/constants/useAppTheme';
 import * as SecureStore from 'expo-secure-store';
 import NetInfo from '@react-native-community/netinfo';
+import Svg, { Path } from 'react-native-svg';
 
 const BACKEND_URL  = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 const SCREEN_WIDTH = Dimensions.get('window').width;
+const CARD_WIDTH   = SCREEN_WIDTH - 32;
 
 const COLORS = {
   new:       '#5DCAA5',
@@ -30,7 +32,7 @@ async function apiFetch(path: string, headers: any) {
   return res.json();
 }
 
-// ── NEW BEAUTIFUL BAR CHART ───────────────────────────────────────────────────
+// ── 1. LEADS OVERVIEW (BAR CHART COMPONENT) ───────────────────────────────────
 function CustomBarChart({ datasets, labels, maxVal }: any) {
   const BAR_H = 140;
   
@@ -41,8 +43,8 @@ function CustomBarChart({ datasets, labels, maxVal }: any) {
   }));
 
   return (
-    <View style={{ width: SCREEN_WIDTH - 70, paddingHorizontal: 4 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: BAR_H, justifyContent: 'space-around', paddingBottom: 4 }}>
+    <View style={{ width: CARD_WIDTH, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 }}>
+      <View style={{ width: '100%', flexDirection: 'row', alignItems: 'flex-end', height: BAR_H, justifyContent: 'space-around', paddingBottom: 4 }}>
         {bars.map((bar: any, i: number) => {
           const h = maxVal > 0 ? (bar.value / maxVal) * (BAR_H - 25) : 0;
           return (
@@ -64,10 +66,8 @@ function CustomBarChart({ datasets, labels, maxVal }: any) {
           );
         })}
       </View>
-      
-      <View style={{ height: 1, backgroundColor: '#e2e8f0', marginHorizontal: 8, marginTop: 2 }} />
-      
-      <View style={{ flexDirection: 'row', marginTop: 8, justifyContent: 'space-around' }}>
+      <View style={{ width: '90%', height: 1, backgroundColor: '#e2e8f0', marginTop: 2 }} />
+      <View style={{ width: '100%', flexDirection: 'row', marginTop: 8, justifyContent: 'space-around' }}>
         {bars.map((bar: any, i: number) => (
           <Text key={i} style={{ flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '600', color: '#64748b' }}>
             {bar.label}
@@ -78,15 +78,15 @@ function CustomBarChart({ datasets, labels, maxVal }: any) {
   );
 }
 
-// ── NEW BEAUTIFUL LINE CHART ──────────────────────────────────────────────────
+// ── 2. LEADS TREND (LINE CHART COMPONENT) ─────────────────────────────────────
 function CustomLineChart({ datasets, labels, maxVal }: any) {
-  const W = SCREEN_WIDTH - 70;
+  const W = CARD_WIDTH - 32; 
   const H = 140;
   const PAD = 40;
 
   return (
-    <View style={{ width: W, paddingHorizontal: 4 }}>
-      <View style={{ height: H, position: 'relative' }}>
+    <View style={{ width: CARD_WIDTH, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 16 }}>
+      <View style={{ width: W, height: H, position: 'relative' }}>
         {datasets.map((ds: any, di: number) => {
           const points = ds.data.map((v: number, i: number) => {
             const stepX = (W - PAD * 2) / (ds.data.length - 1 || 1);
@@ -150,8 +150,8 @@ function CustomLineChart({ datasets, labels, maxVal }: any) {
           );
         })}
       </View>
-      <View style={{ height: 1, backgroundColor: '#e2e8f0', marginHorizontal: PAD - 10, marginTop: 2 }} />
-      <View style={{ flexDirection: 'row', marginTop: 8 }}>
+      <View style={{ width: W - (PAD * 2) + 20, height: 1, backgroundColor: '#e2e8f0', marginTop: 2 }} />
+      <View style={{ width: W, flexDirection: 'row', marginTop: 8, height: 16, position: 'relative' }}>
         {labels.map((label: string, i: number) => {
           const stepX = (W - PAD * 2) / (labels.length - 1 || 1);
           return (
@@ -173,61 +173,51 @@ function CustomLineChart({ datasets, labels, maxVal }: any) {
   );
 }
 
-// ── SOLID CIRCULAR PIE CHART ────────────────────────────────────────────────
+// ── 3. LEADS DISTRIBUTION (PIE CHART COMPONENT) ──────────────────────────────
 function CustomPieChart({ data }: any) {
-  const W = SCREEN_WIDTH - 70;
-  
   const activeSlices = data.filter((slice: any) => slice.value > 0);
   const totalVal = activeSlices.reduce((sum: number, slice: any) => sum + slice.value, 0);
 
   let accumulatedPercent = 0;
 
   return (
-    <View style={{ width: W, alignItems: 'center', paddingVertical: 6 }}>
+    <View style={{ width: CARD_WIDTH, alignItems: 'center', justifyContent: 'center', paddingVertical: 6 }}>
       {totalVal === 0 ? (
         <View style={{ height: 120, justifyContent: 'center' }}>
           <Text style={{ color: '#94a3b8', fontSize: 13 }}>No Data Available</Text>
         </View>
       ) : (
-        <View style={{ width: 120, height: 120, position: 'relative', justifyContent: 'center', alignItems: 'center' }}>
-          <View style={{ width: 120, height: 120, borderRadius: 60, backgroundColor: '#e2e8f0', position: 'absolute', overflow: 'hidden' }} />
-          
-          {activeSlices.map((slice: any, i: number) => {
-            const currentPct = (slice.value / totalVal) * 100;
-            const rotationStart = (accumulatedPercent / 100) * 360;
-            const rotationSkew = 360 - ((currentPct / 100) * 360);
-            accumulatedPercent += currentPct;
+        <View style={{ width: 120, height: 120, justifyContent: 'center', alignItems: 'center' }}>
+          <Svg width={120} height={120} viewBox="0 0 120 120">
+            {activeSlices.map((slice: any, i: number) => {
+              const currentPct = (slice.value / totalVal) * 100;
+              
+              if (currentPct === 100) {
+                return (
+                  <Path 
+                    key={i} 
+                    d="M 60 60 m -50, 0 a 50,50 0 1,0 100,0 a 50,50 0 1,0 -100,0" 
+                    fill={slice.color} 
+                  />
+                );
+              }
 
-            if (currentPct === 100) {
-              return (
-                <View key={i} style={{ position: 'absolute', width: 120, height: 120, borderRadius: 60, backgroundColor: slice.color }} />
-              );
-            }
+              const startAngle = (accumulatedPercent / 100) * 360 - 90;
+              accumulatedPercent += currentPct;
+              const endAngle = (accumulatedPercent / 100) * 360 - 90;
 
-            return (
-              <View 
-                key={i} 
-                style={{
-                  position: 'absolute',
-                  width: 120,
-                  height: 120,
-                  borderRadius: 60,
-                  transform: [{ rotate: `${rotationStart}deg` }],
-                  overflow: 'hidden',
-                }}
-              >
-                <View 
-                  style={{
-                    width: 120,
-                    height: 120,
-                    backgroundColor: slice.color,
-                    transform: [{ translateX: 60 }, { rotate: `${180 - rotationSkew}deg` }, { translateX: -60 }],
-                    transformOrigin: 'center center',
-                  }}
-                />
-              </View>
-            );
-          })}
+              const rad = Math.PI / 180;
+              const x1 = 60 + 50 * Math.cos(startAngle * rad);
+              const y1 = 60 + 50 * Math.sin(startAngle * rad);
+              const x2 = 60 + 50 * Math.cos(endAngle * rad);
+              const y2 = 60 + 50 * Math.sin(endAngle * rad);
+
+              const largeArcFlag = currentPct > 50 ? 1 : 0;
+              const pathData = `M 60 60 L ${x1} ${y1} A 50 50 0 ${largeArcFlag} 1 ${x2} ${y2} Z`;
+
+              return <Path key={i} d={pathData} fill={slice.color} />;
+            })}
+          </Svg>
         </View>
       )}
 
@@ -245,17 +235,17 @@ function CustomPieChart({ data }: any) {
   );
 }
 
-// ── MAIN COMPONENT ────────────────────────────────────────────────────────────
+// ── MAIN DASHBOARD COMPONENT ──────────────────────────────────────────────────
 export default function ManagerDashboard() {
   const router = useRouter();
   const { theme, themeIndex, setThemeIndex } = useAppTheme();
 
-  const [data,             setData]            = useState<any>(null);
-  const [loading,          setLoading]         = useState(true);
-  const [refreshing,       setRefreshing]      = useState(false);
-  const [showProfile,      setShowProfile]     = useState(false);
+  const [data,             setData]             = useState<any>(null);
+  const [loading,          setLoading]          = useState(true);
+  const [refreshing,       setRefreshing]       = useState(false);
+  const [showProfile,      setShowProfile]      = useState(false);
   const [showThemePicker, setShowThemePicker] = useState(false);
-  const [profile,          setProfile]         = useState<any>(null);
+  const [profile,          setProfile]          = useState<any>(null);
   const [loadingProfile,  setLoadingProfile]  = useState(false);
 
   const fetchDashboard = useCallback(async (isRefresh = false) => {
@@ -322,6 +312,7 @@ export default function ManagerDashboard() {
   const contactedPct = total > 0 ? ((contacted / total) * 100).toFixed(1) : '0';
   const qualifiedPct = total > 0 ? ((qualified / total) * 100).toFixed(1) : '0';
 
+  // SEQUENCE ASSIGNED: 1. BAR -> 2. LINE -> 3. PIE
   const chartData = [
     {
       id: 'bar', title: 'Leads Overview (Bar)',
@@ -395,118 +386,6 @@ export default function ManagerDashboard() {
         </View>
       </View>
 
-      {/* BODY */}
-      {loading ? (
-        <View style={styles.centered}><ActivityIndicator size="large" color={theme.navy} /></View>
-      ) : (
-        <ScrollView
-          contentContainerStyle={[styles.content, { paddingBottom: 24 }]}
-          showsVerticalScrollIndicator={false}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchDashboard(true)} tintColor={theme.navy} />}
-        >
-          {/* Total card */}
-          <View style={[styles.totalCard, { backgroundColor: theme.card }]}>
-            <View style={styles.totalCardRow}>
-              <View>
-                <Text style={[styles.totalCardLabel, { color: theme.subText }]}>Total Team Leads</Text>
-                <Text style={[styles.totalNumber, { color: theme.text }]}>{total}</Text>
-              </View>
-              <View style={[styles.totalBadge, { backgroundColor: theme.accent + '18' }]}>
-                <Ionicons name="people" size={28} color={theme.accent} />
-              </View>
-            </View>
-          </View>
-
-          {/* Charts */}
-          <Text style={[styles.sectionLabel, { color: theme.subText }]}>PERFORMANCE CHART</Text>
-          <View style={[styles.card, { backgroundColor: theme.card, paddingRight: 0 }]}>
-            <FlatList
-              data={chartData}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              keyExtractor={item => item.id}
-              renderItem={({ item }) => (
-                <View style={{ width: SCREEN_WIDTH - 70, paddingRight: 18 }}>
-                  <Text style={[styles.chartTitle, { color: theme.text }]}>{item.title}</Text>
-                  {item.component}
-                </View>
-              )}
-            />
-            <Text style={[styles.swipeHint, { color: theme.subText, marginRight: 18 }]}>← swipe for more →</Text>
-          </View>
-
-          {/* Stats grid */}
-          <Text style={[styles.sectionLabel, { color: theme.subText }]}>LEAD STATUS</Text>
-          <View style={styles.statsRow}>
-            <View style={[styles.statCard, { backgroundColor: theme.card }]}>
-              <Text style={[styles.statNumber, { color: COLORS.new }]}>{newLeads}</Text>
-              <Text style={[styles.statLabel, { color: theme.subText }]}>New Leads</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: theme.card }]}>
-              <Text style={[styles.statNumber, { color: COLORS.followup }]}>{contacted}</Text>
-              <Text style={[styles.statLabel, { color: theme.subText }]}>Follow-Up</Text>
-            </View>
-          </View>
-          <View style={styles.statsRow}>
-            <View style={[styles.statCard, { backgroundColor: theme.card }]}>
-              <Text style={[styles.statNumber, { color: COLORS.urgent }]}>{qualified}</Text>
-              <Text style={[styles.statLabel, { color: theme.subText }]}>Urgent</Text>
-            </View>
-            <View style={[styles.statCard, { backgroundColor: theme.card }]}>
-              <Text style={[styles.statNumber, { color: theme.accent }]}>{followups}</Text>
-              <Text style={[styles.statLabel, { color: theme.subText }]}>Follow-Ups</Text>
-            </View>
-          </View>
-
-          {/* Breakdown */}
-          <Text style={[styles.sectionLabel, { color: theme.subText }]}>BREAKDOWN</Text>
-          <View style={[styles.card, { backgroundColor: theme.card }]}>
-            <Text style={[styles.breakdownText, { color: COLORS.new }]}>New Leads: {newLeads} ({newPct}%)</Text>
-            <Text style={[styles.breakdownText, { color: COLORS.followup }]}>Follow-Up: {contacted} ({contactedPct}%)</Text>
-            <Text style={[styles.breakdownText, { color: COLORS.urgent }]}>Urgent: {qualified} ({qualifiedPct}%)</Text>
-          </View>
-
-          {/* Quick nav cards */}
-          <Text style={[styles.sectionLabel, { color: theme.subText }]}>QUICK ACCESS</Text>
-          <View style={styles.quickRow}>
-            <TouchableOpacity style={[styles.quickCard, { backgroundColor: theme.card }]} onPress={() => router.push('/manager/leads' as any)}>
-              <Ionicons name="people" size={24} color={theme.navy} />
-              <Text style={[styles.quickLabel, { color: theme.text }]}>Leads</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.quickCard, { backgroundColor: theme.card }]} onPress={() => router.push('/manager/activity' as any)}>
-              <Ionicons name="pulse" size={24} color={theme.navy} />
-              <Text style={[styles.quickLabel, { color: theme.text }]}>Activity</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.quickCard, { backgroundColor: theme.card }]} onPress={() => router.push('/manager/emails' as any)}>
-              <Ionicons name="mail" size={24} color={theme.navy} />
-              <Text style={[styles.quickLabel, { color: theme.text }]}>Emails</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.quickCard, { backgroundColor: theme.card }]} onPress={() => router.push('/manager/export' as any)}>
-              <Ionicons name="download" size={24} color={theme.navy} />
-              <Text style={[styles.quickLabel, { color: theme.text }]}>Export</Text>
-            </TouchableOpacity>
-          </View>
-        </ScrollView>
-      )}
-
-      {/* BOTTOM NAV */}
-      <View style={[styles.bottomNav, { backgroundColor: theme.navBg, borderTopColor: theme.subText + '22', paddingBottom: Platform.OS === 'ios' ? 28 : 12 }]}>
-        {tabs.map(tab => {
-          const isActive = tab.key === 'Dashboard';
-          return (
-            <TouchableOpacity
-              key={tab.key}
-              style={styles.navItem}
-              onPress={() => { if (tab.route) router.push(tab.route as any); }}
-            >
-              <Ionicons name={isActive ? tab.icon as any : tab.iconOff as any} size={24} color={isActive ? theme.accent : theme.subText} />
-              <Text style={[styles.navLabel, { color: isActive ? theme.accent : theme.subText }]}>{tab.key}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
       {/* PROFILE DROPDOWN */}
       {showProfile && (
         <Pressable style={styles.dropdownBackdrop} onPress={() => setShowProfile(false)}>
@@ -552,7 +431,7 @@ export default function ManagerDashboard() {
         </Pressable>
       )}
 
-      {/* THEME PICKER */}
+      {/* THEME PICKER OVERLAY */}
       {showThemePicker && (
         <Pressable style={styles.dropdownBackdrop} onPress={() => setShowThemePicker(false)}>
           <Pressable style={[styles.dropdown, { right: undefined, left: 16, width: SCREEN_WIDTH - 32 }]} onPress={() => {}}>
@@ -576,13 +455,125 @@ export default function ManagerDashboard() {
           </Pressable>
         </Pressable>
       )}
+
+      {/* BODY CONTENT */}
+      {loading ? (
+        <View style={styles.centered}><ActivityIndicator size="large" color={theme.navy} /></View>
+      ) : (
+        <ScrollView
+          contentContainerStyle={[styles.content, { paddingBottom: 24 }]}
+          showsVerticalScrollIndicator={false}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchDashboard(true)} tintColor={theme.navy} />}
+        >
+          {/* Total card */}
+          <View style={[styles.totalCard, { backgroundColor: theme.card }]}>
+            <View style={styles.totalCardRow}>
+              <View>
+                <Text style={[styles.totalCardLabel, { color: theme.subText }]}>Total Team Leads</Text>
+                <Text style={[styles.totalNumber, { color: theme.text }]}>{total}</Text>
+              </View>
+              <View style={[styles.totalBadge, { backgroundColor: theme.accent + '18' }]}>
+                <Ionicons name="people" size={28} color={theme.accent} />
+              </View>
+            </View>
+          </View>
+
+          {/* Charts card switcher layout */}
+          <Text style={[styles.sectionLabel, { color: theme.subText }]}>PERFORMANCE CHART</Text>
+          <View style={[styles.card, { backgroundColor: theme.card, paddingHorizontal: 0 }]}>
+            <FlatList
+              data={chartData}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={item => item.id}
+              renderItem={({ item }) => (
+                <View style={{ width: CARD_WIDTH, alignItems: 'center', justifyContent: 'center' }}>
+                  <Text style={[styles.chartTitle, { color: theme.text, width: '100%', textAlign: 'center' }]}>{item.title}</Text>
+                  {item.component}
+                </View>
+              )}
+            />
+            <Text style={[styles.swipeHint, { color: theme.subText }]}>← swipe for more →</Text>
+          </View>
+
+          {/* Stats grid */}
+          <Text style={[styles.sectionLabel, { color: theme.subText }]}>LEAD STATUS</Text>
+          <View style={styles.statsRow}>
+            <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+              <Text style={[styles.statNumber, { color: COLORS.new }]}>{newLeads}</Text>
+              <Text style={[styles.statLabel, { color: theme.subText }]}>New Leads</Text>
+            </View>
+            <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+              <Text style={[styles.statNumber, { color: COLORS.followup }]}>{contacted}</Text>
+              <Text style={[styles.statLabel, { color: theme.subText }]}>Follow-Up</Text>
+            </View>
+          </View>
+          <View style={styles.statsRow}>
+            <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+              <Text style={[styles.statNumber, { color: COLORS.urgent }]}>{qualified}</Text>
+              <Text style={[styles.statLabel, { color: theme.subText }]}>Urgent</Text>
+            </View>
+            <View style={[styles.statCard, { backgroundColor: theme.card }]}>
+              <Text style={[styles.statNumber, { color: theme.accent }]}>{followups}</Text>
+              <Text style={[styles.statLabel, { color: theme.subText }]}>Follow-Ups</Text>
+            </View>
+          </View>
+
+          {/* Breakdown parameters */}
+          <Text style={[styles.sectionLabel, { color: theme.subText }]}>BREAKDOWN</Text>
+          <View style={[styles.card, { backgroundColor: theme.card }]}>
+            <Text style={[styles.breakdownText, { color: COLORS.new }]}>New Leads: {newLeads} ({newPct}%)</Text>
+            <Text style={[styles.breakdownText, { color: COLORS.followup }]}>Follow-Up: {contacted} ({contactedPct}%)</Text>
+            <Text style={[styles.breakdownText, { color: COLORS.urgent }]}>Urgent: {qualified} ({qualifiedPct}%)</Text>
+          </View>
+
+          {/* Quick links navigation mapping */}
+          <Text style={[styles.sectionLabel, { color: theme.subText }]}>QUICK ACCESS</Text>
+          <View style={styles.quickRow}>
+            <TouchableOpacity style={[styles.quickCard, { backgroundColor: theme.card }]} onPress={() => router.push('/manager/leads' as any)}>
+              <Ionicons name="people" size={24} color={theme.navy} />
+              <Text style={[styles.quickLabel, { color: theme.text }]}>Leads</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.quickCard, { backgroundColor: theme.card }]} onPress={() => router.push('/manager/activity' as any)}>
+              <Ionicons name="pulse" size={24} color={theme.navy} />
+              <Text style={[styles.quickLabel, { color: theme.text }]}>Activity</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.quickCard, { backgroundColor: theme.card }]} onPress={() => router.push('/manager/emails' as any)}>
+              <Ionicons name="mail" size={24} color={theme.navy} />
+              <Text style={[styles.quickLabel, { color: theme.text }]}>Emails</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.quickCard, { backgroundColor: theme.card }]} onPress={() => router.push('/manager/export' as any)}>
+              <Ionicons name="download" size={24} color={theme.navy} />
+              <Text style={[styles.quickLabel, { color: theme.text }]}>Export</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      )}
+
+      {/* FOOTER TAB TRAY */}
+      <View style={[styles.bottomNav, { backgroundColor: theme.navBg, borderTopColor: theme.subText + '22', paddingBottom: Platform.OS === 'ios' ? 28 : 12 }]}>
+        {tabs.map(tab => {
+          const isActive = tab.key === 'Dashboard';
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              style={styles.navItem}
+              onPress={() => { if (tab.route) router.push(tab.route as any); }}
+            >
+              <Ionicons name={isActive ? tab.icon as any : tab.iconOff as any} size={24} color={isActive ? theme.accent : theme.subText} />
+              <Text style={[styles.navLabel, { color: isActive ? theme.accent : theme.subText }]}>{tab.key}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  header: { paddingHorizontal: 22, paddingBottom: 18, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' },
+  header: { paddingHorizontal: 22, paddingBottom: 18, flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', zIndex: 10 },
   logoSub: { color: 'rgba(255,255,255,0.5)', fontSize: 10, fontWeight: '600', letterSpacing: 2, marginBottom: 2 },
   logo: { color: '#fff', fontSize: 24, fontWeight: '800', letterSpacing: -0.5 },
   headerRight: { flexDirection: 'row', alignItems: 'center', marginBottom: 2, gap: 8 },
@@ -599,7 +590,7 @@ const styles = StyleSheet.create({
   totalNumber: { fontSize: 42, fontWeight: '800', letterSpacing: -1 },
   totalBadge: { width: 56, height: 56, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   card: { borderRadius: 16, padding: 18, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3 },
-  chartTitle: { fontSize: 14, fontWeight: '700', marginBottom: 10 },
+  chartTitle: { fontSize: 14, fontWeight: '700', marginBottom: 10, textAlign: 'center' },
   swipeHint: { fontSize: 10, textAlign: 'center', marginTop: 10 },
   statsRow: { flexDirection: 'row', gap: 12 },
   statCard: { flex: 1, borderRadius: 16, padding: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3 },
@@ -613,8 +604,8 @@ const styles = StyleSheet.create({
   navItem: { alignItems: 'center', gap: 3, flex: 1 },
   navLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 0.3 },
   profileError: { color: '#94a3b8', textAlign: 'center', paddingVertical: 16, fontSize: 13 },
-  dropdownBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100 },
-  dropdown: { position: 'absolute', top: Platform.OS === 'android' ? 80 : 100, right: 16, width: 280, backgroundColor: '#fff', borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 12, zIndex: 101 },
+  dropdownBackdrop: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 99 },
+  dropdown: { position: 'absolute', top: Platform.OS === 'android' ? 76 : 96, right: 16, width: 280, backgroundColor: '#fff', borderRadius: 16, shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 20, elevation: 12, zIndex: 100 },
   dropdownArrow: { position: 'absolute', top: -8, right: 14, width: 16, height: 16, backgroundColor: '#fff', transform: [{ rotate: '45deg' }] },
   dropdownHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 16, paddingBottom: 14 },
   dropdownAvatar: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
