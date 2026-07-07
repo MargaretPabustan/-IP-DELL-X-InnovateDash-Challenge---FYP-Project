@@ -30,62 +30,78 @@ async function apiFetch(path: string, headers: any) {
   return res.json();
 }
 
-// ── CUSTOM BAR CHART ──────────────────────────────────────────────────────────
+// ── NEW BEAUTIFUL BAR CHART ───────────────────────────────────────────────────
 function CustomBarChart({ datasets, labels, maxVal }: any) {
   const BAR_H = 140;
-  const barGroups = labels.map((label: string, i: number) => ({
+  
+  const bars = labels.map((label: string, i: number) => ({
     label,
-    values: datasets.map((d: any) => d.data[i] ?? 0),
-    colors: datasets.map((d: any) => d.color),
+    value: datasets[i]?.data[0] ?? 0,
+    color: datasets[i]?.color ?? '#ccc'
   }));
 
   return (
-    <View style={{ width: SCREEN_WIDTH - 70 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: BAR_H, gap: 6, paddingHorizontal: 10 }}>
-        {barGroups.map((group: any, gi: number) => (
-          <View key={gi} style={{ flex: 1, flexDirection: 'row', alignItems: 'flex-end', gap: 3 }}>
-            {group.values.map((val: number, vi: number) => {
-              const h = maxVal > 0 ? (val / maxVal) * BAR_H : 0;
-              return (
-                <View key={vi} style={{ flex: 1, alignItems: 'center' }}>
-                  <Text style={{ fontSize: 9, color: '#888', marginBottom: 2 }}>{val}</Text>
-                  <View style={{ width: '100%', height: h, backgroundColor: group.colors[vi], borderRadius: 4 }} />
-                </View>
-              );
-            })}
-          </View>
-        ))}
+    <View style={{ width: SCREEN_WIDTH - 70, paddingHorizontal: 4 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: BAR_H, justifyContent: 'space-around', paddingBottom: 4 }}>
+        {bars.map((bar: any, i: number) => {
+          const h = maxVal > 0 ? (bar.value / maxVal) * (BAR_H - 25) : 0;
+          return (
+            <View key={i} style={{ flex: 1, alignItems: 'center', justifyContent: 'flex-end', height: '100%' }}>
+              <Text style={{ fontSize: 11, fontWeight: '700', color: bar.color, marginBottom: 4 }}>{bar.value}</Text>
+              <View style={{ 
+                width: 32, 
+                height: Math.max(h, 4), 
+                backgroundColor: bar.color, 
+                borderTopLeftRadius: 6, 
+                borderTopRightRadius: 6,
+                shadowColor: bar.color,
+                shadowOffset: { width: 0, height: 2 },
+                shadowOpacity: 0.3,
+                shadowRadius: 4,
+                elevation: 2
+              }} />
+            </View>
+          );
+        })}
       </View>
-      <View style={{ flexDirection: 'row', marginTop: 6, gap: 6, paddingHorizontal: 10 }}>
-        {labels.map((label: string, i: number) => (
-          <Text key={i} style={{ flex: 1, textAlign: 'center', fontSize: 10, color: '#888' }}>{label}</Text>
+      
+      <View style={{ height: 1, backgroundColor: '#e2e8f0', marginHorizontal: 8, marginTop: 2 }} />
+      
+      <View style={{ flexDirection: 'row', marginTop: 8, justifyContent: 'space-around' }}>
+        {bars.map((bar: any, i: number) => (
+          <Text key={i} style={{ flex: 1, textAlign: 'center', fontSize: 11, fontWeight: '600', color: '#64748b' }}>
+            {bar.label}
+          </Text>
         ))}
       </View>
     </View>
   );
 }
 
-// ── CUSTOM LINE CHART ─────────────────────────────────────────────────────────
+// ── NEW BEAUTIFUL LINE CHART ──────────────────────────────────────────────────
 function CustomLineChart({ datasets, labels, maxVal }: any) {
   const W = SCREEN_WIDTH - 70;
   const H = 140;
-  const PAD = 30;
+  const PAD = 40;
 
   return (
-    <View style={{ width: W }}>
+    <View style={{ width: W, paddingHorizontal: 4 }}>
       <View style={{ height: H, position: 'relative' }}>
         {datasets.map((ds: any, di: number) => {
           const points = ds.data.map((v: number, i: number) => {
             const stepX = (W - PAD * 2) / (ds.data.length - 1 || 1);
             return {
               x: PAD + i * stepX,
-              y: maxVal > 0 ? H - 20 - (v / maxVal) * (H - 40) : H - 20,
+              y: maxVal > 0 ? H - 25 - (v / maxVal) * (H - 50) : H - 25,
               val: v
             };
           });
 
           return (
             <View key={di} style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}>
+              <View style={{ position: 'absolute', left: PAD, right: PAD, top: H/3, height: 0.5, backgroundColor: '#f1f5f9' }} />
+              <View style={{ position: 'absolute', left: PAD, right: PAD, top: (H/3)*2, height: 0.5, backgroundColor: '#f1f5f9' }} />
+
               {points.map((pt: any, pi: number) => {
                 if (pi === points.length - 1) return null;
                 const next = points[pi + 1];
@@ -101,7 +117,7 @@ function CustomLineChart({ datasets, labels, maxVal }: any) {
                       left: pt.x,
                       top: pt.y,
                       width: len,
-                      height: 2.5,
+                      height: 3,
                       backgroundColor: ds.color,
                       transformOrigin: 'top left',
                       transform: [{ rotate: `${angle}deg` }]
@@ -109,20 +125,47 @@ function CustomLineChart({ datasets, labels, maxVal }: any) {
                   />
                 );
               })}
+
               {points.map((pt: any, pi: number) => (
-                <View key={`dot-${pi}`} style={{ position: 'absolute', left: pt.x - 4, top: pt.y - 4, alignItems: 'center' }}>
-                  <Text style={{ fontSize: 9, color: '#888', position: 'absolute', top: -14 }}>{pt.val}</Text>
-                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: ds.color, borderWidth: 2, borderColor: '#fff' }} />
+                <View key={`dot-${pi}`} style={{ position: 'absolute', left: pt.x - 6, top: pt.y - 6, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: ds.color, position: 'absolute', top: -18, width: 30, textAlign: 'center' }}>
+                    {pt.val}
+                  </Text>
+                  <View style={{ 
+                    width: 12, 
+                    height: 12, 
+                    borderRadius: 6, 
+                    backgroundColor: '#fff', 
+                    borderWidth: 3, 
+                    borderColor: ds.color,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 1 },
+                    shadowOpacity: 0.2,
+                    shadowRadius: 2,
+                    elevation: 2
+                  }} />
                 </View>
               ))}
             </View>
           );
         })}
       </View>
-      <View style={{ flexDirection: 'row', marginTop: 6 }}>
+      <View style={{ height: 1, backgroundColor: '#e2e8f0', marginHorizontal: PAD - 10, marginTop: 2 }} />
+      <View style={{ flexDirection: 'row', marginTop: 8 }}>
         {labels.map((label: string, i: number) => {
+          const stepX = (W - PAD * 2) / (labels.length - 1 || 1);
           return (
-            <Text key={i} style={{ flex: 1, textAlign: 'center', fontSize: 10, color: '#888' }}>{label}</Text>
+            <Text key={i} style={{ 
+              position: 'absolute', 
+              left: PAD + i * stepX - 40, 
+              width: 80, 
+              textAlign: 'center', 
+              fontSize: 11, 
+              fontWeight: '600', 
+              color: '#64748b' 
+            }}>
+              {label}
+            </Text>
           );
         })}
       </View>
@@ -130,28 +173,71 @@ function CustomLineChart({ datasets, labels, maxVal }: any) {
   );
 }
 
-// ── CUSTOM PIE CHART ──────────────────────────────────────────────────────────
+// ── SOLID CIRCULAR PIE CHART ────────────────────────────────────────────────
 function CustomPieChart({ data }: any) {
   const W = SCREEN_WIDTH - 70;
+  
+  const activeSlices = data.filter((slice: any) => slice.value > 0);
+  const totalVal = activeSlices.reduce((sum: number, slice: any) => sum + slice.value, 0);
+
+  let accumulatedPercent = 0;
+
   return (
-    <View style={{ width: W, height: 160, justifyContent: 'center', alignItems: 'center' }}>
-      <View style={{ flexDirection: 'row', width: '85%', height: 28, borderRadius: 14, overflow: 'hidden', backgroundColor: '#eee' }}>
-        {data.map((slice: any, i: number) => {
-          if (parseFloat(slice.pct) === 0) return null;
-          return (
-            <View key={i} style={{ width: `${slice.pct}%`, backgroundColor: slice.color, justifyContent: 'center', alignItems: 'center' }}>
-              {parseFloat(slice.pct) > 12 && (
-                <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{Math.round(slice.pct)}%</Text>
-              )}
-            </View>
-          );
-        })}
-      </View>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 14, marginTop: 20 }}>
+    <View style={{ width: W, alignItems: 'center', paddingVertical: 6 }}>
+      {totalVal === 0 ? (
+        <View style={{ height: 120, justifyContent: 'center' }}>
+          <Text style={{ color: '#94a3b8', fontSize: 13 }}>No Data Available</Text>
+        </View>
+      ) : (
+        <View style={{ width: 120, height: 120, position: 'relative', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ width: 120, height: 120, borderRadius: 60, backgroundColor: '#e2e8f0', position: 'absolute', overflow: 'hidden' }} />
+          
+          {activeSlices.map((slice: any, i: number) => {
+            const currentPct = (slice.value / totalVal) * 100;
+            const rotationStart = (accumulatedPercent / 100) * 360;
+            const rotationSkew = 360 - ((currentPct / 100) * 360);
+            accumulatedPercent += currentPct;
+
+            if (currentPct === 100) {
+              return (
+                <View key={i} style={{ position: 'absolute', width: 120, height: 120, borderRadius: 60, backgroundColor: slice.color }} />
+              );
+            }
+
+            return (
+              <View 
+                key={i} 
+                style={{
+                  position: 'absolute',
+                  width: 120,
+                  height: 120,
+                  borderRadius: 60,
+                  transform: [{ rotate: `${rotationStart}deg` }],
+                  overflow: 'hidden',
+                }}
+              >
+                <View 
+                  style={{
+                    width: 120,
+                    height: 120,
+                    backgroundColor: slice.color,
+                    transform: [{ translateX: 60 }, { rotate: `${180 - rotationSkew}deg` }, { translateX: -60 }],
+                    transformOrigin: 'center center',
+                  }}
+                />
+              </View>
+            );
+          })}
+        </View>
+      )}
+
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 12, marginTop: 24, paddingHorizontal: 10 }}>
         {data.map((slice: any, i: number) => (
-          <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <View key={i} style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f8fafc', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20, borderWidth: 1, borderColor: '#f1f5f9', gap: 6 }}>
             <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: slice.color }} />
-            <Text style={{ fontSize: 11, fontWeight: '600', color: '#555' }}>{slice.label} ({slice.value})</Text>
+            <Text style={{ fontSize: 11, fontWeight: '700', color: '#334155' }}>
+              {slice.label} <Text style={{ fontWeight: '500', color: '#64748b' }}>({slice.value})</Text>
+            </Text>
           </View>
         ))}
       </View>
@@ -436,7 +522,7 @@ export default function ManagerDashboard() {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.dropdownName} numberOfLines={1}>{profile.full_name}</Text>
-                    <Text style={styles.dropdownEmail} numberOfLines={1}>{profile.full_name}</Text>
+                    <Text style={styles.dropdownEmail} numberOfLines={1}>{profile.email}</Text>
                   </View>
                   <View style={styles.dropdownRoleBadge}>
                     <Text style={styles.dropdownRoleText}>{profile.role?.toUpperCase()}</Text>
