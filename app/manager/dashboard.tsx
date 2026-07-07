@@ -40,8 +40,8 @@ function CustomBarChart({ datasets, labels, maxVal }: any) {
   }));
 
   return (
-    <View>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: BAR_H, gap: 6 }}>
+    <View style={{ width: SCREEN_WIDTH - 70 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: BAR_H, gap: 6, paddingHorizontal: 10 }}>
         {barGroups.map((group: any, gi: number) => (
           <View key={gi} style={{ flex: 1, flexDirection: 'row', alignItems: 'flex-end', gap: 3 }}>
             {group.values.map((val: number, vi: number) => {
@@ -56,7 +56,7 @@ function CustomBarChart({ datasets, labels, maxVal }: any) {
           </View>
         ))}
       </View>
-      <View style={{ flexDirection: 'row', marginTop: 6, gap: 6 }}>
+      <View style={{ flexDirection: 'row', marginTop: 6, gap: 6, paddingHorizontal: 10 }}>
         {labels.map((label: string, i: number) => (
           <Text key={i} style={{ flex: 1, textAlign: 'center', fontSize: 10, color: '#888' }}>{label}</Text>
         ))}
@@ -67,42 +67,92 @@ function CustomBarChart({ datasets, labels, maxVal }: any) {
 
 // ── CUSTOM LINE CHART ─────────────────────────────────────────────────────────
 function CustomLineChart({ datasets, labels, maxVal }: any) {
-  const W = SCREEN_WIDTH - 80;
+  const W = SCREEN_WIDTH - 70;
   const H = 140;
-  const PAD = 10;
-
-  const pts = (data: number[]) => data.map((v, i) => ({
-    x: data.length > 1 ? PAD + (i / (data.length - 1)) * (W - PAD * 2) : W / 2,
-    y: maxVal > 0 ? H - PAD - (v / maxVal) * (H - PAD * 2) : H - PAD,
-  }));
+  const PAD = 30;
 
   return (
-    <View>
-      <View style={{ height: H }}>
+    <View style={{ width: W }}>
+      <View style={{ height: H, position: 'relative' }}>
         {datasets.map((ds: any, di: number) => {
-          const points = pts(ds.data);
+          const points = ds.data.map((v: number, i: number) => {
+            const stepX = (W - PAD * 2) / (ds.data.length - 1 || 1);
+            return {
+              x: PAD + i * stepX,
+              y: maxVal > 0 ? H - 20 - (v / maxVal) * (H - 40) : H - 20,
+              val: v
+            };
+          });
+
           return (
-            <View key={di} style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}>
-              {points.map((pt, pi) => {
+            <View key={di} style={[StyleSheet.absoluteFill, { overflow: 'hidden' }]}>
+              {points.map((pt: any, pi: number) => {
                 if (pi === points.length - 1) return null;
                 const next = points[pi + 1];
-                const dx = next.x - pt.x; const dy = next.y - pt.y;
+                const dx = next.x - pt.x;
+                const dy = next.y - pt.y;
                 const len = Math.sqrt(dx * dx + dy * dy);
                 const angle = (Math.atan2(dy, dx) * 180) / Math.PI;
                 return (
-                  <View key={`line-${pi}`} style={{ position: 'absolute', left: pt.x, top: pt.y - 1, width: len, height: 2.5, backgroundColor: ds.color, transform: [{ rotate: `${angle}deg` }] }} />
+                  <View
+                    key={`line-${pi}`}
+                    style={{
+                      position: 'absolute',
+                      left: pt.x,
+                      top: pt.y,
+                      width: len,
+                      height: 2.5,
+                      backgroundColor: ds.color,
+                      transformOrigin: 'top left',
+                      transform: [{ rotate: `${angle}deg` }]
+                    }}
+                  />
                 );
               })}
-              {points.map((pt, pi) => (
-                <View key={`dot-${pi}`} style={{ position: 'absolute', left: pt.x - 4, top: pt.y - 4, width: 8, height: 8, borderRadius: 4, backgroundColor: ds.color, borderWidth: 2, borderColor: '#fff' }} />
+              {points.map((pt: any, pi: number) => (
+                <View key={`dot-${pi}`} style={{ position: 'absolute', left: pt.x - 4, top: pt.y - 4, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 9, color: '#888', position: 'absolute', top: -14 }}>{pt.val}</Text>
+                  <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: ds.color, borderWidth: 2, borderColor: '#fff' }} />
+                </View>
               ))}
             </View>
           );
         })}
       </View>
       <View style={{ flexDirection: 'row', marginTop: 6 }}>
-        {labels.map((label: string, i: number) => (
-          <Text key={i} style={{ flex: 1, textAlign: 'center', fontSize: 10, color: '#888' }}>{label}</Text>
+        {labels.map((label: string, i: number) => {
+          return (
+            <Text key={i} style={{ flex: 1, textAlign: 'center', fontSize: 10, color: '#888' }}>{label}</Text>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+// ── CUSTOM PIE CHART ──────────────────────────────────────────────────────────
+function CustomPieChart({ data }: any) {
+  const W = SCREEN_WIDTH - 70;
+  return (
+    <View style={{ width: W, height: 160, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flexDirection: 'row', width: '85%', height: 28, borderRadius: 14, overflow: 'hidden', backgroundColor: '#eee' }}>
+        {data.map((slice: any, i: number) => {
+          if (parseFloat(slice.pct) === 0) return null;
+          return (
+            <View key={i} style={{ width: `${slice.pct}%`, backgroundColor: slice.color, justifyContent: 'center', alignItems: 'center' }}>
+              {parseFloat(slice.pct) > 12 && (
+                <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{Math.round(slice.pct)}%</Text>
+              )}
+            </View>
+          );
+        })}
+      </View>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 14, marginTop: 20 }}>
+        {data.map((slice: any, i: number) => (
+          <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: slice.color }} />
+            <Text style={{ fontSize: 11, fontWeight: '600', color: '#555' }}>{slice.label} ({slice.value})</Text>
+          </View>
         ))}
       </View>
     </View>
@@ -114,12 +164,12 @@ export default function ManagerDashboard() {
   const router = useRouter();
   const { theme, themeIndex, setThemeIndex } = useAppTheme();
 
-  const [data,            setData]            = useState<any>(null);
-  const [loading,         setLoading]         = useState(true);
-  const [refreshing,      setRefreshing]      = useState(false);
-  const [showProfile,     setShowProfile]     = useState(false);
+  const [data,             setData]            = useState<any>(null);
+  const [loading,          setLoading]         = useState(true);
+  const [refreshing,       setRefreshing]      = useState(false);
+  const [showProfile,      setShowProfile]     = useState(false);
   const [showThemePicker, setShowThemePicker] = useState(false);
-  const [profile,         setProfile]         = useState<any>(null);
+  const [profile,          setProfile]         = useState<any>(null);
   const [loadingProfile,  setLoadingProfile]  = useState(false);
 
   const fetchDashboard = useCallback(async (isRefresh = false) => {
@@ -211,6 +261,18 @@ export default function ManagerDashboard() {
         />
       ),
     },
+    {
+      id: 'pie', title: 'Leads Distribution (Pie)',
+      component: (
+        <CustomPieChart
+          data={[
+            { label: 'New', value: newLeads, pct: newPct, color: COLORS.new },
+            { label: 'Contacted', value: contacted, pct: contactedPct, color: COLORS.contacted },
+            { label: 'Qualified', value: qualified, pct: qualifiedPct, color: COLORS.qualified },
+          ]}
+        />
+      ),
+    },
   ];
 
   const tabs = [
@@ -271,7 +333,7 @@ export default function ManagerDashboard() {
 
           {/* Charts */}
           <Text style={[styles.sectionLabel, { color: theme.subText }]}>PERFORMANCE CHART</Text>
-          <View style={[styles.card, { backgroundColor: theme.card }]}>
+          <View style={[styles.card, { backgroundColor: theme.card, paddingRight: 0 }]}>
             <FlatList
               data={chartData}
               horizontal
@@ -279,13 +341,13 @@ export default function ManagerDashboard() {
               showsHorizontalScrollIndicator={false}
               keyExtractor={item => item.id}
               renderItem={({ item }) => (
-                <View style={{ width: SCREEN_WIDTH - 70 }}>
+                <View style={{ width: SCREEN_WIDTH - 70, paddingRight: 18 }}>
                   <Text style={[styles.chartTitle, { color: theme.text }]}>{item.title}</Text>
                   {item.component}
                 </View>
               )}
             />
-            <Text style={[styles.swipeHint, { color: theme.subText }]}>← swipe for more →</Text>
+            <Text style={[styles.swipeHint, { color: theme.subText, marginRight: 18 }]}>← swipe for more →</Text>
           </View>
 
           {/* Stats grid */}
@@ -374,7 +436,7 @@ export default function ManagerDashboard() {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.dropdownName} numberOfLines={1}>{profile.full_name}</Text>
-                    <Text style={styles.dropdownEmail} numberOfLines={1}>{profile.email}</Text>
+                    <Text style={styles.dropdownEmail} numberOfLines={1}>{profile.full_name}</Text>
                   </View>
                   <View style={styles.dropdownRoleBadge}>
                     <Text style={styles.dropdownRoleText}>{profile.role?.toUpperCase()}</Text>
