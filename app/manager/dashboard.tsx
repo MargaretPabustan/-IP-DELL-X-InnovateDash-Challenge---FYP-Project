@@ -15,8 +15,8 @@ const SCREEN_WIDTH = Dimensions.get('window').width;
 
 const COLORS = {
   new:       '#5DCAA5',
-  contacted: '#378ADD',
-  qualified: '#7F77DD',
+  followup: '#378ADD',
+  urgent: '#7F77DD',
 };
 
 async function getAuthHeaders() {
@@ -241,12 +241,12 @@ export default function ManagerDashboard() {
       id: 'bar', title: 'Leads Overview (Bar)',
       component: (
         <CustomBarChart
-          labels={['New', 'Contacted', 'Qualified']}
+          labels={['New', 'Follow-Up', 'Urgent']}
           maxVal={Math.max(newLeads, contacted, qualified, 1)}
           datasets={[
             { data: [newLeads],  color: COLORS.new },
-            { data: [contacted], color: COLORS.contacted },
-            { data: [qualified], color: COLORS.qualified },
+            { data: [contacted], color: COLORS.followup },
+            { data: [qualified], color: COLORS.urgent },
           ]}
         />
       ),
@@ -255,7 +255,7 @@ export default function ManagerDashboard() {
       id: 'line', title: 'Leads Trend (Line)',
       component: (
         <CustomLineChart
-          labels={['New', 'Contacted', 'Qualified']}
+          labels={['New', 'Follow-Up', 'Urgent']}
           maxVal={Math.max(newLeads, contacted, qualified, 1)}
           datasets={[{ data: [newLeads, contacted, qualified], color: theme.navy }]}
         />
@@ -267,8 +267,8 @@ export default function ManagerDashboard() {
         <CustomPieChart
           data={[
             { label: 'New', value: newLeads, pct: newPct, color: COLORS.new },
-            { label: 'Contacted', value: contacted, pct: contactedPct, color: COLORS.contacted },
-            { label: 'Qualified', value: qualified, pct: qualifiedPct, color: COLORS.qualified },
+            { label: 'Follow-Up', value: contacted, pct: contactedPct, color: COLORS.followup },
+            { label: 'Urgent', value: qualified, pct: qualifiedPct, color: COLORS.urgent },
           ]}
         />
       ),
@@ -358,14 +358,14 @@ export default function ManagerDashboard() {
               <Text style={[styles.statLabel, { color: theme.subText }]}>New Leads</Text>
             </View>
             <View style={[styles.statCard, { backgroundColor: theme.card }]}>
-              <Text style={[styles.statNumber, { color: COLORS.contacted }]}>{contacted}</Text>
-              <Text style={[styles.statLabel, { color: theme.subText }]}>Contacted</Text>
+              <Text style={[styles.statNumber, { color: COLORS.followup }]}>{contacted}</Text>
+              <Text style={[styles.statLabel, { color: theme.subText }]}>Follow-Up</Text>
             </View>
           </View>
           <View style={styles.statsRow}>
             <View style={[styles.statCard, { backgroundColor: theme.card }]}>
-              <Text style={[styles.statNumber, { color: COLORS.qualified }]}>{qualified}</Text>
-              <Text style={[styles.statLabel, { color: theme.subText }]}>Qualified</Text>
+              <Text style={[styles.statNumber, { color: COLORS.urgent }]}>{qualified}</Text>
+              <Text style={[styles.statLabel, { color: theme.subText }]}>Urgent</Text>
             </View>
             <View style={[styles.statCard, { backgroundColor: theme.card }]}>
               <Text style={[styles.statNumber, { color: theme.accent }]}>{followups}</Text>
@@ -377,8 +377,8 @@ export default function ManagerDashboard() {
           <Text style={[styles.sectionLabel, { color: theme.subText }]}>BREAKDOWN</Text>
           <View style={[styles.card, { backgroundColor: theme.card }]}>
             <Text style={[styles.breakdownText, { color: COLORS.new }]}>New Leads: {newLeads} ({newPct}%)</Text>
-            <Text style={[styles.breakdownText, { color: COLORS.contacted }]}>Contacted: {contacted} ({contactedPct}%)</Text>
-            <Text style={[styles.breakdownText, { color: COLORS.qualified }]}>Qualified: {qualified} ({qualifiedPct}%)</Text>
+            <Text style={[styles.breakdownText, { color: COLORS.followup }]}>Follow-Up: {contacted} ({contactedPct}%)</Text>
+            <Text style={[styles.breakdownText, { color: COLORS.urgent }]}>Urgent: {qualified} ({qualifiedPct}%)</Text>
           </View>
 
           {/* Quick nav cards */}
