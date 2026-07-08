@@ -44,6 +44,17 @@ export default function ManagerActivity() {
     { key: 'Export',    icon: 'download', iconOff: 'download-outline', route: '/manager/export' },
   ];
 
+  // Clears out visual duplicate logs on the client fallback engine
+  const processUniqueLogs = (incomingLogs: ActivityLog[]): ActivityLog[] => {
+    const seenIds = new Set<string | number>();
+    return incomingLogs.filter(log => {
+      if (!log.activity_id) return true;
+      if (seenIds.has(log.activity_id)) return false;
+      seenIds.add(log.activity_id);
+      return true;
+    });
+  };
+
   const fetchLogs = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
     else setLoading(true);
@@ -52,7 +63,8 @@ export default function ManagerActivity() {
       const res  = await fetch(`${BACKEND_URL}/manager/activity`, { headers });
       const data = await res.json();
       if (data.success) {
-        setLogs(data.data || []);
+        const cleanedData = processUniqueLogs(data.data || []);
+        setLogs(cleanedData);
       } else {
         Alert.alert("Error", data.message || "Failed to load activities.");
       }
@@ -90,7 +102,11 @@ export default function ManagerActivity() {
               const data = await res.json();
               if (data.success) {
                 Alert.alert("Cancelled", "Followup status updated successfully.");
-                fetchLogs(true);
+                
+                // Disappearing feature: Instantly filters the cancelled card out of the state array
+                setLogs(currentLogs => 
+                  currentLogs.filter(item => item.activity_id !== log.activity_id)
+                );
               } else {
                 Alert.alert("Error", data.message || "Failed to cancel.");
               }
@@ -122,7 +138,6 @@ export default function ManagerActivity() {
     const color = getActivityColor(log.activity_type);
     const uType = log.activity_type?.toUpperCase() || '';
     
-    // Explicitly determine if this specific item represents an active followup card
     const isFollowupType = uType.includes('FOLLOWUP') && log.followup_id !== null;
     const isCancelled = log.followup_status?.toString().toLowerCase().trim() === 'cancelled';
 
@@ -141,27 +156,22 @@ export default function ManagerActivity() {
             {log.created_at ? new Date(log.created_at).toLocaleString('en-SG') : '—'}
           </Text>
 
-          {/* Action button rendering isolated exclusively using strict boolean evaluations */}
-          {isFollowupType && (
-            !isCancelled ? (
-              <TouchableOpacity 
-                style={styles.cancelBtn} 
-                onPress={() => handleCancelFollowup(log)}
-              >
-                <Ionicons name="close-circle" size={14} color="#ef4444" />
-                <Text style={styles.cancelBtnText}>Cancel Followup</Text>
-              </TouchableOpacity>
-            ) : (
-              <View style={[styles.cancelBtn, { borderColor: 'transparent', backgroundColor: '#ef444408', marginTop: 10 }]}>
-                <Ionicons name="ban" size={14} color="#94a3b8" />
-                <Text style={[styles.cancelBtnText, { color: '#94a3b8' }]}>Cancelled</Text>
-              </View>
-            )
+          {isFollowupType && !isCancelled && (
+            <TouchableOpacity 
+              style={styles.cancelBtn} 
+              onPress={() => handleCancelFollowup(log)}
+            >
+              <Ionicons name="close-circle" size={14} color="#ef4444" />
+              <Text style={styles.cancelBtnText}>Cancel Followup</Text>
+            </TouchableOpacity>
           )}
         </View>
       </View>
     );
   };
+
+  // Filters out items structurally labeled as cancelled from rendering
+  const visibleLogs = logs.filter(log => log.followup_status?.toString().toLowerCase().trim() !== 'cancelled');
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
@@ -174,7 +184,7 @@ export default function ManagerActivity() {
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
           <Text style={styles.headerTitle}>Activity Logs</Text>
-          <Text style={styles.headerSub}>{logs.length} activities</Text>
+          <Text style={styles.headerSub}>{visibleLogs.length} activities</Text>
         </View>
       </View>
 
@@ -183,7 +193,7 @@ export default function ManagerActivity() {
         <View style={[styles.centered, { paddingTop: 0 }]}><ActivityIndicator size="large" color={theme.navy} /></View>
       ) : (
         <FlatList
-          data={logs}
+          data={visibleLogs}
           renderItem={renderLogItem}
           keyExtractor={(item, index) => item.activity_id ? `activity-${item.activity_id}` : `idx-${index}`}
           contentContainerStyle={[styles.content, { paddingBottom: 24 }]}
