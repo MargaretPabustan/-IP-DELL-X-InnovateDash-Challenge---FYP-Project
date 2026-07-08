@@ -99,19 +99,46 @@ if (!process.env.GEMINI_API_KEY) {
     console.warn('❌ GEMINI_API_KEY is missing from environment configuration');
 }
 
-// ── EMAIL TRANSPORTER (Nodemailer + Gmail SMTP) ──────────────────────────────
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
+// ── EMAIL TRANSPORTER ───────────────────────────────────────────────────────
+function createEmailTransporter() {
+    const emailHost = process.env.EMAIL_HOST;
+    const emailPort = Number(process.env.EMAIL_PORT || 587);
+    const emailSecure = process.env.EMAIL_SECURE === 'true' || process.env.EMAIL_SECURE === '1';
+    const emailUser = process.env.EMAIL_USER;
+    const emailPass = process.env.EMAIL_PASS;
+
+    if (emailHost) {
+        return nodemailer.createTransport({
+            host: emailHost,
+            port: Number.isFinite(emailPort) ? emailPort : 587,
+            secure: emailSecure,
+            auth: emailUser && emailPass ? { user: emailUser, pass: emailPass } : undefined,
+        });
     }
-});
+
+    return nodemailer.createTransport({
+        service: process.env.EMAIL_SERVICE || 'gmail',
+        auth: emailUser && emailPass ? { user: emailUser, pass: emailPass } : undefined,
+    });
+}
+
+const transporter = createEmailTransporter();
 
 // ── SEND EMAIL HELPER ─────────────────────────────────────────────────────────
-async function sendEmail({ to, subject, text }) {
+async function sendEmail({ to, subject, text, from }) {
+    if (!to || !subject || !text) {
+        throw new Error('Email recipient, subject, and message body are required.');
+    }
+
+    const emailUser = process.env.EMAIL_USER;
+    if (!emailUser || !process.env.EMAIL_PASS) {
+        if (!process.env.EMAIL_HOST) {
+            throw new Error('Email service is not configured. Set EMAIL_USER/EMAIL_PASS or EMAIL_HOST/EMAIL_PORT/EMAIL_SECURE in the backend environment.');
+        }
+    }
+
     const info = await transporter.sendMail({
-        from: `"Boothflow" <${process.env.EMAIL_USER}>`,
+        from: from || `"Boothflow" <${emailUser || process.env.EMAIL_FROM || 'no-reply@boothflow.local'}>`,
         to,
         subject,
         text,
@@ -827,6 +854,31 @@ Return ONLY valid JSON in this exact format, no extra text:
     } catch (error) {
         console.error('AI analysis error:', error);
         res.status(500).json({ success: false, message: 'AI analysis failed' });
+    }
+});
+
+// ── GENERIC EMAIL SENDING ROUTE ─────────────────────────────────────────────
+app.post('/send-email', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
+    const { to, subject, text, lead_id } = req.body || {};
+
+    if (!to || !subject || !text) {
+        return res.status(400).json({ success: false, message: 'Recipient, subject, and text are required.' });
+    }
+
+    try {
+        await sendEmail({ to, subject, text });
+
+        if (lead_id) {
+            await pool.query(
+                `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'EMAIL_SENT', $2)`,
+                [lead_id, `Manual email sent from the app to ${to}`]
+            );
+        }
+
+        res.json({ success: true, message: 'Email sent successfully.' });
+    } catch (err) {
+        console.error('Email delivery error:', err);
+        res.status(500).json({ success: false, message: `Email delivery failed: ${err.message}` });
     }
 });
 
