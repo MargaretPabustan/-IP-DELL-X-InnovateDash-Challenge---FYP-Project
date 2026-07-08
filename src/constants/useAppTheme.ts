@@ -15,10 +15,11 @@ export type Theme = {
   navBg: string;
   scanColor: string;
   scanIcon: string;
+  gradientColors?: string[];
 };
 
 export const THEMES: Theme[] = [
-  // 1. Navy — original
+  // 1. Navy — original light theme
   {
     name: 'Navy',
     navy: '#0f2557',
@@ -44,29 +45,29 @@ export const THEMES: Theme[] = [
     scanColor: '#365314',
     scanIcon: '#ffffff',
   },
-  // 3. Midnight — deep dark + sky blue
+  // 3. Dark — midnight blue
   {
     name: 'Dark',
-    navy: '#0f172a',
-    accent: '#38bdf8',
-    bg: '#020617',
-    card: '#0f172a',
+    navy: '#1e3a5f',
+    accent: '#3b82f6',
+    bg: '#0f172a',
+    card: '#1e293b',
     text: '#f1f5f9',
     subText: '#94a3b8',
-    navBg: '#0f172a',
-    scanColor: '#38bdf8',
-    scanIcon: '#38bdf8',
+    navBg: '#1e3a5f',
+    scanColor: '#3b82f6',
+    scanIcon: '#3b82f6',
   },
-  // 4. Aurora — dark purple + fuchsia
+  // 4. Aurora — purple tones
   {
     name: 'Aurora',
-    navy: '#1e1b4b',
-    accent: '#e879f9',
-    bg: '#0d0d1f',
-    card: '#1e1b4b',
+    navy: '#2d1b69',
+    accent: '#a855f7',
+    bg: '#0d0a1f',
+    card: '#1a1040',
     text: '#ede9fe',
-    subText: '#a5b4fc',
-    navBg: '#1e1b4b',
+    subText: '#a78bfa',
+    navBg: '#1a1040',
     scanColor: '#e879f9',
     scanIcon: '#e879f9',
   },
@@ -78,23 +79,19 @@ const listeners = new Set<Listener>();
 
 function subscribe(fn: Listener) {
   listeners.add(fn);
-  return () => {
-    listeners.delete(fn);
-  };
+  return () => { listeners.delete(fn); };
 }
 
 function broadcast(index: number) {
   listeners.forEach((fn) => fn(index));
 }
-// ─────────────────────────────────────────────────────────────────────────────
 
-let cachedIndex = 0; // in-memory cache so new screens get correct value immediately
+let cachedIndex = 0;
 
 export function useAppTheme() {
   const [themeIndex, setThemeIndexState] = useState(cachedIndex);
   const [loaded, setLoaded] = useState(false);
 
-  // Load from AsyncStorage on first mount
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY).then((val) => {
       if (val !== null) {
@@ -108,26 +105,17 @@ export function useAppTheme() {
     });
   }, []);
 
-  // Subscribe to global broadcasts so theme updates instantly on all screens
   useEffect(() => {
-    const unsub = subscribe((index) => {
-      setThemeIndexState(index);
-    });
+    const unsub = subscribe((index) => { setThemeIndexState(index); });
     return unsub;
   }, []);
 
   const setThemeIndex = useCallback((index: number) => {
     cachedIndex = index;
     setThemeIndexState(index);
-    broadcast(index);                              // ← instant update everywhere
-    AsyncStorage.setItem(STORAGE_KEY, String(index)); // ← persist for next session
+    broadcast(index);
+    AsyncStorage.setItem(STORAGE_KEY, String(index));
   }, []);
 
-  return {
-    theme: THEMES[themeIndex],
-    themeIndex,
-    setThemeIndex,
-    loaded,
-    THEMES,
-  };
+  return { theme: THEMES[themeIndex], themeIndex, setThemeIndex, loaded, THEMES };
 }

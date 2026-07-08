@@ -106,8 +106,8 @@ function mapLead(item: any): Lead {
 
 function getStatusColor(status: string) {
   switch (status) {
-    case 'QUALIFIED': return '#22c55e';
-    case 'CONTACTED': return '#f59e0b';
+    case 'URGENT': return '#22c55e';
+    case 'FOLLOW-UP': return '#f59e0b';
     case 'CLOSED':    return '#6366f1';
     default:          return '#ef4444';
   }
@@ -115,14 +115,14 @@ function getStatusColor(status: string) {
 
 function getStatusLabel(status: string) {
   switch (status) {
-    case 'QUALIFIED': return 'Immediate Follow-up';
-    case 'CONTACTED': return 'Follow-up in Progress';
+    case 'URGENT': return 'Immediate Follow-up';
+    case 'FOLLOW-UP': return 'Follow-up in Progress';
     case 'CLOSED':    return 'Closed';
     default:          return 'Follow-up Later';
   }
 }
 
-const FILTER_OPTIONS = ['ALL', 'QUALIFIED', 'CONTACTED', 'NEW', 'CLOSED'];
+const FILTER_OPTIONS = ['ALL', 'URGENT', 'FOLLOW-UP', 'NEW', 'CLOSED'];
 
 // ─── View Modal ───────────────────────────────────────────────────────────────
 function ViewModal({ lead, onClose, theme }: { lead: Lead; onClose: () => void; theme: any }) {

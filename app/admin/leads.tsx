@@ -18,8 +18,8 @@ async function getAuthHeaders() {
 
 function getStatusColor(status: string) {
   switch (status) {
-    case 'QUALIFIED': return '#22c55e';
-    case 'CONTACTED': return '#f59e0b';
+    case 'URGENT': return '#22c55e';
+    case 'FOLLOW-UP': return '#f59e0b';
     case 'CLOSED':    return '#6366f1';
     default:          return '#ef4444';
   }
@@ -27,8 +27,8 @@ function getStatusColor(status: string) {
 
 function getStatusLabel(status: string) {
   switch (status) {
-    case 'QUALIFIED': return 'Immediate Follow-up';
-    case 'CONTACTED': return 'Follow-up in Progress';
+    case 'URGENT': return 'Immediate Follow-up';
+    case 'FOLLOW-UP': return 'Follow-up in Progress';
     case 'CLOSED':    return 'Closed';
     default:          return 'Follow-up Later';
   }
@@ -142,7 +142,7 @@ function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () =
     } finally { setSaving(false); }
   };
 
-  const STATUS_OPTIONS = ['NEW', 'CONTACTED', 'QUALIFIED', 'CLOSED'];
+  const STATUS_OPTIONS = ['NEW', 'FOLLOW-UP', 'URGENT', 'CLOSED'];
 
   return (
     <Modal visible animationType="slide" transparent>
@@ -402,10 +402,10 @@ export default function AdminLeads() {
                   </View>
                   <View style={styles.teamStats}>
                     <View style={[styles.miniStat, { backgroundColor: '#22c55e20' }]}>
-                      <Text style={[styles.miniStatText, { color: '#22c55e' }]}>{teamLeads.filter(l => l.status === 'QUALIFIED').length} Q</Text>
+                      <Text style={[styles.miniStatText, { color: '#22c55e' }]}>{teamLeads.filter(l => l.status === 'URGENT').length} Q</Text>
                     </View>
                     <View style={[styles.miniStat, { backgroundColor: '#f59e0b20' }]}>
-                      <Text style={[styles.miniStatText, { color: '#f59e0b' }]}>{teamLeads.filter(l => l.status === 'CONTACTED').length} C</Text>
+                      <Text style={[styles.miniStatText, { color: '#f59e0b' }]}>{teamLeads.filter(l => l.status === 'FOLLOW-UP').length} C</Text>
                     </View>
                   </View>
                   <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={16} color={theme.subText} style={{ marginLeft: 8 }} />
@@ -443,7 +443,6 @@ export default function AdminLeads() {
         )}
       </ScrollView>
 
-      {/* BOTTOM NAV */}
       <View style={[styles.bottomNav, { backgroundColor: theme.navBg, borderTopColor: theme.subText + '22', paddingBottom: Platform.OS === 'ios' ? 28 : 12 }]}>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/admin/dashboard' as any)}>
           <Ionicons name="grid-outline" size={24} color={theme.subText} />
@@ -452,6 +451,10 @@ export default function AdminLeads() {
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/admin/users' as any)}>
           <Ionicons name="people-outline" size={24} color={theme.subText} />
           <Text style={[styles.navLabel, { color: theme.subText }]}>Users</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/admin/leads' as any)}>
+          <Ionicons name="document-text" size={24} color={theme.accent} />
+          <Text style={[styles.navLabel, { color: theme.accent }]}>Leads</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/admin/teams' as any)}>
           <Ionicons name="business-outline" size={24} color={theme.subText} />

@@ -137,8 +137,8 @@ export default function AdminTeams() {
                   {team.description ? <Text style={[styles.teamDesc, { color: theme.subText }]} numberOfLines={1}>{team.description}</Text> : null}
                 </View>
                 <View style={styles.actions}>
-                  <TouchableOpacity style={[styles.actionBtn, { borderColor: theme.navy }]} onPress={() => openEdit(team)}>
-                    <Ionicons name="pencil" size={14} color={theme.navy} />
+                  <TouchableOpacity style={[styles.actionBtn, { borderColor: theme.accent }]} onPress={() => openEdit(team)}>
+                    <Ionicons name="pencil" size={14} color={theme.accent} />
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.actionBtn, { borderColor: '#ef4444' }]} onPress={() => handleDelete(team)}>
                     <Ionicons name="trash-outline" size={14} color="#ef4444" />
@@ -160,12 +160,17 @@ export default function AdminTeams() {
           <Ionicons name="people-outline" size={24} color={theme.subText} />
           <Text style={[styles.navLabel, { color: theme.subText }]}>Users</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/admin/leads' as any)}>
+          <Ionicons name="document-text-outline" size={24} color={theme.subText} />
+          <Text style={[styles.navLabel, { color: theme.subText }]}>Leads</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => router.push('/admin/teams' as any)}>
           <Ionicons name="business" size={24} color={theme.accent} />
           <Text style={[styles.navLabel, { color: theme.accent }]}>Teams</Text>
         </TouchableOpacity>
       </View>
 
+      {/* CREATE/EDIT MODAL */}
       <Modal visible={showCreate} transparent animationType="slide">
         <Pressable style={styles.modalBackdrop} onPress={() => setShowCreate(false)}>
           <Pressable style={[styles.modalSheet, { backgroundColor: theme.card }]} onPress={() => {}}>
@@ -173,19 +178,19 @@ export default function AdminTeams() {
             <Text style={[styles.modalTitle, { color: theme.text }]}>{editTeam ? 'Edit Team' : 'Create Team'}</Text>
 
             <Text style={styles.fieldLabel}>TEAM NAME</Text>
-            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={name} onChangeText={setName} placeholder="e.g. AI PCs Team" placeholderTextColor={theme.subText} />
+            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: theme.bg }]} value={name} onChangeText={setName} placeholder="e.g. AI PCs Team" placeholderTextColor={theme.subText} />
 
             <Text style={styles.fieldLabel}>TERRITORY</Text>
-            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={territory} onChangeText={setTerritory} placeholder="e.g. Singapore" placeholderTextColor={theme.subText} />
+            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: theme.bg }]} value={territory} onChangeText={setTerritory} placeholder="e.g. Singapore" placeholderTextColor={theme.subText} />
 
             <Text style={styles.fieldLabel}>DESCRIPTION</Text>
-            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44', minHeight: 60, textAlignVertical: 'top' }]} value={description} onChangeText={setDescription} placeholder="Team description..." placeholderTextColor={theme.subText} multiline />
+            <TextInput style={[styles.input, { color: theme.text, borderColor: theme.subText + '44', backgroundColor: theme.bg, minHeight: 60, textAlignVertical: 'top' }]} value={description} onChangeText={setDescription} placeholder="Team description..." placeholderTextColor={theme.subText} multiline />
 
             <View style={styles.modalBtns}>
-              <TouchableOpacity style={[styles.cancelBtn, { borderColor: theme.navy }]} onPress={() => setShowCreate(false)}>
-                <Text style={[styles.cancelText, { color: theme.navy }]}>Cancel</Text>
+              <TouchableOpacity style={[styles.cancelBtn, { borderColor: theme.accent }]} onPress={() => setShowCreate(false)}>
+                <Text style={[styles.cancelText, { color: theme.accent }]}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.navy, opacity: saving ? 0.7 : 1 }]} onPress={handleSave} disabled={saving}>
+              <TouchableOpacity style={[styles.saveBtn, { backgroundColor: theme.accent, opacity: saving ? 0.7 : 1 }]} onPress={handleSave} disabled={saving}>
                 {saving ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.saveBtnText}>{editTeam ? 'Save' : 'Create'}</Text>}
               </TouchableOpacity>
             </View>
@@ -225,7 +230,7 @@ const styles = StyleSheet.create({
   cancelText: { fontSize: 14, fontWeight: '600' },
   saveBtn: { flex: 1, borderRadius: 12, paddingVertical: 14, alignItems: 'center' },
   saveBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  bottomNav: { flexDirection: 'row', borderTopWidth: 1, paddingTop: 10, paddingHorizontal: 24, justifyContent: 'space-around', alignItems: 'center' },
+  bottomNav: { flexDirection: 'row', borderTopWidth: 1, paddingTop: 10, paddingHorizontal: 16, justifyContent: 'space-around', alignItems: 'center' },
   navItem: { alignItems: 'center', gap: 3, flex: 1 },
   navLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 0.3 },
 });

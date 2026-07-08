@@ -1,0 +1,20 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: boothflow-network-policy
+  namespace: boothflow
+
+spec:
+  podSelector:
+    matchLabels:
+      app: boothflow-backend
+
+  policyTypes:
+  - Ingress
+  - Egress
+
+  ingress:
+  - {}
+
+  egress:
+  - {}

@@ -1,0 +1,10 @@
+Place the provided "lets get started" background image file here with the exact filename:
+
+  booth-bg-replacement.jpg
+
+Steps:
+1. Save the attached image from the chat as `booth-bg-replacement.jpg`.
+2. Put it in this folder: `assets/images/`.
+3. If using Expo, reload the app or re-bundle assets so the new image is included.
+
+If you prefer the file to replace the original `booth-bg.png`, you can instead name the file `booth-bg.png` and overwrite the existing image.
