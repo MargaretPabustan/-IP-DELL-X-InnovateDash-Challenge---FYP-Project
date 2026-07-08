@@ -30,7 +30,7 @@ async function getAuthHeaders() {
 
 export default function ManagerActivity() {
   const router    = useRouter();
-  const { theme } = useAppTheme();
+  const { theme, toggleTheme } = useAppTheme() as any;
 
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,23 +44,29 @@ export default function ManagerActivity() {
     { key: 'Export',    icon: 'download', iconOff: 'download-outline', route: '/manager/export' },
   ];
 
-  // Guaranteed Unique Lookups Engine
+  // Guaranteed Unique Lookups Engine with duplication data integrity guards
   const processUniqueLogs = (incomingLogs: ActivityLog[]): ActivityLog[] => {
     const uniqueMap = new Map<string | number, ActivityLog>();
+    let duplicateDetected = false;
     
     incomingLogs.forEach(log => {
-      if (!log.activity_id) return;
+      const uniqueKey = log.followup_id || log.activity_id;
+      if (!uniqueKey) return;
       
-      // If log exists, keep the non-cancelled state preference context
-      if (uniqueMap.has(log.activity_id)) {
-        const existing = uniqueMap.get(log.activity_id);
+      if (uniqueMap.has(uniqueKey)) {
+        duplicateDetected = true;
+        const existing = uniqueMap.get(uniqueKey);
         if (existing?.followup_status === 'cancelled' && log.followup_status !== 'cancelled') {
-          uniqueMap.set(log.activity_id, log);
+          uniqueMap.set(uniqueKey, log);
         }
         return;
       }
-      uniqueMap.set(log.activity_id, log);
+      uniqueMap.set(uniqueKey, log);
     });
+
+    if (duplicateDetected) {
+      console.warn("Database Data Integrity Warning: Duplicate follow-up/activity records were identified and automatically merged.");
+    }
 
     return Array.from(uniqueMap.values());
   };
@@ -113,7 +119,7 @@ export default function ManagerActivity() {
               if (data.success) {
                 Alert.alert("Cancelled", "Followup status updated successfully.");
                 
-                // State side synchronization update logic layout
+                // Real-time local state adjustment layout update
                 setLogs(currentLogs => 
                   currentLogs.map(item => 
                     item.lead_id === log.lead_id 
@@ -137,14 +143,14 @@ export default function ManagerActivity() {
   const getActivityIcon = (type: string) => {
     const uType = type?.toUpperCase() || '';
     if (uType.includes('EMAIL')) return 'mail-outline';
-    if (uType.includes('FOLLOWUP')) return 'calendar-outline';
+    if (uType.includes('FOLLOWUP') || uType.includes('SCHEDULED') || uType.includes('PENDING')) return 'calendar-outline';
     return 'pulse-outline';
   };
 
   const getActivityColor = (type: string) => {
     const uType = type?.toUpperCase() || '';
     if (uType.includes('EMAIL')) return '#3b82f6'; 
-    if (uType.includes('FOLLOWUP')) return '#22c55e'; 
+    if (uType.includes('FOLLOWUP') || uType.includes('SCHEDULED') || uType.includes('PENDING')) return '#22c55e'; 
     return '#f59e0b'; 
   };
 
@@ -152,7 +158,7 @@ export default function ManagerActivity() {
     const color = getActivityColor(log.activity_type);
     const uType = log.activity_type?.toUpperCase() || '';
     
-    const isFollowupType = (uType.includes('FOLLOWUP') || uType.includes('SCHEDULED')) && log.lead_id;
+    const isFollowupType = (uType.includes('FOLLOWUP') || uType.includes('SCHEDULED') || uType.includes('PENDING') || log.followup_status === 'pending') && log.lead_id;
     const isCancelled = log.followup_status?.toString().toLowerCase().trim() === 'cancelled';
 
     return (
@@ -161,7 +167,9 @@ export default function ManagerActivity() {
           <Ionicons name={getActivityIcon(log.activity_type) as any} size={20} color={color} />
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.activityType, { color: theme.text }]}>{log.activity_type}</Text>
+          <Text style={[styles.activityType, { color: theme.text }]}>
+            {log.followup_status ? `FOLLOWUP_${log.followup_status.toUpperCase()}` : log.activity_type}
+          </Text>
           <Text style={[styles.activityLead, { color: theme.subText }]}>
             {log.lead_name || 'N/A'} {log.company ? `· ${log.company}` : ''}
           </Text>
@@ -170,7 +178,7 @@ export default function ManagerActivity() {
             {log.created_at ? new Date(log.created_at).toLocaleString('en-SG') : '—'}
           </Text>
 
-          {isFollowupType && !isCancelled && (
+          {isFollowupType && !isCancelled && log.followup_status === 'pending' && (
             <TouchableOpacity 
               style={styles.cancelBtn} 
               onPress={() => handleCancelFollowup(log)}
@@ -184,21 +192,35 @@ export default function ManagerActivity() {
     );
   };
 
-  // Filters out items structurally labeled as cancelled from rendering
-  const visibleLogs = logs.filter(log => log.followup_status?.toString().toLowerCase().trim() !== 'cancelled');
+  // Keep all operational items ('pending' or 'done') visible on screen
+  const visibleLogs = logs.filter(log => log.followup_status === 'pending' || log.followup_status === 'done');
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* HEADER */}
+      {/* FIXED HEADER WITH UNIFORM PANEL LABELS AND SYSTEM ACTIONS */}
       <View style={[styles.header, { backgroundColor: theme.navy, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
+        
         <View style={{ flex: 1 }}>
+          <Text style={styles.headerPanelLabel}>MANAGER PANEL</Text>
           <Text style={styles.headerTitle}>Activity Logs</Text>
           <Text style={styles.headerSub}>{visibleLogs.length} activities</Text>
+        </View>
+
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={() => fetchLogs(true)} style={styles.actionBtn}>
+            <Ionicons name="refresh-outline" size={20} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => toggleTheme && toggleTheme()} style={styles.actionBtn}>
+            <Ionicons name={theme.bg === '#020617' || theme.bg === '#0d0d1f' ? "sunny-outline" : "moon-outline"} size={20} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.profileBtn}>
+            <Ionicons name="person-circle" size={26} color="#fff" />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -209,7 +231,7 @@ export default function ManagerActivity() {
         <FlatList
           data={visibleLogs}
           renderItem={renderLogItem}
-          keyExtractor={(item, index) => item.activity_id ? `activity-${item.activity_id}` : `idx-${index}`}
+          keyExtractor={(item, index) => item.followup_id ? `followup-${item.followup_id}` : item.activity_id ? `activity-${item.activity_id}` : `idx-${index}`}
           contentContainerStyle={[styles.content, { paddingBottom: 24 }]}
           showsVerticalScrollIndicator={false}
           initialNumToRender={10}
@@ -218,7 +240,7 @@ export default function ManagerActivity() {
             <RefreshControl 
               refreshing={refreshing} 
               onRefresh={() => fetchLogs(true)} 
-              tintColor={theme.navy} 
+              tintColor="#fff" 
             />
           }
           ListEmptyComponent={
@@ -254,8 +276,12 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   header: { paddingHorizontal: 16, paddingBottom: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
   backBtn: { padding: 4 },
+  headerPanelLabel: { color: 'rgba(255,255,255,0.45)', fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginBottom: 1 },
   headerTitle: { color: '#fff', fontSize: 17, fontWeight: '700' },
   headerSub: { color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 1 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  actionBtn: { padding: 6 },
+  profileBtn: { paddingLeft: 4 },
   content: { padding: 16, gap: 10 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12 },
   emptyText: { fontSize: 15, fontWeight: '600' },

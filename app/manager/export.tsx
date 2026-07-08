@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
-  StatusBar, Platform, Alert, ActivityIndicator,
+  StatusBar, Platform, Alert, ActivityIndicator, ScrollView, RefreshControl
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,7 +9,7 @@ import { useAppTheme } from '../../src/constants/useAppTheme';
 import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from "expo-sharing";
-import DateTimePickerModal from 'react-native-modal-datetime-picker'; // Added missing import
+import DateTimePickerModal from 'react-native-modal-datetime-picker';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
@@ -20,9 +20,10 @@ async function getAuthHeaders() {
 
 export default function ManagerExport() {
   const router  = useRouter();
-  const { theme } = useAppTheme();
+  const { theme, toggleTheme } = useAppTheme() as any; // Destructured toggleTheme for the theme button
   const [previewLoading,  setPreviewLoading]  = useState(false);
   const [downloadLoading, setDownloadLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   // States required by the DateTimePickerModal snippet
   const [showPicker, setShowPicker] = useState(false);
@@ -30,12 +31,27 @@ export default function ManagerExport() {
   const [followupDate, setFollowupDate] = useState(new Date());
   const [followupTime, setFollowupTime] = useState(new Date());
 
-  // Tabs configuration array needed for tabs.map()
+  // Fixed Tabs Configuration to show ALL 5 ITEMS IN NAVBAR
   const tabs = [
-    { key: 'Leads', icon: 'people', iconOff: 'people-outline' },
-    { key: 'Emails', icon: 'mail', iconOff: 'mail-outline' }, // Current highlighted route based on your snippet logic
-    { key: 'Settings', icon: 'settings', iconOff: 'settings-outline' },
+    { key: 'Dashboard', icon: 'grid',     iconOff: 'grid-outline',     route: '/manager/dashboard' },
+    { key: 'Leads',     icon: 'people',   iconOff: 'people-outline',   route: '/manager/leads' },
+    { key: 'Activity',  icon: 'pulse',    iconOff: 'pulse-outline',    route: '/manager/activity' },
+    { key: 'Emails',    icon: 'mail',     iconOff: 'mail-outline',     route: '/manager/emails' },
+    { key: 'Export',    icon: 'download', iconOff: 'download-outline', route: null }, // Active View
   ];
+
+  // Manual Trigger Action for the Top Header Refresh Button & Pull-to-refresh
+  const handleRefreshData = async () => {
+    setRefreshing(true);
+    try {
+      // Perform any layout refreshing sync operations here if needed
+      await new Promise(resolve => setTimeout(resolve, 800)); 
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const previewLeads = async () => {
     setPreviewLoading(true);
@@ -126,19 +142,41 @@ export default function ManagerExport() {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* HEADER */}
+      {/* HEADER WITH MANAGER PANEL TEXT, REFRESH, THEME PICKER & PROFILE ICONS */}
       <View style={[styles.header, { backgroundColor: theme.navy, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
+        
         <View style={{ flex: 1 }}>
+          <Text style={styles.headerPanelLabel}>MANAGER PANEL</Text>
           <Text style={styles.headerTitle}>Export Leads</Text>
           <Text style={styles.headerSub}>Download or preview team leads</Text>
         </View>
+
+        {/* Action Controls Group from Dashboard */}
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={handleRefreshData} style={styles.actionBtn}>
+            <Ionicons name="refresh-outline" size={20} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => toggleTheme && toggleTheme()} style={styles.actionBtn}>
+            <Ionicons name={theme.bg === '#020617' || theme.bg === '#0d0d1f' ? "sunny-outline" : "moon-outline"} size={20} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.profileBtn}>
+            <Ionicons name="person-circle" size={26} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* BODY */}
-      <View style={styles.body}>
+      {/* BODY WITH SCROLL & REFRESH CONTROL */}
+      <ScrollView 
+        style={styles.scrollView}
+        contentContainerStyle={styles.body}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={handleRefreshData} tintColor="#fff" />
+        }
+      >
 
         {/* Preview card */}
         <View style={[styles.card, { backgroundColor: theme.card }]}>
@@ -182,19 +220,19 @@ export default function ManagerExport() {
           </TouchableOpacity>
         </View>
 
-      </View>
+      </ScrollView>
 
-      {/* BOTTOM NAV */}
+      {/* FIXED BOTTOM NAV BAR TO MATCH THE FULL 5-ITEM MANAGER PANEL */}
       <View style={[styles.bottomNav, { backgroundColor: theme.navBg, borderTopColor: theme.subText + '22', paddingBottom: Platform.OS === 'ios' ? 28 : 12 }]}>
         {tabs.map(tab => {
-          const isActive = tab.key === 'Emails';
+          const isActive = tab.key === 'Export';
           return (
             <TouchableOpacity
               key={tab.key}
               style={styles.navItem}
-              onPress={() => { if (tab.key !== 'Emails') router.replace(`/manager/${tab.key.toLowerCase()}` as any); }}
+              onPress={() => { if (tab.route && !isActive) router.replace(tab.route as any); }}
             >
-              <Ionicons name={isActive ? tab.icon as any : tab.iconOff as any} size={22} color={isActive ? theme.accent : theme.subText} />
+              <Ionicons name={isActive ? tab.icon as any : tab.iconOff as any} size={24} color={isActive ? theme.accent : theme.subText} />
               <Text style={[styles.navLabel, { color: isActive ? theme.accent : theme.subText }]}>{tab.key}</Text>
             </TouchableOpacity>
           );
@@ -224,17 +262,21 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   header: { paddingHorizontal: 16, paddingBottom: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
   backBtn: { padding: 4 },
+  headerPanelLabel: { color: 'rgba(255,255,255,0.45)', fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginBottom: 1 },
   headerTitle: { color: '#fff', fontSize: 17, fontWeight: '700' },
   headerSub: { color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 1 },
-  body: { flex: 1, padding: 16, gap: 16 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  actionBtn: { padding: 6 },
+  profileBtn: { paddingLeft: 4 },
+  scrollView: { flex: 1 },
+  body: { padding: 16, gap: 16 },
   card: { borderRadius: 16, padding: 24, alignItems: 'center', gap: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.07, shadowRadius: 8, elevation: 3 },
   iconBox: { width: 64, height: 64, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   cardTitle: { fontSize: 18, fontWeight: '800' },
   cardSub: { fontSize: 13, textAlign: 'center', lineHeight: 20 },
   btn: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 12, paddingVertical: 13, paddingHorizontal: 24, marginTop: 4 },
   btnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  // Missing bottom navigation styles added below:
-  bottomNav: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', borderTopWidth: 1, paddingTop: 10 },
+  bottomNav: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingTop: 10, borderTopWidth: 1 },
   navItem: { alignItems: 'center', justifyContent: 'center', flex: 1 },
-  navLabel: { fontSize: 11, marginTop: 4, fontWeight: '600' },
+  navLabel: { fontSize: 11, marginTop: 4, fontWeight: '500' },
 });

@@ -66,7 +66,6 @@ type Lead = {
   followup_status: string | null;
 };
 
-// ─── View Modal ───────────────────────────────────────────────────────────────
 function ViewModal({ lead, onClose, theme }: { lead: Lead; onClose: () => void; theme: any }) {
   const statusColor = getStatusColor(lead.status);
   const confidencePct = lead.confidence_score ? `${Math.round(lead.confidence_score * 100)}%` : '—';
@@ -116,19 +115,11 @@ function ViewModal({ lead, onClose, theme }: { lead: Lead; onClose: () => void; 
   );
 }
 
-const tabs = [
-  { key: 'Dashboard', icon: 'grid',     iconOff: 'grid-outline' },
-  { key: 'Leads',     icon: 'people',   iconOff: 'people-outline' },
-  { key: 'Activity',  icon: 'pulse',    iconOff: 'pulse-outline' },
-  { key: 'Emails',    icon: 'mail',     iconOff: 'mail-outline' },
-  { key: 'Export',    icon: 'download', iconOff: 'download-outline' },
-];
-
 export default function ManagerLeads() {
   const router = useRouter();
-  const { theme } = useAppTheme();
+  const { theme, toggleTheme } = useAppTheme() as any;
 
-  const [leads,              setLeads]              = useState<Lead[]>([]);
+  const [leads,               setLeads]               = useState<Lead[]>([]);
   const [loading,            setLoading]            = useState(true);
   const [refreshing,         setRefreshing]         = useState(false);
   const [filter,             setFilter]             = useState('ALL');
@@ -137,7 +128,14 @@ export default function ManagerLeads() {
   const [statusPickerVisible, setStatusPickerVisible] = useState(false);
   const [viewingLead,        setViewingLead]        = useState<Lead | null>(null);
 
-  // Filter and Search handling computed on render
+  const tabs = [
+    { key: 'Dashboard', icon: 'grid',     iconOff: 'grid-outline' },
+    { key: 'Leads',     icon: 'people',   iconOff: 'people-outline' },
+    { key: 'Activity',  icon: 'pulse',    iconOff: 'pulse-outline' },
+    { key: 'Emails',    icon: 'mail',     iconOff: 'mail-outline' },
+    { key: 'Export',    icon: 'download', iconOff: 'download-outline' },
+  ];
+
   const filteredLeads = useMemo(() => {
     return leads.filter(l => {
       const matchesFilter = filter === 'ALL' || l.status?.toUpperCase() === filter.toUpperCase();
@@ -214,14 +212,28 @@ export default function ManagerLeads() {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* HEADER */}
+      {/* HEADER WITH MANAGER PANEL, REFRESH, THEME, AND PROFILE CONTROLS */}
       <View style={[styles.header, { backgroundColor: theme.navy || '#0f172a', paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
+        
         <View style={{ flex: 1 }}>
+          <Text style={styles.headerPanelLabel}>MANAGER PANEL</Text>
           <Text style={styles.headerTitle}>Team Leads</Text>
           <Text style={styles.headerSub}>{filteredLeads.length} leads</Text>
+        </View>
+
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={() => fetchLeads(true)} style={styles.actionBtn}>
+            <Ionicons name="refresh-outline" size={20} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => toggleTheme && toggleTheme()} style={styles.actionBtn}>
+            <Ionicons name={theme.bg === '#020617' || theme.bg === '#0d0d1f' ? "sunny-outline" : "moon-outline"} size={20} color="#fff" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.profileBtn}>
+            <Ionicons name="person-circle" size={26} color="#fff" />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -284,7 +296,6 @@ export default function ManagerLeads() {
 
               return (
                 <View style={[styles.card, { backgroundColor: theme.card }]}>
-                  {/* Lead info row */}
                   <TouchableOpacity
                     style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}
                     onPress={() => setViewingLead(lead)}
@@ -310,10 +321,8 @@ export default function ManagerLeads() {
                     <Ionicons name="chevron-forward" size={16} color={theme.subText} />
                   </TouchableOpacity>
 
-                  {/* Divider */}
                   <View style={{ height: 1, backgroundColor: theme.bg, marginVertical: 10 }} />
 
-                  {/* Action buttons */}
                   <View style={styles.actions}>
                     <TouchableOpacity
                       style={[styles.editBtn, { borderColor: accentColor }]}
@@ -387,8 +396,12 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1 },
   header: { paddingHorizontal: 16, paddingBottom: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
   backBtn: { padding: 4 },
+  headerPanelLabel: { color: 'rgba(255,255,255,0.45)', fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginBottom: 1 },
   headerTitle: { color: '#fff', fontSize: 17, fontWeight: '700' },
   headerSub: { color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 1 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  actionBtn: { padding: 6 },
+  profileBtn: { paddingLeft: 4 },
   searchContainer: { flexDirection: 'row', alignItems: 'center', borderRadius: 10, paddingHorizontal: 12, height: 44, marginVertical: 8, borderWidth: 1, borderColor: '#e2e8f0' },
   searchIcon: { marginRight: 8 },
   searchInput: { flex: 1, fontSize: 14, padding: 0 },

@@ -485,7 +485,15 @@ app.get('/manager/dashboard', authenticateToken, authorizeRoles('admin', 'manage
 
 app.get('/manager/leads', authenticateToken, async (req, res) => {
     try {
-        // DISTINCT ON prevents one-to-many relationship rows from multiplying leads in your array
+        // 1. Extract the manager's team_id from the authenticated token payload
+        // Adjust req.user.team_id to match your token's exact structure if necessary
+        const managerTeamId = req.user?.team_id; 
+
+        if (!managerTeamId) {
+            return res.status(400).json({ success: false, message: 'Manager team context not found.' });
+        }
+
+        // 2. Add a WHERE clause to filter leads by the manager's assigned team id
         const queryText = `
             SELECT DISTINCT ON (l.lead_id)
                 l.*,
@@ -494,10 +502,11 @@ app.get('/manager/leads', authenticateToken, async (req, res) => {
                 f.due_date
             FROM leads l
             LEFT JOIN lead_followups f ON l.lead_id = f.lead_id
+            WHERE l.assigned_team_id = $1
             ORDER BY l.lead_id, f.updated_at DESC
         `;
 
-        const result = await pool.query(queryText);
+        const result = await pool.query(queryText, [managerTeamId]);
         res.json({ success: true, data: result.rows });
     } catch (err) {
         console.error('Error fetching leads:', err);
@@ -584,44 +593,44 @@ app.get('/export/leads/excel', authenticateToken, authorizeRoles('admin', 'manag
 // =========================================================================
 // GET ALL ACTIVITY LOGS (CLEAN JOIN - DEDUPLICATED)
 // =========================================================================
-app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
+// 1. GET ACTIVITY FEED: Fetch operational follow-ups ('pending' or 'done') for the manager's team
+app.get('/manager/activity', authenticateToken, async (req, res) => {
     try {
-        // DISTINCT ON (log.activity_id) guarantees that database-level join state 
-        // extensions do not multiply the logs rendered on the frontend.
+        const managerTeamId = req.user?.team_id; 
+
+        if (!managerTeamId) {
+            return res.status(400).json({ success: false, message: 'Manager team context not found.' });
+        }
+
+        // Queries the single source of truth for follow-ups, filters by status and team
         const queryText = `
-            SELECT DISTINCT ON (a.activity_id)
-                a.activity_id,
-                a.activity_type,
-                a.activity_description,
-                a.created_at,
-                l.lead_id,
-                l.name AS lead_name,
-                l.company,
+            SELECT 
                 f.followup_id,
-                f.followup_status
-            FROM lead_activity_logs a
-            INNER JOIN leads l ON a.lead_id = l.lead_id
-            LEFT JOIN lead_followups f ON l.lead_id = f.lead_id
-            ORDER BY a.activity_id, a.created_at DESC, f.updated_at DESC
+                f.lead_id,
+                COALESCE(f.followup_action, 'Follow-up Pending') AS activity_type,
+                f.followup_status,
+                f.due_date,
+                COALESCE(f.notes, 'No additional notes provided.') AS activity_description,
+                f.created_at,
+                f.updated_at,
+                l.name AS lead_name,
+                l.company AS company
+            FROM lead_followups f
+            INNER JOIN leads l ON f.lead_id = l.lead_id
+            WHERE l.assigned_team_id = $1 
+              AND f.followup_status IN ('pending', 'done')
+            ORDER BY f.updated_at DESC, f.created_at DESC
         `;
 
-        const result = await pool.query(queryText);
-        
-        // Final secondary sort by date sequence for chronological rendering
-        const sortedLogs = result.rows.sort((a, b) => 
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
-
-        res.json({ success: true, data: sortedLogs });
+        const result = await pool.query(queryText, [managerTeamId]);
+        res.json({ success: true, data: result.rows });
     } catch (err) {
-        console.error('Error fetching activity logs:', err);
-        res.status(500).json({ success: false, message: 'Internal server error' });
+        console.error('Error fetching manager activities:', err);
+        res.status(500).json({ success: false, message: 'Internal server error processing activity logs.' });
     }
 });
-// --- CANCEL FOLLOWUP ROUTE ---
-// =========================================================================
-// 4. CANCEL FOLLOW-UP ROUTE (PREVENTS ACCIDENTAL OR DUPLICATE ORPHANED ROWS)
-// =========================================================================
+
+// 2. POST CANCEL FOLLOW-UP: Safely cancel a team follow-up loop cycle
 app.post('/manager/followup/cancel', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     const { followup_id, lead_id } = req.body;
     
@@ -648,6 +657,7 @@ app.post('/manager/followup/cancel', authenticateToken, authorizeRoles('admin', 
             return res.status(404).json({ success: false, message: 'Could not resolve the associated lead for cancellation.' });
         }
 
+        // Update the operational follow-up table to tracking cancellation status
         const updateResult = await pool.query(
             `UPDATE lead_followups 
              SET followup_status = 'cancelled', 
@@ -657,6 +667,7 @@ app.post('/manager/followup/cancel', authenticateToken, authorizeRoles('admin', 
             [targetedLeadId]
         );
 
+        // Record a row history log point trace entry
         await pool.query(
             `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description, created_at)
              VALUES ($1, 'FOLLOWUP_CANCELLED', 'A manager cancelled an active follow-up cycle.', NOW())`,
@@ -676,10 +687,11 @@ app.post('/manager/followup/cancel', authenticateToken, authorizeRoles('admin', 
         res.status(500).json({ success: false, message: 'Server error processing cancellation.' });
     }
 });
+
+// 3. PUT FOLLOW-UP STATUS: Update status and gracefully resolve duplicate records
 app.put('/manager/followup/:leadId', authenticateToken, async (req, res) => {
-    // Extracted correctly from the path param
     const leadId = req.params.leadId; 
-    const { followup_status } = req.body; // 'pending', 'done', or 'cancelled'
+    const { followup_status, followup_action, notes } = req.body; // Expects 'pending', 'done', or 'cancelled'
 
     if (!leadId) {
         return res.status(400).json({ success: false, message: 'Missing lead identifier parameter.' });
@@ -688,17 +700,21 @@ app.put('/manager/followup/:leadId', authenticateToken, async (req, res) => {
     try {
         await pool.query('BEGIN');
 
-        // This will now succeed perfectly because "unique_lead_followup" exists!
+        // FIXED UPSERT: Uses the targeted (lead_id) constraint and dynamically checks for payload action updates
+        const actionLabel = followup_action || `Status Updated to ${followup_status}`;
+        
         await pool.query(
-            `INSERT INTO lead_followups (lead_id, followup_action, followup_status, created_at, updated_at)
-             VALUES ($1, 'Status Update', $2, NOW(), NOW())
+            `INSERT INTO lead_followups (lead_id, followup_action, followup_status, notes, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, NOW(), NOW())
              ON CONFLICT (lead_id) DO UPDATE SET
                followup_status = EXCLUDED.followup_status,
+               followup_action = COALESCE(EXCLUDED.followup_action, lead_followups.followup_action),
+               notes = COALESCE(EXCLUDED.notes, lead_followups.notes),
                updated_at = NOW()`,
-            [leadId, followup_status]
+            [leadId, actionLabel, followup_status, notes || null]
         );
 
-        // Log action trace inside Activity Logs 
+        // Record trace inside historical log table
         await pool.query(
             `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description, created_at)
              VALUES ($1, 'STATUS_CHANGED', $2, NOW())`,
@@ -710,7 +726,7 @@ app.put('/manager/followup/:leadId', authenticateToken, async (req, res) => {
     } catch (err) {
         await pool.query('ROLLBACK').catch(() => {});
         console.error('Error updating follow up status:', err);
-        res.status(500).json({ success: false, message: 'Server error updating follow-up status' });
+        res.status(500).json({ success: false, message: 'Server error updating follow-up status.' });
     }
 });
 
