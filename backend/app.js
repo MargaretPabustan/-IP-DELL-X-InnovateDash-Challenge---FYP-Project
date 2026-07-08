@@ -531,11 +531,30 @@ app.get('/manager/export/leads', authenticateToken, authorizeRoles('admin', 'man
 
 app.get('/export/leads/excel', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM leads ORDER BY created_at DESC');
+        // 1. Extract the manager's team ID from their decoded JWT token payload
+        const teamId = req.user.team_id; 
+
+        if (!teamId) {
+            return res.status(400).json({ success: false, message: 'Manager is not assigned to any team.' });
+        }
+
+        // 2. Query matching your ERD column schema: 'assigned_team_id'
+        const queryText = `
+            SELECT 
+                lead_id, name, company, title, email, phone_number, status, created_at 
+            FROM leads 
+            WHERE assigned_team_id = $1 
+            ORDER BY created_at DESC
+        `;
+        const result = await pool.query(queryText, [teamId]);
+        
+        // 3. Initialize ExcelJS workbook instances
         const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet('Leads');
+        const worksheet = workbook.addWorksheet('Team Leads Export');
+        
+        // 4. Map columns precisely to your table schemas
         worksheet.columns = [
-            { header: 'Lead ID',    key: 'lead_id',      width: 10 },
+            { header: 'Lead ID',    key: 'lead_id',       width: 10 },
             { header: 'Name',       key: 'name',          width: 20 },
             { header: 'Company',    key: 'company',       width: 20 },
             { header: 'Title',      key: 'title',         width: 20 },
@@ -544,12 +563,21 @@ app.get('/export/leads/excel', authenticateToken, authorizeRoles('admin', 'manag
             { header: 'Status',     key: 'status',        width: 15 },
             { header: 'Created At', key: 'created_at',    width: 20 },
         ];
+        
+        // 5. Inject rows into the active worksheet layout context
         result.rows.forEach(row => worksheet.addRow(row));
+        
+        // 6. Set binary multi-purpose internet mail extension headers
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', 'attachment; filename=leads.xlsx');
+        res.setHeader('Content-Disposition', 'attachment; filename=team_leads.xlsx');
+        
         await workbook.xlsx.write(res);
         res.end();
-    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+
+    } catch (err) { 
+        console.error('Excel export process runtime error: ', err);
+        res.status(500).json({ success: false, message: 'Server compilation breakdown during document write engines.' }); 
+    }
 });
 
 // --- GET ACTIVITY LOGS ROUTE ---
