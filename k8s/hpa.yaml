@@ -1,14 +1,15 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
+
 metadata:
-  name: dell-backend
+  name: boothflow-backend-hpa
   namespace: boothflow
 
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: dell-backend
+    name: boothflow-backend
 
   minReplicas: 1
   maxReplicas: 5
