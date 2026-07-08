@@ -9,13 +9,13 @@ const bcrypt = require('bcrypt');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const ExcelJS = require('exceljs');
 const nodemailer = require('nodemailer');
-const brevo = require('@getbrevo/brevo');
 const RateLimit = require('express-rate-limit');
 const cron = require('node-cron');
 
 const app = express();
 const allowedOrigins = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : [];
 app.use(helmet());
+app.set('trust proxy', 1);
 app.use(express.json());
 app.use(cors({
     origin: (origin, callback) => {
@@ -126,39 +126,20 @@ function createEmailTransporter() {
 const transporter = createEmailTransporter();
 
 // ── SEND EMAIL HELPER ─────────────────────────────────────────────────────────
-async function sendEmail({ to, subject, text, from, html }) {
+async function sendEmail({ to, subject, text, from }) {
     if (!to || !subject || !text) {
         throw new Error('Email recipient, subject, and message body are required.');
     }
 
-    const brevoApiKey = process.env.BREVO_API_KEY;
-    const senderEmail = process.env.BREVO_SENDER_EMAIL || process.env.EMAIL_FROM || process.env.EMAIL_USER || 'no-reply@boothflow.local';
-
-    if (brevoApiKey) {
-        const apiInstance = new brevo.TransactionalEmailsApi();
-        apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, brevoApiKey);
-
-        const message = new brevo.SendSmtpEmail();
-        message.sender = { name: 'Boothflow', email: senderEmail };
-        message.to = [{ email: to }];
-        message.subject = subject;
-        message.htmlContent = html || `<p>${String(text).replace(/\n/g, '<br/>')}</p>`;
-        message.textContent = String(text);
-
-        await apiInstance.sendTransacEmail(message);
-        return { provider: 'brevo' };
-    }
-
     const emailUser = process.env.EMAIL_USER;
-    const emailPass = process.env.EMAIL_PASS;
-    if (!emailUser || !emailPass) {
+    if (!emailUser || !process.env.EMAIL_PASS) {
         if (!process.env.EMAIL_HOST) {
-            throw new Error('Email service is not configured. Set BREVO_API_KEY or EMAIL_USER/EMAIL_PASS (or EMAIL_HOST/EMAIL_PORT/EMAIL_SECURE).');
+            throw new Error('Email service is not configured. Set EMAIL_USER/EMAIL_PASS or EMAIL_HOST/EMAIL_PORT/EMAIL_SECURE in the backend environment.');
         }
     }
 
     const info = await transporter.sendMail({
-        from: from || `"Boothflow" <${emailUser || senderEmail}>`,
+        from: from || `"Boothflow" <${emailUser || process.env.EMAIL_FROM || 'no-reply@boothflow.local'}>`,
         to,
         subject,
         text,
@@ -546,25 +527,43 @@ app.get('/export/leads/excel', authenticateToken, authorizeRoles('admin', 'manag
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
+// --- GET ACTIVITY LOGS ROUTE ---
 app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
         const { role, team_id } = req.user;
+        const queryParams = [];
+
+        // LEFT JOIN LATERAL gets exactly one latest follow-up status row per lead.
+        // This stops activity logs duplication entirely on sql execution.
         let query = `
             SELECT 
-                la.activity_id, la.activity_type, la.activity_description, la.created_at, la.lead_id,
-                l.name AS lead_name, l.company,
-                CASE WHEN UPPER(la.activity_type) LIKE '%FOLLOWUP%' THEN f.followup_id ELSE NULL END as followup_id,
-                CASE WHEN UPPER(la.activity_type) LIKE '%FOLLOWUP%' THEN f.followup_status ELSE NULL END as followup_status
+                la.activity_id, 
+                la.activity_type, 
+                la.activity_description, 
+                la.created_at, 
+                la.lead_id,
+                l.name AS lead_name, 
+                l.company,
+                f.followup_id,
+                f.followup_status
             FROM lead_activity_logs la
             LEFT JOIN leads l ON la.lead_id = l.lead_id
-            LEFT JOIN lead_followups f ON l.lead_id = f.lead_id
+            LEFT JOIN LATERAL (
+                SELECT followup_id, followup_status 
+                FROM lead_followups 
+                WHERE lead_followups.lead_id = l.lead_id 
+                ORDER BY lead_followups.created_at DESC 
+                LIMIT 1
+            ) f ON TRUE
         `;
-        const queryParams = [];
+
         if (role === 'manager') {
             query += ` WHERE l.assigned_team_id = $1 `;
             queryParams.push(team_id);
         }
+
         query += ` ORDER BY la.created_at DESC LIMIT 100`;
+
         const result = await pool.query(query, queryParams);
         res.json({ success: true, data: result.rows });
     } catch (err) {
@@ -573,19 +572,31 @@ app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager
     }
 });
 
+// --- CANCEL FOLLOWUP ROUTE ---
 app.post('/manager/followup/cancel', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     const { followup_id, lead_id } = req.body;
+    
     if (!followup_id && !lead_id) {
         return res.status(400).json({ success: false, message: 'Missing cancellation identity parameters.' });
     }
+
     try {
         await pool.query('BEGIN');
+        let targetedLeadId = lead_id;
+
+        // 1. Update the follow-up entry
         if (followup_id) {
             const result = await pool.query(
-                `UPDATE lead_followups SET followup_status = 'cancelled', updated_at = NOW() WHERE followup_id = $1`,
+                `UPDATE lead_followups 
+                 SET followup_status = 'cancelled', updated_at = NOW() 
+                 WHERE followup_id = $1 
+                 RETURNING lead_id`,
                 [followup_id]
             );
-            if (result.rowCount === 0 && lead_id) {
+            
+            if (result.rowCount > 0) {
+                targetedLeadId = result.rows[0].lead_id;
+            } else if (lead_id) {
                 await pool.query(
                     `UPDATE lead_followups SET followup_status = 'cancelled', updated_at = NOW() WHERE lead_id = $1`,
                     [lead_id]
@@ -597,10 +608,21 @@ app.post('/manager/followup/cancel', authenticateToken, authorizeRoles('admin', 
                 [lead_id]
             );
         }
+
+        // 2. Audit Trail creation: Add log history entry regarding this event action
+        if (targetedLeadId) {
+            await pool.query(
+                `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description, created_at)
+                 VALUES ($1, 'Followup Cancelled', 'A manager cancelled an active follow-up cycle.', NOW())`,
+                [targetedLeadId]
+            );
+        }
+
         await pool.query('COMMIT');
         res.json({ success: true, message: 'Followup cancelled successfully.' });
     } catch (err) {
         await pool.query('ROLLBACK');
+        console.error("Cancellation Transaction Error: ", err);
         res.status(500).json({ success: false, message: err.message });
     }
 });

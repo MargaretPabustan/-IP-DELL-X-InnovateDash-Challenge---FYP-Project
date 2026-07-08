@@ -9,6 +9,7 @@ import { useAppTheme } from '../../src/constants/useAppTheme';
 import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from "expo-sharing";
+import DateTimePickerModal from 'react-native-modal-datetime-picker'; // Added missing import
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
@@ -22,6 +23,19 @@ export default function ManagerExport() {
   const { theme } = useAppTheme();
   const [previewLoading,  setPreviewLoading]  = useState(false);
   const [downloadLoading, setDownloadLoading] = useState(false);
+
+  // States required by the DateTimePickerModal snippet
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickerMode, setPickerMode] = useState<'date' | 'time'>('date');
+  const [followupDate, setFollowupDate] = useState(new Date());
+  const [followupTime, setFollowupTime] = useState(new Date());
+
+  // Tabs configuration array needed for tabs.map()
+  const tabs = [
+    { key: 'Leads', icon: 'people', iconOff: 'people-outline' },
+    { key: 'Emails', icon: 'mail', iconOff: 'mail-outline' }, // Current highlighted route based on your snippet logic
+    { key: 'Settings', icon: 'settings', iconOff: 'settings-outline' },
+  ];
 
   const previewLeads = async () => {
     setPreviewLoading(true);
@@ -48,8 +62,6 @@ export default function ManagerExport() {
       const token = await SecureStore.getItemAsync("token");
       const fileName = `leads-${Date.now()}.xlsx`;
       
-      // On Android, saving to documentDirectory makes it much more permanent and visible 
-      // to system intent systems than cacheDirectory.
       const directory = Platform.OS === 'android' ? FileSystem.documentDirectory : FileSystem.cacheDirectory;
       const fileUri = `${directory}${fileName}`;
 
@@ -63,7 +75,6 @@ export default function ManagerExport() {
         }
       );
 
-      // Verify the native sharing module is accessible
       const available = await Sharing.isAvailableAsync();
 
       if (!available) {
@@ -74,7 +85,6 @@ export default function ManagerExport() {
         return;
       }
 
-      // Explicit Android layout optimization
       if (Platform.OS === 'android') {
         Alert.alert(
           "🎉 Export Success",
@@ -97,7 +107,6 @@ export default function ManagerExport() {
           ]
         );
       } else {
-        // Standard iOS Share Sheet behavior
         await Sharing.shareAsync(result.uri, {
           mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
           dialogTitle: "Export Leads",
@@ -174,6 +183,39 @@ export default function ManagerExport() {
         </View>
 
       </View>
+
+      {/* BOTTOM NAV */}
+      <View style={[styles.bottomNav, { backgroundColor: theme.navBg, borderTopColor: theme.subText + '22', paddingBottom: Platform.OS === 'ios' ? 28 : 12 }]}>
+        {tabs.map(tab => {
+          const isActive = tab.key === 'Emails';
+          return (
+            <TouchableOpacity
+              key={tab.key}
+              style={styles.navItem}
+              onPress={() => { if (tab.key !== 'Emails') router.replace(`/manager/${tab.key.toLowerCase()}` as any); }}
+            >
+              <Ionicons name={isActive ? tab.icon as any : tab.iconOff as any} size={22} color={isActive ? theme.accent : theme.subText} />
+              <Text style={[styles.navLabel, { color: isActive ? theme.accent : theme.subText }]}>{tab.key}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      {/* Picker Modal */}
+      <DateTimePickerModal
+        isVisible={showPicker}
+        mode={pickerMode}
+        date={pickerMode === 'date' ? followupDate : followupTime}
+        onConfirm={(selected) => {
+          setShowPicker(false);
+          if (pickerMode === 'date') setFollowupDate(selected);
+          else setFollowupTime(selected);
+        }}
+        onCancel={() => setShowPicker(false)}
+        display={pickerMode === 'time' ? 'spinner' : 'inline'}
+        is24Hour={false}
+        themeVariant={theme.bg === '#020617' || theme.bg === '#0d0d1f' ? 'dark' : 'light'}
+      />
     </SafeAreaView>
   );
 }
@@ -191,4 +233,8 @@ const styles = StyleSheet.create({
   cardSub: { fontSize: 13, textAlign: 'center', lineHeight: 20 },
   btn: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 12, paddingVertical: 13, paddingHorizontal: 24, marginTop: 4 },
   btnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  // Missing bottom navigation styles added below:
+  bottomNav: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', borderTopWidth: 1, paddingTop: 10 },
+  navItem: { alignItems: 'center', justifyContent: 'center', flex: 1 },
+  navLabel: { fontSize: 11, marginTop: 4, fontWeight: '600' },
 });
