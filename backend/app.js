@@ -834,12 +834,16 @@ Return ONLY valid JSON in this exact format, no extra text:
 // Manager manually schedules a follow-up email at any time.
 // If a pending auto follow-up exists, it gets replaced with the manual one.
 // If auto already sent (done), returns 409.
+// ── MANUAL FOLLOW-UP EMAIL ROUTE (WITH IMMEDIATE SENDING) ────────────────────
 app.post('/send-followup/:id', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
         const { followupDate } = req.body || {};
 
+        // 1. Fetch lead information
         const leadResult = await pool.query('SELECT * FROM leads WHERE lead_id = $1', [req.params.id]);
-        if (leadResult.rows.length === 0) return res.status(404).json({ success: false, message: 'Lead not found' });
+        if (leadResult.rows.length === 0) {
+            return res.status(404).json({ success: false, message: 'Lead not found' });
+        }
 
         const lead = leadResult.rows[0];
         const aiData = {
@@ -850,7 +854,11 @@ app.post('/send-followup/:id', authenticateToken, authorizeRoles('admin', 'manag
         const emailSubject = 'Your Dell Technologies Follow-up';
         const scheduledAt = followupDate || new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
 
-        // Block if already sent
+        // Safe extraction of the local date component for the database column
+        const dateObj = new Date(scheduledAt);
+        const localDueDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+
+        // Block if email tracking states this lead is completely finished
         const existing = await pool.query(
             `SELECT followup_status FROM lead_followups WHERE lead_id = $1`,
             [lead.lead_id]
@@ -859,39 +867,50 @@ app.post('/send-followup/:id', authenticateToken, authorizeRoles('admin', 'manag
             return res.status(409).json({ success: false, message: 'Follow-up already sent for this lead.' });
         }
 
-        // Upsert — replace pending auto with manual, or insert new
+        // Generate the dynamic text email body
+        const emailBody = buildFollowUpEmail(lead, aiData, interests);
+
+        // 2. TRIGGER NODEMAILER IMMEDIATE TRANSMISSION 🔥
+        await sendEmail({
+            to: lead.email,
+            subject: emailSubject,
+            text: emailBody
+        });
+
+        // 3. Upsert into database — mark status as 'done' since it sent successfully
         const followup = await pool.query(
-            `INSERT INTO lead_followups (lead_id, followup_action, followup_status, due_date, scheduled_at, email_subject, notes)
-             VALUES ($1, 'Manual Follow-up Email', 'pending', $2, $3, $4, $5)
+            `INSERT INTO lead_followups (lead_id, followup_action, followup_status, due_date, scheduled_at, sent_at, email_subject, notes)
+             VALUES ($1, 'Manual Follow-up Email', 'done', $2, $3, NOW(), $4, $5)
              ON CONFLICT (lead_id) DO UPDATE SET
                followup_action = 'Manual Follow-up Email',
-               followup_status = 'pending',
+               followup_status = 'done',
                due_date = EXCLUDED.due_date,
                scheduled_at = EXCLUDED.scheduled_at,
+               sent_at = NOW(),
                email_subject = EXCLUDED.email_subject,
                notes = EXCLUDED.notes
              RETURNING followup_id`,
-            [lead.lead_id, scheduledAt.split('T')[0], scheduledAt, emailSubject, buildFollowUpEmail(lead, aiData, interests)]
+            [lead.lead_id, localDueDate, scheduledAt, emailSubject, emailBody]
         );
 
+        // 4. Log the activity completion
         await pool.query(
             `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'FOLLOWUP_SCHEDULED', $2)`,
-            [lead.lead_id, `Manager scheduled follow-up email for ${scheduledAt}`]
+            [lead.lead_id, `Manager triggered and sent immediate follow-up email via dashboard.`]
         );
 
         res.json({
             success: true,
-            message: 'Follow-up successfully scheduled.',
+            message: 'Follow-up email successfully sent and logged.',
             scheduled_at: scheduledAt,
             followup_id: followup.rows[0].followup_id
         });
 
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ success: false, message: err.message });
+        console.error("Email Delivery Error: ", err);
+        res.status(500).json({ success: false, message: `Email distribution failed: ${err.message}` });
     }
 });
-
 // ── CRON JOB — runs every minute, sends pending emails ───────────────────────
 cron.schedule('* * * * *', async () => {
     try {
