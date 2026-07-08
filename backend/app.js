@@ -11,7 +11,6 @@ const ExcelJS = require('exceljs');
 const nodemailer = require('nodemailer');
 const RateLimit = require('express-rate-limit');
 const cron = require('node-cron');
-const brevo = require('@getbrevo/brevo');
 
 const app = express();
 const allowedOrigins = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : [];
@@ -100,37 +99,17 @@ if (!process.env.GEMINI_API_KEY) {
     console.warn('❌ GEMINI_API_KEY is missing from environment configuration');
 }
 
-// ── EMAIL TRANSPORTER ───────────────────────────────────────────────────────
+// ── EMAIL TRANSPORTER (Nodemailer + Gmail SMTP) ──────────────────────────────
 const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
-    port: Number(process.env.EMAIL_PORT || 587),
-    secure: process.env.EMAIL_SECURE === 'true',
+    service: 'gmail',
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
     }
 });
 
-let brevoClient = null;
-if (process.env.BREVO_API_KEY && process.env.BREVO_SENDER_EMAIL) {
-    brevoClient = new brevo.TransactionalEmailsApi();
-    brevoClient.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY);
-}
-
 // ── SEND EMAIL HELPER ─────────────────────────────────────────────────────────
-async function sendEmail({ to, subject, text, html }) {
-    if (brevoClient) {
-        const sendSmtpEmail = new brevo.SendSmtpEmail();
-        sendSmtpEmail.sender = {
-            name: process.env.BREVO_SENDER_NAME || 'Boothflow',
-            email: process.env.BREVO_SENDER_EMAIL,
-        };
-        sendSmtpEmail.to = [{ email: to }];
-        sendSmtpEmail.subject = subject;
-        sendSmtpEmail.htmlContent = html || `<p>${(text || '').replace(/\n/g, '<br/>')}</p>`;
-        return await brevoClient.sendTransacEmail(sendSmtpEmail);
-    }
-
+async function sendEmail({ to, subject, text }) {
     const info = await transporter.sendMail({
         from: `"Boothflow" <${process.env.EMAIL_USER}>`,
         to,
@@ -422,26 +401,6 @@ app.get('/manager/me', authenticateToken, authorizeRoles('admin', 'manager'), as
         if (result.rows.length === 0) return res.status(404).json({ success: false, message: 'User not found' });
         res.json({ success: true, data: result.rows[0] });
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
-});
-
-// ── TEST EMAIL ROUTE ────────────────────────────────────────────────────────
-app.post('/send-followup', async (req, res) => {
-    try {
-        const { email, subject, text, html } = req.body || {};
-        if (!email) return res.status(400).json({ success: false, message: 'email is required' });
-
-        const info = await sendEmail({
-            to: email,
-            subject: subject || 'Test email from Boothflow',
-            text: text || 'This is a test email sent from the Boothflow backend.',
-            html: html || '<p>This is a test email sent from the Boothflow backend.</p>'
-        });
-
-        res.json({ success: true, message: 'Email sent', data: info });
-    } catch (err) {
-        console.error('❌ Email send failed:', err.message);
-        res.status(500).json({ success: false, message: err.message });
-    }
 });
 
 // ── MANAGER ROUTES ────────────────────────────────────────────────────────────
