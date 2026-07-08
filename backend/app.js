@@ -9,6 +9,7 @@ const bcrypt = require('bcrypt');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const ExcelJS = require('exceljs');
 const nodemailer = require('nodemailer');
+const brevo = require('@getbrevo/brevo');
 const RateLimit = require('express-rate-limit');
 const cron = require('node-cron');
 
@@ -125,20 +126,39 @@ function createEmailTransporter() {
 const transporter = createEmailTransporter();
 
 // ── SEND EMAIL HELPER ─────────────────────────────────────────────────────────
-async function sendEmail({ to, subject, text, from }) {
+async function sendEmail({ to, subject, text, from, html }) {
     if (!to || !subject || !text) {
         throw new Error('Email recipient, subject, and message body are required.');
     }
 
+    const brevoApiKey = process.env.BREVO_API_KEY;
+    const senderEmail = process.env.BREVO_SENDER_EMAIL || process.env.EMAIL_FROM || process.env.EMAIL_USER || 'no-reply@boothflow.local';
+
+    if (brevoApiKey) {
+        const apiInstance = new brevo.TransactionalEmailsApi();
+        apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, brevoApiKey);
+
+        const message = new brevo.SendSmtpEmail();
+        message.sender = { name: 'Boothflow', email: senderEmail };
+        message.to = [{ email: to }];
+        message.subject = subject;
+        message.htmlContent = html || `<p>${String(text).replace(/\n/g, '<br/>')}</p>`;
+        message.textContent = String(text);
+
+        await apiInstance.sendTransacEmail(message);
+        return { provider: 'brevo' };
+    }
+
     const emailUser = process.env.EMAIL_USER;
-    if (!emailUser || !process.env.EMAIL_PASS) {
+    const emailPass = process.env.EMAIL_PASS;
+    if (!emailUser || !emailPass) {
         if (!process.env.EMAIL_HOST) {
-            throw new Error('Email service is not configured. Set EMAIL_USER/EMAIL_PASS or EMAIL_HOST/EMAIL_PORT/EMAIL_SECURE in the backend environment.');
+            throw new Error('Email service is not configured. Set BREVO_API_KEY or EMAIL_USER/EMAIL_PASS (or EMAIL_HOST/EMAIL_PORT/EMAIL_SECURE).');
         }
     }
 
     const info = await transporter.sendMail({
-        from: from || `"Boothflow" <${emailUser || process.env.EMAIL_FROM || 'no-reply@boothflow.local'}>`,
+        from: from || `"Boothflow" <${emailUser || senderEmail}>`,
         to,
         subject,
         text,
