@@ -96,9 +96,15 @@ export default function EmailsScreen() {
     setScheduling(true);
     try {
       const headers = await getAuthHeaders();
-      const response = await fetch(`${BACKEND_URL}/send-followup/${selectedLead.lead_id}`, {
+      const response = await fetch(`${BACKEND_URL}/send-email`, {
         method: 'POST', headers,
-        body: JSON.stringify({ followupDate: scheduledDate.toISOString() }),
+        body: JSON.stringify({
+          to: selectedLead.email,
+          subject: 'Your Dell Technologies Follow-up',
+          text: `Hello ${selectedLead.name},\n\nThank you for visiting our booth. We would love to continue the conversation about Dell solutions and help with your requirements.\n\nBest regards,\nDell Boothflow Team`,
+          lead_id: selectedLead.lead_id,
+          followupDate: scheduledDate.toISOString(),
+        }),
       });
       const data = await response.json();
       if (response.ok && data.success) {

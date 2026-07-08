@@ -8,13 +8,13 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const ExcelJS = require('exceljs');
-const nodemailer = require('nodemailer');
 const RateLimit = require('express-rate-limit');
 const cron = require('node-cron');
 
 const app = express();
 const allowedOrigins = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : [];
 app.use(helmet());
+app.set('trust proxy', 1);
 app.use(express.json());
 app.use(cors({
     origin: (origin, callback) => {
@@ -99,27 +99,42 @@ if (!process.env.GEMINI_API_KEY) {
     console.warn('❌ GEMINI_API_KEY is missing from environment configuration');
 }
 
-// ── EMAIL TRANSPORTER (Nodemailer + Gmail SMTP) ──────────────────────────────
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-    }
-});
-
-// ── SEND EMAIL HELPER ─────────────────────────────────────────────────────────
+// ── EMAIL (Brevo HTTP API — works on Render/K8s, no SMTP needed) ──────────────
 async function sendEmail({ to, subject, text }) {
-    const info = await transporter.sendMail({
-        from: `"Boothflow" <${process.env.EMAIL_USER}>`,
-        to,
-        subject,
-        text,
-    });
-    if (info.rejected && info.rejected.length > 0) {
-        throw new Error(`Email rejected for ${to}`);
+    if (!to || !subject || !text) {
+        throw new Error('Email recipient, subject, and message body are required.');
     }
-    return info;
+    console.log(`📧 Attempting to send email to: ${to}`);
+    console.log(`📧 BREVO_API_KEY configured: ${!!process.env.BREVO_API_KEY}`);
+    console.log(`📧 BREVO_SENDER_EMAIL configured: ${!!process.env.BREVO_SENDER_EMAIL}`);
+
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+            'accept': 'application/json',
+            'api-key': process.env.BREVO_API_KEY,
+            'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+            sender: {
+                name: process.env.BREVO_SENDER_NAME || 'Boothflow',
+                email: process.env.BREVO_SENDER_EMAIL,
+            },
+            to: [{ email: to }],
+            subject,
+            textContent: text,
+        }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        console.error(`❌ Brevo error:`, JSON.stringify(data));
+        throw new Error(data.message || 'Brevo email send failed');
+    }
+
+    console.log(`✅ Email sent to ${to} via Brevo, messageId: ${data.messageId}`);
+    return data;
 }
 
 // ── PERSONALISED EMAIL BUILDER ────────────────────────────────────────────────
@@ -868,6 +883,31 @@ Return ONLY valid JSON in this exact format, no extra text:
     } catch (error) {
         console.error('AI analysis error:', error);
         res.status(500).json({ success: false, message: 'AI analysis failed' });
+    }
+});
+
+// ── GENERIC EMAIL SENDING ROUTE ─────────────────────────────────────────────
+app.post('/send-email', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
+    const { to, subject, text, lead_id } = req.body || {};
+
+    if (!to || !subject || !text) {
+        return res.status(400).json({ success: false, message: 'Recipient, subject, and text are required.' });
+    }
+
+    try {
+        await sendEmail({ to, subject, text });
+
+        if (lead_id) {
+            await pool.query(
+                `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'EMAIL_SENT', $2)`,
+                [lead_id, `Manual email sent from the app to ${to}`]
+            );
+        }
+
+        res.json({ success: true, message: 'Email sent successfully.' });
+    } catch (err) {
+        console.error('Email delivery error:', err);
+        res.status(500).json({ success: false, message: `Email delivery failed: ${err.message}` });
     }
 });
 
