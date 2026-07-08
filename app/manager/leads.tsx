@@ -1,9 +1,9 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import { useFocusEffect } from 'expo-router';
 import {
   View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
   StatusBar, Platform, ScrollView, ActivityIndicator,
-  RefreshControl, Modal, Pressable, Alert, FlatList
+  RefreshControl, Modal, Pressable, Alert, FlatList, TextInput
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -39,6 +39,7 @@ function formatDate(iso: string) {
   if (!iso) return '—';
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Just now';
   if (mins < 60) return `${mins}m ago`;
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h ago`;
@@ -127,18 +128,27 @@ export default function ManagerLeads() {
   const router = useRouter();
   const { theme } = useAppTheme();
 
-  const [leads,               setLeads]               = useState<Lead[]>([]);
-  const [loading,             setLoading]             = useState(true);
-  const [refreshing,          setRefreshing]          = useState(false);
-  const [filter,              setFilter]              = useState('ALL');
-  const [editingLead,         setEditingLead]         = useState<Lead | null>(null);
+  const [leads,              setLeads]              = useState<Lead[]>([]);
+  const [loading,            setLoading]            = useState(true);
+  const [refreshing,         setRefreshing]         = useState(false);
+  const [filter,             setFilter]             = useState('ALL');
+  const [searchQuery,        setSearchQuery]        = useState('');
+  const [editingLead,        setEditingLead]        = useState<Lead | null>(null);
   const [statusPickerVisible, setStatusPickerVisible] = useState(false);
-  const [viewingLead,         setViewingLead]         = useState<Lead | null>(null);
+  const [viewingLead,        setViewingLead]        = useState<Lead | null>(null);
 
-  const filteredLeads = leads.filter(l => {
-    if (filter === 'ALL') return true;
-    return l.status?.toUpperCase() === filter.toUpperCase();
-  });
+  // Filter and Search handling computed on render
+  const filteredLeads = useMemo(() => {
+    return leads.filter(l => {
+      const matchesFilter = filter === 'ALL' || l.status?.toUpperCase() === filter.toUpperCase();
+      const matchesSearch = searchQuery.trim() === '' || 
+        l.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        l.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        l.email?.toLowerCase().includes(searchQuery.toLowerCase());
+      
+      return matchesFilter && matchesSearch;
+    });
+  }, [leads, filter, searchQuery]);
 
   const fetchLeads = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -149,19 +159,19 @@ export default function ManagerLeads() {
       const data = await res.json();
       if (data.success) {
         const normalized = (data.data || []).map((l: any) => ({
-          lead_id:          l.lead_id,
-          name:             l.name,
-          title:            l.title,
-          company:          l.company,
-          email:            l.email,
-          phone_number:     l.phone_number,
-          customer_intent:  l.customer_intent,
-          status:           l.status ?? 'NEW',
-          ai_notes:         l.ai_notes ?? '',
-          confidence_score: l.confidence_score ?? null,
-          scanned_by_name:  l.scanned_by_name ?? null,
-          created_at:       l.created_at,
-          followup_status:  l.followup_status ?? 'pending',
+          lead_id:            l.lead_id,
+          name:               l.name,
+          title:              l.title,
+          company:            l.company,
+          email:              l.email,
+          phone_number:       l.phone_number,
+          customer_intent:    l.customer_intent,
+          status:             l.status ?? 'NEW',
+          ai_notes:           l.ai_notes ?? '',
+          confidence_score:   l.confidence_score ?? null,
+          scanned_by_name:    l.scanned_by_name ?? null,
+          created_at:         l.created_at,
+          followup_status:    l.followup_status ?? 'pending',
           follow_up_required: l.follow_up_required ?? false,
         }));
         setLeads(normalized);
@@ -215,22 +225,7 @@ export default function ManagerLeads() {
         </View>
       </View>
 
-      {/* FILTER PILLS */}
-      <View style={[styles.filterRow, { backgroundColor: theme.card }]}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 16, paddingVertical: 10 }}>
-          {FILTERS.map(f => (
-            <TouchableOpacity
-              key={f}
-              style={[styles.pill, { backgroundColor: filter === f ? (theme.navy || '#0f172a') : theme.bg, borderColor: theme.navy || '#0f172a' }]}
-              onPress={() => setFilter(f)}
-            >
-              <Text style={[styles.pillText, { color: filter === f ? '#fff' : (theme.navy || '#0f172a') }]}>{f}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      </View>
-
-      {/* LEADS LIST */}
+      {/* LEADS LIST WITH ATTACHED FILTERS AND SEARCH */}
       <View style={{ flex: 1 }}>
         {loading ? (
           <View style={styles.centered}><ActivityIndicator size="large" color={theme.navy || '#0f172a'} /></View>
@@ -241,6 +236,42 @@ export default function ManagerLeads() {
             contentContainerStyle={[styles.content, { paddingBottom: 24 }]}
             showsVerticalScrollIndicator={false}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchLeads(true)} tintColor={theme.navy || '#0f172a'} />}
+            ListHeaderComponent={
+              <View style={{ marginBottom: 4 }}>
+                {/* SEARCH INPUT BAR */}
+                <View style={[styles.searchContainer, { backgroundColor: theme.card }]}>
+                  <Ionicons name="search" size={18} color={theme.subText || '#94a3b8'} style={styles.searchIcon} />
+                  <TextInput
+                    style={[styles.searchInput, { color: theme.text }]}
+                    placeholder="Search name, company, email..."
+                    placeholderTextColor={theme.subText || '#94a3b8'}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    clearButtonMode="while-editing"
+                  />
+                  {searchQuery.length > 0 && Platform.OS === 'android' && (
+                    <TouchableOpacity onPress={() => setSearchQuery('')}>
+                      <Ionicons name="close-circle" size={18} color={theme.subText} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+
+                {/* FILTER PILLS */}
+                <View style={[styles.filterRow, { backgroundColor: theme.card }]}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 10 }}>
+                    {FILTERS.map(f => (
+                      <TouchableOpacity
+                        key={f}
+                        style={[styles.pill, { backgroundColor: filter === f ? (theme.navy || '#0f172a') : theme.bg, borderColor: theme.navy || '#0f172a' }]}
+                        onPress={() => setFilter(f)}
+                      >
+                        <Text style={[styles.pillText, { color: filter === f ? '#fff' : (theme.navy || '#0f172a') }]}>{f}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </View>
+              </View>
+            }
             ListEmptyComponent={
               <View style={styles.centered}>
                 <Ionicons name="document-text-outline" size={48} color={theme.subText} />
@@ -282,7 +313,7 @@ export default function ManagerLeads() {
                   {/* Divider */}
                   <View style={{ height: 1, backgroundColor: theme.bg, marginVertical: 10 }} />
 
-                  {/* Action buttons — always visible */}
+                  {/* Action buttons */}
                   <View style={styles.actions}>
                     <TouchableOpacity
                       style={[styles.editBtn, { borderColor: accentColor }]}
@@ -358,10 +389,13 @@ const styles = StyleSheet.create({
   backBtn: { padding: 4 },
   headerTitle: { color: '#fff', fontSize: 17, fontWeight: '700' },
   headerSub: { color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 1 },
-  filterRow: { borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  searchContainer: { flexDirection: 'row', alignItems: 'center', borderRadius: 10, paddingHorizontal: 12, height: 44, marginVertical: 8, borderWidth: 1, borderColor: '#e2e8f0' },
+  searchIcon: { marginRight: 8 },
+  searchInput: { flex: 1, fontSize: 14, padding: 0 },
+  filterRow: { paddingBottom: 4 },
   pill: { borderRadius: 20, borderWidth: 1.5, paddingHorizontal: 14, paddingVertical: 6 },
   pillText: { fontSize: 12, fontWeight: '600' },
-  content: { padding: 16, gap: 14 },
+  content: { paddingHorizontal: 16, gap: 14 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 80, gap: 12 },
   emptyText: { fontSize: 15, fontWeight: '600' },
   card: { borderRadius: 14, padding: 14, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },

@@ -450,21 +450,26 @@ app.get('/manager/dashboard', authenticateToken, authorizeRoles('admin', 'manage
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-app.get('/manager/leads', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
-    const { status } = req.query;
+app.get('/manager/leads', authenticateToken, async (req, res) => {
     try {
-        const teamId = req.user.team_id;
-        let query = `
-            SELECT leads.*, COALESCE(lf.followup_status, 'pending') AS followup_status
-            FROM leads LEFT JOIN lead_followups lf ON leads.lead_id = lf.lead_id
-            WHERE assigned_team_id = $1
+        // DISTINCT ON prevents one-to-many relationship rows from multiplying leads in your array
+        const queryText = `
+            SELECT DISTINCT ON (l.lead_id)
+                l.*,
+                f.followup_status,
+                f.followup_action,
+                f.due_date
+            FROM leads l
+            LEFT JOIN lead_followups f ON l.lead_id = f.lead_id
+            ORDER BY l.lead_id, f.updated_at DESC
         `;
-        const params = [teamId];
-        if (status && status !== 'ALL') { params.push(status); query += ` AND leads.status = $${params.length}`; }
-        query += ' ORDER BY leads.created_at DESC';
-        const result = await pool.query(query, params);
+
+        const result = await pool.query(queryText);
         res.json({ success: true, data: result.rows });
-    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+    } catch (err) {
+        console.error('Error fetching leads:', err);
+        res.status(500).json({ success: false, message: 'Internal server error' });
+    }
 });
 
 app.get('/manager/emails', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
@@ -515,51 +520,47 @@ app.get('/export/leads/excel', authenticateToken, authorizeRoles('admin', 'manag
 });
 
 // --- GET ACTIVITY LOGS ROUTE ---
+// =========================================================================
+// GET ALL ACTIVITY LOGS (CLEAN JOIN - DEDUPLICATED)
+// =========================================================================
 app.get('/manager/activity', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     try {
-        const { role, team_id } = req.user;
-        const queryParams = [];
-
-        // LEFT JOIN LATERAL gets exactly one latest follow-up status row per lead.
-        // This stops activity logs duplication entirely on sql execution.
-        let query = `
-            SELECT 
-                la.activity_id, 
-                la.activity_type, 
-                la.activity_description, 
-                la.created_at, 
-                la.lead_id,
-                l.name AS lead_name, 
+        // DISTINCT ON (log.activity_id) guarantees that database-level join state 
+        // extensions do not multiply the logs rendered on the frontend.
+        const queryText = `
+            SELECT DISTINCT ON (a.activity_id)
+                a.activity_id,
+                a.activity_type,
+                a.activity_description,
+                a.created_at,
+                l.lead_id,
+                l.name AS lead_name,
                 l.company,
                 f.followup_id,
                 f.followup_status
-            FROM lead_activity_logs la
-            LEFT JOIN leads l ON la.lead_id = l.lead_id
-            LEFT JOIN LATERAL (
-                SELECT followup_id, followup_status 
-                FROM lead_followups 
-                WHERE lead_followups.lead_id = l.lead_id 
-                ORDER BY lead_followups.created_at DESC 
-                LIMIT 1
-            ) f ON TRUE
+            FROM lead_activity_logs a
+            INNER JOIN leads l ON a.lead_id = l.lead_id
+            LEFT JOIN lead_followups f ON l.lead_id = f.lead_id
+            ORDER BY a.activity_id, a.created_at DESC, f.updated_at DESC
         `;
 
-        if (role === 'manager') {
-            query += ` WHERE l.assigned_team_id = $1 `;
-            queryParams.push(team_id);
-        }
+        const result = await pool.query(queryText);
+        
+        // Final secondary sort by date sequence for chronological rendering
+        const sortedLogs = result.rows.sort((a, b) => 
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
 
-        query += ` ORDER BY la.created_at DESC LIMIT 100`;
-
-        const result = await pool.query(query, queryParams);
-        res.json({ success: true, data: result.rows });
+        res.json({ success: true, data: sortedLogs });
     } catch (err) {
-        console.error("Error fetching activity logs:", err);
-        res.status(500).json({ success: false, message: err.message });
+        console.error('Error fetching activity logs:', err);
+        res.status(500).json({ success: false, message: 'Internal server error' });
     }
 });
-
 // --- CANCEL FOLLOWUP ROUTE ---
+// =========================================================================
+// 4. CANCEL FOLLOW-UP ROUTE (PREVENTS ACCIDENTAL OR DUPLICATE ORPHANED ROWS)
+// =========================================================================
 app.post('/manager/followup/cancel', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
     const { followup_id, lead_id } = req.body;
     
@@ -571,59 +572,85 @@ app.post('/manager/followup/cancel', authenticateToken, authorizeRoles('admin', 
         await pool.query('BEGIN');
         let targetedLeadId = lead_id;
 
-        // 1. Update the follow-up entry
-        if (followup_id) {
-            const result = await pool.query(
-                `UPDATE lead_followups 
-                 SET followup_status = 'cancelled', updated_at = NOW() 
-                 WHERE followup_id = $1 
-                 RETURNING lead_id`,
+        if (followup_id && !targetedLeadId) {
+            const leadLookUp = await pool.query(
+                `SELECT lead_id FROM lead_followups WHERE followup_id = $1`,
                 [followup_id]
             );
-            
-            if (result.rowCount > 0) {
-                targetedLeadId = result.rows[0].lead_id;
-            } else if (lead_id) {
-                await pool.query(
-                    `UPDATE lead_followups SET followup_status = 'cancelled', updated_at = NOW() WHERE lead_id = $1`,
-                    [lead_id]
-                );
+            if (leadLookUp.rowCount > 0) {
+                targetedLeadId = leadLookUp.rows[0].lead_id;
             }
-        } else {
-            await pool.query(
-                `UPDATE lead_followups SET followup_status = 'cancelled', updated_at = NOW() WHERE lead_id = $1`,
-                [lead_id]
-            );
         }
 
-        // 2. Audit Trail creation: Add log history entry regarding this event action
-        if (targetedLeadId) {
-            await pool.query(
-                `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description, created_at)
-                 VALUES ($1, 'Followup Cancelled', 'A manager cancelled an active follow-up cycle.', NOW())`,
-                [targetedLeadId]
-            );
+        if (!targetedLeadId) {
+            await pool.query('ROLLBACK');
+            return res.status(404).json({ success: false, message: 'Could not resolve the associated lead for cancellation.' });
         }
+
+        const updateResult = await pool.query(
+            `UPDATE lead_followups 
+             SET followup_status = 'cancelled', 
+                 followup_action = 'Cancelled Follow-up',
+                 updated_at = NOW() 
+             WHERE lead_id = $1`,
+            [targetedLeadId]
+        );
+
+        await pool.query(
+            `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description, created_at)
+             VALUES ($1, 'FOLLOWUP_CANCELLED', 'A manager cancelled an active follow-up cycle.', NOW())`,
+            [targetedLeadId]
+        );
 
         await pool.query('COMMIT');
-        res.json({ success: true, message: 'Followup cancelled successfully.' });
+        res.json({ 
+            success: true, 
+            message: 'Followup cancelled successfully.',
+            affectedRows: updateResult.rowCount 
+        });
+
     } catch (err) {
-        await pool.query('ROLLBACK');
+        await pool.query('ROLLBACK').catch(() => {});
         console.error("Cancellation Transaction Error: ", err);
-        res.status(500).json({ success: false, message: err.message });
+        res.status(500).json({ success: false, message: 'Server error processing cancellation.' });
     }
 });
+app.put('/manager/followup/:leadId', authenticateToken, async (req, res) => {
+    // Extracted correctly from the path param
+    const leadId = req.params.leadId; 
+    const { followup_status } = req.body; // 'pending', 'done', or 'cancelled'
 
-app.put('/manager/followup/:leadId', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
-    const { followup_status } = req.body;
+    if (!leadId) {
+        return res.status(400).json({ success: false, message: 'Missing lead identifier parameter.' });
+    }
+
     try {
-        await pool.query(`
-            INSERT INTO lead_followups (lead_id, followup_status, updated_at)
-            VALUES ($1, $2, NOW())
-            ON CONFLICT (lead_id) DO UPDATE SET followup_status = EXCLUDED.followup_status, updated_at = NOW()
-        `, [req.params.leadId, followup_status]);
-        res.json({ success: true, message: 'Follow-up updated' });
-    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+        await pool.query('BEGIN');
+
+        // This will now succeed perfectly because "unique_lead_followup" exists!
+        await pool.query(
+            `INSERT INTO lead_followups (lead_id, followup_action, followup_status, created_at, updated_at)
+             VALUES ($1, 'Status Update', $2, NOW(), NOW())
+             ON CONFLICT (lead_id) DO UPDATE SET
+               followup_status = EXCLUDED.followup_status,
+               updated_at = NOW()`,
+            [leadId, followup_status]
+        );
+
+        // Log action trace inside Activity Logs 
+        await pool.query(
+            `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description, created_at)
+             VALUES ($1, 'STATUS_CHANGED', $2, NOW())`,
+            [leadId, `Follow-up status changed to ${followup_status?.toUpperCase()} by Manager.`]
+        );
+
+        await pool.query('COMMIT');
+        res.json({ success: true, message: `Follow-up status successfully changed to ${followup_status}.` });
+    } catch (err) {
+        await pool.query('ROLLBACK').catch(() => {});
+        console.error('Error updating follow up status:', err);
+        res.status(500).json({ success: false, message: 'Server error updating follow-up status' });
+    }
 });
 
 // ── ADMIN ROUTES ──────────────────────────────────────────────────────────────
@@ -916,17 +943,26 @@ app.post('/send-email', authenticateToken, authorizeRoles('admin', 'manager'), a
 // If a pending auto follow-up exists, it gets replaced with the manual one.
 // If auto already sent (done), returns 409.
 // ── MANUAL FOLLOW-UP EMAIL ROUTE (WITH IMMEDIATE SENDING) ────────────────────
-app.post('/send-followup/:id', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
+app.post('/send-followup/:id', authenticateToken, async (req, res) => {
     try {
         const { followupDate } = req.body || {};
+        const leadId = req.params.id;
 
-        // 1. Fetch lead information
-        const leadResult = await pool.query('SELECT * FROM leads WHERE lead_id = $1', [req.params.id]);
+        const leadResult = await pool.query('SELECT * FROM leads WHERE lead_id = $1', [leadId]);
         if (leadResult.rows.length === 0) {
             return res.status(404).json({ success: false, message: 'Lead not found' });
         }
-
         const lead = leadResult.rows[0];
+
+        // CRITICAL CHECK: Stop processing if a record is active and not cancelled
+        const existing = await pool.query(
+            `SELECT followup_status FROM lead_followups WHERE lead_id = $1`,
+            [leadId]
+        );
+        if (existing.rowCount > 0 && existing.rows[0].followup_status !== 'cancelled') {
+            return res.status(409).json({ success: false, message: 'Cannot perform more than one followup for this lead.' });
+        }
+
         const aiData = {
             intent: lead.status === 'URGENT' ? 'High' : lead.status === 'FOLLOW-UP' ? 'Medium' : 'Low',
             notes:  lead.ai_notes || 'Thank you for visiting our booth.',
@@ -935,59 +971,42 @@ app.post('/send-followup/:id', authenticateToken, authorizeRoles('admin', 'manag
         const emailSubject = 'Your Dell Technologies Follow-up';
         const scheduledAt = followupDate || new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
 
-        // Safe extraction of the local date component for the database column
         const dateObj = new Date(scheduledAt);
         const localDueDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
-
-        // Block if email tracking states this lead is completely finished
-        const existing = await pool.query(
-            `SELECT followup_status FROM lead_followups WHERE lead_id = $1`,
-            [lead.lead_id]
-        );
-        if (existing.rows.length > 0 && existing.rows[0].followup_status === 'done') {
-            return res.status(409).json({ success: false, message: 'Follow-up already sent for this lead.' });
-        }
-
-        // Generate the dynamic text email body
         const emailBody = buildFollowUpEmail(lead, aiData, interests);
 
-        // 2. TRIGGER NODEMAILER IMMEDIATE TRANSMISSION 🔥
-        await sendEmail({
-            to: lead.email,
-            subject: emailSubject,
-            text: emailBody
-        });
+        // Execute Mail Sending Service
+        await sendEmail({ to: lead.email, subject: emailSubject, text: emailBody });
 
-        // 3. Upsert into database — mark status as 'done' since it sent successfully
+        await pool.query('BEGIN');
+
+        // GUARANTEED ONE ROW RULE: ON CONFLICT (lead_id) updates the record instead of appending rows
         const followup = await pool.query(
-            `INSERT INTO lead_followups (lead_id, followup_action, followup_status, due_date, scheduled_at, sent_at, email_subject, notes)
-             VALUES ($1, 'Manual Follow-up Email', 'done', $2, $3, NOW(), $4, $5)
+            `INSERT INTO lead_followups (lead_id, followup_action, followup_status, due_date, scheduled_at, sent_at, email_subject, notes, created_at, updated_at)
+             VALUES ($1, 'Manual Follow-up Email', 'done', $2, $3, NOW(), $4, $5, NOW(), NOW())
              ON CONFLICT (lead_id) DO UPDATE SET
-               followup_action = 'Manual Follow-up Email',
+               followup_action = EXCLUDED.followup_action,
                followup_status = 'done',
                due_date = EXCLUDED.due_date,
                scheduled_at = EXCLUDED.scheduled_at,
                sent_at = NOW(),
                email_subject = EXCLUDED.email_subject,
-               notes = EXCLUDED.notes
+               notes = EXCLUDED.notes,
+               updated_at = NOW()
              RETURNING followup_id`,
             [lead.lead_id, localDueDate, scheduledAt, emailSubject, emailBody]
         );
 
-        // 4. Log the activity completion
         await pool.query(
-            `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'FOLLOWUP_SCHEDULED', $2)`,
+            `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description, created_at) 
+             VALUES ($1, 'FOLLOWUP_SCHEDULED', $2, NOW())`,
             [lead.lead_id, `Manager triggered and sent immediate follow-up email via dashboard.`]
         );
 
-        res.json({
-            success: true,
-            message: 'Follow-up email successfully sent and logged.',
-            scheduled_at: scheduledAt,
-            followup_id: followup.rows[0].followup_id
-        });
-
+        await pool.query('COMMIT');
+        res.json({ success: true, message: 'Follow-up email successfully sent and logged.', scheduled_at: scheduledAt, followup_id: followup.rows[0].followup_id });
     } catch (err) {
+        await pool.query('ROLLBACK').catch(() => {});
         console.error("Email Delivery Error: ", err);
         res.status(500).json({ success: false, message: `Email distribution failed: ${err.message}` });
     }

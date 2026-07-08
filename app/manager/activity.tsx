@@ -44,15 +44,25 @@ export default function ManagerActivity() {
     { key: 'Export',    icon: 'download', iconOff: 'download-outline', route: '/manager/export' },
   ];
 
-  // Clears out visual duplicate logs on the client fallback engine
+  // Guaranteed Unique Lookups Engine
   const processUniqueLogs = (incomingLogs: ActivityLog[]): ActivityLog[] => {
-    const seenIds = new Set<string | number>();
-    return incomingLogs.filter(log => {
-      if (!log.activity_id) return true;
-      if (seenIds.has(log.activity_id)) return false;
-      seenIds.add(log.activity_id);
-      return true;
+    const uniqueMap = new Map<string | number, ActivityLog>();
+    
+    incomingLogs.forEach(log => {
+      if (!log.activity_id) return;
+      
+      // If log exists, keep the non-cancelled state preference context
+      if (uniqueMap.has(log.activity_id)) {
+        const existing = uniqueMap.get(log.activity_id);
+        if (existing?.followup_status === 'cancelled' && log.followup_status !== 'cancelled') {
+          uniqueMap.set(log.activity_id, log);
+        }
+        return;
+      }
+      uniqueMap.set(log.activity_id, log);
     });
+
+    return Array.from(uniqueMap.values());
   };
 
   const fetchLogs = useCallback(async (isRefresh = false) => {
@@ -103,9 +113,13 @@ export default function ManagerActivity() {
               if (data.success) {
                 Alert.alert("Cancelled", "Followup status updated successfully.");
                 
-                // Disappearing feature: Instantly filters the cancelled card out of the state array
+                // State side synchronization update logic layout
                 setLogs(currentLogs => 
-                  currentLogs.filter(item => item.activity_id !== log.activity_id)
+                  currentLogs.map(item => 
+                    item.lead_id === log.lead_id 
+                      ? { ...item, followup_status: 'cancelled' } 
+                      : item
+                  )
                 );
               } else {
                 Alert.alert("Error", data.message || "Failed to cancel.");
@@ -138,7 +152,7 @@ export default function ManagerActivity() {
     const color = getActivityColor(log.activity_type);
     const uType = log.activity_type?.toUpperCase() || '';
     
-    const isFollowupType = uType.includes('FOLLOWUP') && log.followup_id !== null;
+    const isFollowupType = (uType.includes('FOLLOWUP') || uType.includes('SCHEDULED')) && log.lead_id;
     const isCancelled = log.followup_status?.toString().toLowerCase().trim() === 'cancelled';
 
     return (
