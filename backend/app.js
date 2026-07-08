@@ -11,6 +11,7 @@ const ExcelJS = require('exceljs');
 const nodemailer = require('nodemailer');
 const RateLimit = require('express-rate-limit');
 const cron = require('node-cron');
+const brevo = require('@getbrevo/brevo');
 
 const app = express();
 const allowedOrigins = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : [];
@@ -99,18 +100,37 @@ if (!process.env.GEMINI_API_KEY) {
     console.warn('❌ GEMINI_API_KEY is missing from environment configuration');
 }
 
-// ── EMAIL TRANSPORTER (Nodemailer fallback until Brevo is set up) ─────────────
+// ── EMAIL TRANSPORTER ───────────────────────────────────────────────────────
 const transporter = nodemailer.createTransport({
-    service: 'gmail',
+    host: process.env.EMAIL_HOST || 'smtp.gmail.com',
+    port: Number(process.env.EMAIL_PORT || 587),
+    secure: process.env.EMAIL_SECURE === 'true',
     auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS
     }
 });
 
+let brevoClient = null;
+if (process.env.BREVO_API_KEY && process.env.BREVO_SENDER_EMAIL) {
+    brevoClient = new brevo.TransactionalEmailsApi();
+    brevoClient.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY);
+}
+
 // ── SEND EMAIL HELPER ─────────────────────────────────────────────────────────
-// Centralised email sender — swap out for Brevo when API key is ready
-async function sendEmail({ to, subject, text }) {
+async function sendEmail({ to, subject, text, html }) {
+    if (brevoClient) {
+        const sendSmtpEmail = new brevo.SendSmtpEmail();
+        sendSmtpEmail.sender = {
+            name: process.env.BREVO_SENDER_NAME || 'Boothflow',
+            email: process.env.BREVO_SENDER_EMAIL,
+        };
+        sendSmtpEmail.to = [{ email: to }];
+        sendSmtpEmail.subject = subject;
+        sendSmtpEmail.htmlContent = html || `<p>${(text || '').replace(/\n/g, '<br/>')}</p>`;
+        return await brevoClient.sendTransacEmail(sendSmtpEmail);
+    }
+
     const info = await transporter.sendMail({
         from: `"Boothflow" <${process.env.EMAIL_USER}>`,
         to,
@@ -404,52 +424,24 @@ app.get('/manager/me', authenticateToken, authorizeRoles('admin', 'manager'), as
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
-import Brevo from "@getbrevo/brevo";
-import express from "express";
+// ── TEST EMAIL ROUTE ────────────────────────────────────────────────────────
+app.post('/send-followup', async (req, res) => {
+    try {
+        const { email, subject, text, html } = req.body || {};
+        if (!email) return res.status(400).json({ success: false, message: 'email is required' });
 
-const app = express();
+        const info = await sendEmail({
+            to: email,
+            subject: subject || 'Test email from Boothflow',
+            text: text || 'This is a test email sent from the Boothflow backend.',
+            html: html || '<p>This is a test email sent from the Boothflow backend.</p>'
+        });
 
-// Brevo setup
-const brevoClient = new Brevo.TransactionalEmailsApi();
-brevoClient.setApiKey(
-  Brevo.TransactionalEmailsApiApiKeys.apiKey,
-  process.env.BREVO_API_KEY
-);
-
-// Helper function
-async function sendFollowUpEmail(toEmail, subject, htmlContent) {
-  const email = {
-    sender: {
-      email: process.env.BREVO_SENDER_EMAIL,
-      name: process.env.BREVO_SENDER_NAME,
-    },
-    to: [{ email: toEmail }],
-    subject,
-    htmlContent,
-  };
-
-  try {
-    const response = await brevoClient.sendTransacEmail(email);
-    console.log("Email sent:", response);
-  } catch (error) {
-    console.error("Error sending email:", error);
-  }
-}
-
-// Example route
-app.post("/send-followup", async (req, res) => {
-  const { email } = req.body;
-  await sendFollowUpEmail(
-    email,
-    "Thanks for visiting!",
-    "<p>We’ll follow up soon.</p>"
-  );
-  res.json({ success: true });
-});
-
-// Server start
-app.listen(3000, () => {
-  console.log("Server running on port 3000");
+        res.json({ success: true, message: 'Email sent', data: info });
+    } catch (err) {
+        console.error('❌ Email send failed:', err.message);
+        res.status(500).json({ success: false, message: err.message });
+    }
 });
 
 // ── MANAGER ROUTES ────────────────────────────────────────────────────────────
@@ -989,19 +981,3 @@ app.listen(PORT, async () => {
         console.log('❌ DB check failed:', err.message);
     }
 });
-import { BrevoClient } from '@getbrevo/brevo';
-
-const brevo = new BrevoClient({ apiKey: 'your-api-key' });
-
-async function sendEmail() {
-  const result = await brevo.transactionalEmails.sendTransacEmail({
-    subject: 'Hello from Brevo!',
-    htmlContent: '<html><body><p>Welcome to our app!</p></body></html>',
-    sender: { name: 'Your App', email: 'noreply@yourapp.com' },
-    to: [{ email: 'user@example.com', name: 'User' }],
-  });
-
-  console.log('Email sent. Message ID:', result.messageId);
-}
-
-sendEmail();
