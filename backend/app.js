@@ -8,13 +8,13 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const ExcelJS = require('exceljs');
-const nodemailer = require('nodemailer');
 const RateLimit = require('express-rate-limit');
 const cron = require('node-cron');
 
 const app = express();
 const allowedOrigins = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : [];
 app.use(helmet());
+app.set('trust proxy', 1);
 app.use(express.json());
 app.use(cors({
     origin: (origin, callback) => {
@@ -99,54 +99,42 @@ if (!process.env.GEMINI_API_KEY) {
     console.warn('❌ GEMINI_API_KEY is missing from environment configuration');
 }
 
-// ── EMAIL TRANSPORTER ───────────────────────────────────────────────────────
-function createEmailTransporter() {
-    const emailHost = process.env.EMAIL_HOST;
-    const emailPort = Number(process.env.EMAIL_PORT || 587);
-    const emailSecure = process.env.EMAIL_SECURE === 'true' || process.env.EMAIL_SECURE === '1';
-    const emailUser = process.env.EMAIL_USER;
-    const emailPass = process.env.EMAIL_PASS;
-
-    if (emailHost) {
-        return nodemailer.createTransport({
-            host: emailHost,
-            port: Number.isFinite(emailPort) ? emailPort : 587,
-            secure: emailSecure,
-            auth: emailUser && emailPass ? { user: emailUser, pass: emailPass } : undefined,
-        });
-    }
-
-    return nodemailer.createTransport({
-        service: process.env.EMAIL_SERVICE || 'gmail',
-        auth: emailUser && emailPass ? { user: emailUser, pass: emailPass } : undefined,
-    });
-}
-
-const transporter = createEmailTransporter();
-
-// ── SEND EMAIL HELPER ─────────────────────────────────────────────────────────
-async function sendEmail({ to, subject, text, from }) {
+// ── EMAIL (Brevo HTTP API — works on Render/K8s, no SMTP needed) ──────────────
+async function sendEmail({ to, subject, text }) {
     if (!to || !subject || !text) {
         throw new Error('Email recipient, subject, and message body are required.');
     }
+    console.log(`📧 Attempting to send email to: ${to}`);
+    console.log(`📧 BREVO_API_KEY configured: ${!!process.env.BREVO_API_KEY}`);
+    console.log(`📧 BREVO_SENDER_EMAIL configured: ${!!process.env.BREVO_SENDER_EMAIL}`);
 
-    const emailUser = process.env.EMAIL_USER;
-    if (!emailUser || !process.env.EMAIL_PASS) {
-        if (!process.env.EMAIL_HOST) {
-            throw new Error('Email service is not configured. Set EMAIL_USER/EMAIL_PASS or EMAIL_HOST/EMAIL_PORT/EMAIL_SECURE in the backend environment.');
-        }
-    }
-
-    const info = await transporter.sendMail({
-        from: from || `"Boothflow" <${emailUser || process.env.EMAIL_FROM || 'no-reply@boothflow.local'}>`,
-        to,
-        subject,
-        text,
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+            'accept': 'application/json',
+            'api-key': process.env.BREVO_API_KEY,
+            'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+            sender: {
+                name: process.env.BREVO_SENDER_NAME || 'Boothflow',
+                email: process.env.BREVO_SENDER_EMAIL,
+            },
+            to: [{ email: to }],
+            subject,
+            textContent: text,
+        }),
     });
-    if (info.rejected && info.rejected.length > 0) {
-        throw new Error(`Email rejected for ${to}`);
+
+    const data = await response.json();
+
+    if (!response.ok) {
+        console.error(`❌ Brevo error:`, JSON.stringify(data));
+        throw new Error(data.message || 'Brevo email send failed');
     }
-    return info;
+
+    console.log(`✅ Email sent to ${to} via Brevo, messageId: ${data.messageId}`);
+    return data;
 }
 
 // ── PERSONALISED EMAIL BUILDER ────────────────────────────────────────────────
