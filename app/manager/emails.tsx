@@ -59,9 +59,9 @@ export default function EmailsScreen() {
         if (leadsRes?.success) setLeads(leadsRes.data || []);
         if (emailsRes?.success && emailsRes.data) {
           setMetrics({
-            sentCount:    emailsRes.data.sent?.length || 0,
+            sentCount:     emailsRes.data.sent?.length || 0,
             sentThisWeek: emailsRes.data.sentThisWeek || 0,
-            overdue:      emailsRes.data.overdue || 0,
+            overdue:       emailsRes.data.overdue || 0,
           });
         }
       }
@@ -106,6 +106,13 @@ export default function EmailsScreen() {
           followupDate: scheduledDate.toISOString(),
         }),
       });
+
+      // Catch the explicit 409 status code to display your requested duplicate error message
+      if (response.status === 409) {
+        Alert.alert('Error', 'Error - No duplicate followups');
+        return;
+      }
+
       const data = await response.json();
       if (response.ok && data.success) {
         Alert.alert('✅ Scheduled', `Follow-up email for ${selectedLead.name} has been scheduled.`);
@@ -207,7 +214,6 @@ export default function EmailsScreen() {
             ))}
           </ScrollView>
 
-          {/* Selected lead info */}
           {selectedLead && (
             <View style={[styles.leadInfo, { backgroundColor: theme.bg }]}>
               <View style={styles.leadInfoRow}>
@@ -231,14 +237,13 @@ export default function EmailsScreen() {
           )}
         </View>
 
-        {/* Date & Time Section — wrapped in card */}
+        {/* Date & Time Section */}
         <View style={[styles.section, { backgroundColor: theme.card }]}>
           <View style={styles.sectionHeader}>
             <Ionicons name="time-outline" size={16} color={theme.navy} />
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Schedule</Text>
           </View>
 
-          {/* Date row */}
           <TouchableOpacity
             onPress={() => { setPickerMode('date'); setShowPicker(true); }}
             style={styles.pickerRow}
@@ -255,7 +260,6 @@ export default function EmailsScreen() {
 
           <View style={[styles.divider, { backgroundColor: theme.subText + '18' }]} />
 
-          {/* Time row */}
           <TouchableOpacity
             onPress={() => { setPickerMode('time'); setShowPicker(true); }}
             style={styles.pickerRow}

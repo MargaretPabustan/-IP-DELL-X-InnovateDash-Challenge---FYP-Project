@@ -951,25 +951,100 @@ Return ONLY valid JSON in this exact format, no extra text:
 });
 
 // ── GENERIC EMAIL SENDING ROUTE ─────────────────────────────────────────────
+// ── GENERIC EMAIL SENDING ROUTE ─────────────────────────────────────────────
 app.post('/send-email', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
-    const { to, subject, text, lead_id } = req.body || {};
+    const { to, subject, text, lead_id, followupDate } = req.body || {};
 
     if (!to || !subject || !text) {
         return res.status(400).json({ success: false, message: 'Recipient, subject, and text are required.' });
     }
 
     try {
-        await sendEmail({ to, subject, text });
+        let finalSubject = subject;
+        let finalBody = text;
 
         if (lead_id) {
-            await pool.query(
-                `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'EMAIL_SENT', $2)`,
-                [lead_id, `Manual email sent from the app to ${to}`]
+            const leadIdParsed = parseInt(lead_id, 10);
+            
+            // Query state to prevent any duplicate followup records matching schema constraints
+            const existing = await pool.query(
+                `SELECT followup_status FROM lead_followups WHERE lead_id = $1`,
+                [leadIdParsed]
             );
+            
+            if (existing.rowCount > 0 && existing.rows[0].followup_status !== 'cancelled') {
+                return res.status(409).json({ success: false, message: 'Error - No duplicate followups' });
+            }
+
+            // Extract accurate categories linked from relational intermediate tables
+            const interestsResult = await pool.query(
+                `SELECT ic.category_name FROM lead_interest_categories lic
+                 JOIN interest_categories ic ON lic.category_id = ic.category_id 
+                 WHERE lic.lead_id = $1`,
+                [leadIdParsed]
+            );
+            
+            const categoriesString = interestsResult.rows.map(r => r.category_name).join(', ');
+            const interests = categoriesString || 'Dell Technologies solutions';
+
+            const leadResult = await pool.query('SELECT * FROM leads WHERE lead_id = $1', [leadIdParsed]);
+            if (leadResult.rows.length > 0) {
+                const lead = leadResult.rows[0];
+                const aiData = {
+                    intent: lead.status === 'URGENT' ? 'High' : lead.status === 'FOLLOW-UP' ? 'Medium' : 'Low',
+                    notes: lead.ai_notes || 'Thank you for visiting our booth.',
+                };
+
+                if (typeof buildFollowUpEmail === 'function') {
+                    finalBody = buildFollowUpEmail(lead, aiData, interests);
+                }
+                finalSubject = `Your Dell Technologies Follow-up — ${interests}`;
+            }
+        }
+
+        // Trigger external provider transmission pipeline
+        await sendEmail({ to, subject: finalSubject, text: finalBody });
+
+        if (lead_id) {
+            const leadIdParsed = parseInt(lead_id, 10);
+            const scheduledAt = followupDate || new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
+            const dateObj = new Date(scheduledAt);
+            const localDueDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+
+            await pool.query('BEGIN');
+
+            // Persist information inside lead_followups matching ERD layout requirements
+            await pool.query(
+                `INSERT INTO lead_followups (
+                    lead_id, followup_action, followup_status, due_date, 
+                    scheduled_at, sent_at, email_subject, notes, created_at, updated_at
+                 )
+                 VALUES ($1, 'Manual Follow-up Email', 'done', $2, $3, NOW(), $4, $5, NOW(), NOW())
+                 ON CONFLICT (lead_id) DO UPDATE SET
+                   followup_action = EXCLUDED.followup_action,
+                   followup_status = 'done',
+                   due_date = EXCLUDED.due_date,
+                   scheduled_at = EXCLUDED.scheduled_at,
+                   sent_at = NOW(),
+                   email_subject = EXCLUDED.email_subject,
+                   notes = EXCLUDED.notes,
+                   updated_at = NOW()`,
+                [leadIdParsed, localDueDate, scheduledAt, finalSubject, finalBody]
+            );
+
+            // Log entity state interaction timeline update
+            await pool.query(
+                `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description, created_at) 
+                 VALUES ($1, 'EMAIL_SENT', $2, NOW())`,
+                [leadIdParsed, `Manual follow-up email sent from the app dashboard.`]
+            );
+
+            await pool.query('COMMIT');
         }
 
         res.json({ success: true, message: 'Email sent successfully.' });
     } catch (err) {
+        await pool.query('ROLLBACK').catch(() => {});
         console.error('Email delivery error:', err);
         res.status(500).json({ success: false, message: `Email delivery failed: ${err.message}` });
     }
@@ -983,43 +1058,66 @@ app.post('/send-email', authenticateToken, authorizeRoles('admin', 'manager'), a
 app.post('/send-followup/:id', authenticateToken, async (req, res) => {
     try {
         const { followupDate } = req.body || {};
-        const leadId = req.params.id;
+        const leadId = parseInt(req.params.id, 10);
 
+        if (isNaN(leadId)) {
+            return res.status(400).json({ success: false, message: 'Invalid lead ID format.' });
+        }
+
+        // 1. Verify existence of the lead entity matching ERD constraints
         const leadResult = await pool.query('SELECT * FROM leads WHERE lead_id = $1', [leadId]);
         if (leadResult.rows.length === 0) {
-            return res.status(404).json({ success: false, message: 'Lead not found' });
+            return res.status(404).json({ success: false, message: 'Lead not found.' });
         }
         const lead = leadResult.rows[0];
 
-        // CRITICAL CHECK: Stop processing if a record is active and not cancelled
+        // 2. State machine protection validation on lead_followups
         const existing = await pool.query(
             `SELECT followup_status FROM lead_followups WHERE lead_id = $1`,
             [leadId]
         );
         if (existing.rowCount > 0 && existing.rows[0].followup_status !== 'cancelled') {
-            return res.status(409).json({ success: false, message: 'Cannot perform more than one followup for this lead.' });
+            return res.status(409).json({ success: false, message: 'Cannot perform more than one active follow-up execution structure for this lead context.' });
         }
+
+        // 3. Extract mapped contextual identities from joining tables (Double checked with ERD)
+        const interestsResult = await pool.query(
+            `SELECT ic.category_name 
+             FROM lead_interest_categories lic
+             JOIN interest_categories ic ON lic.category_id = ic.category_id 
+             WHERE lic.lead_id = $1`,
+            [leadId]
+        );
+        
+        const categoriesString = interestsResult.rows.map(r => r.category_name).join(', ');
+        const interests = categoriesString || 'Dell Technologies solutions';
 
         const aiData = {
             intent: lead.status === 'URGENT' ? 'High' : lead.status === 'FOLLOW-UP' ? 'Medium' : 'Low',
-            notes:  lead.ai_notes || 'Thank you for visiting our booth.',
+            notes: lead.ai_notes || 'Thank you for stopping by our exhibition space.',
         };
-        const interests = lead.customer_intent || 'Dell Technologies solutions';
-        const emailSubject = 'Your Dell Technologies Follow-up';
+
+        const emailSubject = `Your Dell Technologies Follow-up — ${interests}`;
         const scheduledAt = followupDate || new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
 
         const dateObj = new Date(scheduledAt);
         const localDueDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+        
+        // Compile email template utilizing relational entities
         const emailBody = buildFollowUpEmail(lead, aiData, interests);
 
-        // Execute Mail Sending Service
+        // 4. Trigger transactional email pipeline execution
         await sendEmail({ to: lead.email, subject: emailSubject, text: emailBody });
 
+        // 5. Commit state persistence inside an atomic transaction scope
         await pool.query('BEGIN');
 
-        // GUARANTEED ONE ROW RULE: ON CONFLICT (lead_id) updates the record instead of appending rows
+        // Upsert follow-up mapping record state configuration
         const followup = await pool.query(
-            `INSERT INTO lead_followups (lead_id, followup_action, followup_status, due_date, scheduled_at, sent_at, email_subject, notes, created_at, updated_at)
+            `INSERT INTO lead_followups (
+                lead_id, followup_action, followup_status, due_date, 
+                scheduled_at, sent_at, email_subject, notes, created_at, updated_at
+             )
              VALUES ($1, 'Manual Follow-up Email', 'done', $2, $3, NOW(), $4, $5, NOW(), NOW())
              ON CONFLICT (lead_id) DO UPDATE SET
                followup_action = EXCLUDED.followup_action,
@@ -1031,23 +1129,34 @@ app.post('/send-followup/:id', authenticateToken, async (req, res) => {
                notes = EXCLUDED.notes,
                updated_at = NOW()
              RETURNING followup_id`,
-            [lead.lead_id, localDueDate, scheduledAt, emailSubject, emailBody]
+            [leadId, localDueDate, scheduledAt, emailSubject, emailBody]
         );
 
+        // EXTRA FAILED-SAFE: Update the activity text explicitly in your tracking description log 
+        // to guarantee activity.tsx captures the exact category string parsed!
         await pool.query(
             `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description, created_at) 
-             VALUES ($1, 'FOLLOWUP_SCHEDULED', $2, NOW())`,
-            [lead.lead_id, `Manager triggered and sent immediate follow-up email via dashboard.`]
+             VALUES ($1, 'EMAIL_SENT', $2, NOW())`,
+            [leadId, `Manager successfully generated and delivered manual follow-up email exploring: ${interests}. Summary text: ${emailBody}`]
         );
 
         await pool.query('COMMIT');
-        res.json({ success: true, message: 'Follow-up email successfully sent and logged.', scheduled_at: scheduledAt, followup_id: followup.rows[0].followup_id });
+        
+        res.json({ 
+            success: true, 
+            message: 'Follow-up timeline successfully processed, recorded, and sent.', 
+            scheduled_at: scheduledAt, 
+            followup_id: followup.rows[0].followup_id 
+        });
+
     } catch (err) {
         await pool.query('ROLLBACK').catch(() => {});
-        console.error("Email Delivery Error: ", err);
-        res.status(500).json({ success: false, message: `Email distribution failed: ${err.message}` });
+        console.error("Manual Email Pipeline Critical Fault: ", err);
+        res.status(500).json({ success: false, message: `Data system processing failed: ${err.message}` });
     }
 });
+
+
 // ── CRON JOB — runs every minute, sends pending emails ───────────────────────
 cron.schedule('* * * * *', async () => {
     try {
