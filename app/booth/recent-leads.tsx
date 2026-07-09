@@ -387,6 +387,7 @@ export default function RecentLeadsScreen() {
   const [viewing,      setViewing]     = useState<Lead | null>(null);
   const [editing,      setEditing]     = useState<Lead | null>(null);
   const [showProfile,  setShowProfile] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
   const [search,       setSearch]      = useState('');
   const [activeFilter, setFilter]      = useState('ALL');
 
@@ -453,30 +454,38 @@ export default function RecentLeadsScreen() {
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Leads</Text>
-        <Text style={styles.headerCount}>{filteredLeads.length}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={styles.headerCount}>{filteredLeads.length}</Text>
+          <TouchableOpacity onPress={() => { setShowSearch(s => !s); if (showSearch) setSearch(''); }} style={styles.backBtn}>
+            <Ionicons name={showSearch ? 'close-outline' : 'search-outline'} size={22} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* SEARCH */}
-      <View style={[styles.searchBar, { backgroundColor: theme.card, borderColor: theme.subText + '22' }]}>
-        <Ionicons name="search-outline" size={16} color={theme.subText} style={{ marginRight: 8 }} />
-        <TextInput
-          style={[styles.searchInput, { color: theme.text }]}
-          placeholder="Search by name, company, email..."
-          placeholderTextColor={theme.subText}
-          value={search}
-          onChangeText={setSearch}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        {search.length > 0 && (
-          <TouchableOpacity onPress={() => setSearch('')}>
-            <Ionicons name="close-circle" size={16} color={theme.subText} />
-          </TouchableOpacity>
-        )}
-      </View>
+      {/* SEARCH — collapsible */}
+      {showSearch && (
+        <View style={[styles.searchBar, { backgroundColor: theme.card, borderColor: theme.subText + '22' }]}>
+          <Ionicons name="search-outline" size={16} color={theme.subText} style={{ marginRight: 8 }} />
+          <TextInput
+            style={[styles.searchInput, { color: theme.text }]}
+            placeholder="Search by name, company, email..."
+            placeholderTextColor={theme.subText}
+            value={search}
+            onChangeText={setSearch}
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoFocus
+          />
+          {search.length > 0 && (
+            <TouchableOpacity onPress={() => setSearch('')}>
+              <Ionicons name="close-circle" size={16} color={theme.subText} />
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
 
       {/* FILTER TABS */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ backgroundColor: theme.bg, flexGrow: 0 }} contentContainerStyle={styles.filterContent}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ backgroundColor: theme.bg, flexGrow: 0, flexShrink: 0 }} contentContainerStyle={styles.filterContent}>
         {FILTER_OPTIONS.map(f => {
           const isActive = activeFilter === f;
           const count = statusCounts[f] ?? 0;
@@ -590,12 +599,12 @@ const styles = StyleSheet.create({
   headerCount: { color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: '600', minWidth: 22, textAlign: 'right' },
   searchBar: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 16, marginTop: 12, marginBottom: 4, borderRadius: 12, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 10 },
   searchInput: { flex: 1, fontSize: 14, fontWeight: '500' },
-  filterContent: { paddingHorizontal: 16, paddingVertical: 10, gap: 8, flexDirection: 'row' },
+  filterContent: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 20, gap: 8, flexDirection: 'row' },
   filterChip: { borderRadius: 20, paddingHorizontal: 12, paddingVertical: 6, flexDirection: 'row', alignItems: 'center', gap: 6 },
   filterChipText: { fontSize: 12, fontWeight: '700' },
   filterBadge: { borderRadius: 10, minWidth: 20, height: 20, paddingHorizontal: 5, alignItems: 'center', justifyContent: 'center' },
   filterBadgeText: { fontSize: 11, fontWeight: '700' },
-  list: { padding: 16, gap: 10 },
+  list: { padding: 16, paddingTop: 12, gap: 10 },
   emptyState: { alignItems: 'center', marginTop: 48, gap: 8 },
   emptyText: { textAlign: 'center', fontSize: 15, fontWeight: '600' },
   emptySubText: { textAlign: 'center', fontSize: 13 },
