@@ -100,24 +100,21 @@ if (!process.env.GEMINI_API_KEY) {
     console.warn('❌ GEMINI_API_KEY is missing from environment configuration');
 }
 
-// ── SEND EMAIL HELPER (Brevo SDK) ────────────────────────────────────────────
-
-async function sendEmail({ to, subject, text, from, html }) {
-  const brevoApiKey = process.env.BREVO_API_KEY;
-  const senderEmail = process.env.BREVO_SENDER_EMAIL || 'no-reply@boothflow.local';
-
-  if (!brevoApiKey) throw new Error('BREVO_API_KEY missing');
-
-  const apiInstance = new brevo.TransactionalEmailsApi();
-  apiInstance.authentications['apiKey'].apiKey = brevoApiKey;
-
-  const message = new brevo.SendSmtpEmail({
-    sender: { name: 'Boothflow', email: senderEmail },
+// Pure fetch (sends correct body)
+await fetch('https://api.brevo.com/v3/smtp/email', {
+  method: 'POST',
+  headers: {
+    'api-key': process.env.BREVO_API_KEY,
+    'content-type': 'application/json',
+  },
+  body: JSON.stringify({
+    sender: { name: 'Boothflow', email: process.env.BREVO_SENDER_EMAIL },
     to: [{ email: to }],
     subject,
-    htmlContent: html || `<p>${String(text).replace(/\n/g, '<br/>')}</p>`,
-    textContent: String(text),
-  });
+    textContent: text,
+  }),
+});
+
 
   try {
     await apiInstance.sendTransacEmail(message);
