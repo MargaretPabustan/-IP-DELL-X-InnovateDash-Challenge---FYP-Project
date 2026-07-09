@@ -101,48 +101,34 @@ if (!process.env.GEMINI_API_KEY) {
 }
 
 // ── SEND EMAIL HELPER (Brevo SDK) ────────────────────────────────────────────
-async function sendEmail({ to, subject, text }) {
-    if (!to || !subject || !text) {
-        throw new Error('Email recipient, subject, and message body are required.');
-    }
+const brevo = require('@getbrevo/brevo');
 
-    console.log(`📧 Attempting to send email to: ${to}`);
-    console.log(`📧 BREVO_API_KEY configured: ${!!process.env.BREVO_API_KEY}`);
-    console.log(`📧 BREVO_SENDER_EMAIL configured: ${!!process.env.BREVO_SENDER_EMAIL}`);
+async function sendEmail({ to, subject, text, from, html }) {
+  const brevoApiKey = process.env.BREVO_API_KEY;
+  const senderEmail = process.env.BREVO_SENDER_EMAIL || 'no-reply@boothflow.local';
 
-    try {
-        const defaultClient = brevo.ApiClient.instance;
-        const apiKey = defaultClient.authentications['api-key'];
-        apiKey.apiKey = process.env.BREVO_API_KEY;
+  if (!brevoApiKey) throw new Error('BREVO_API_KEY missing');
 
-        const apiInstance = new brevo.TransactionalEmailsApi();
-        const sendSmtpEmail = new brevo.SendSmtpEmail();
+  const apiInstance = new brevo.TransactionalEmailsApi();
+  apiInstance.authentications['apiKey'].apiKey = brevoApiKey;
 
-        sendSmtpEmail.sender = {
-            name: 'Boothflow',
-            email: process.env.BREVO_SENDER_EMAIL,
-        };
-        sendSmtpEmail.to = [{ email: to }];
-        sendSmtpEmail.subject = subject;
-        sendSmtpEmail.textContent = text;
-        sendSmtpEmail.htmlContent = `<p>${String(text).replace(/\n/g, '<br/>')}</p>`;
+  const message = new brevo.SendSmtpEmail({
+    sender: { name: 'Boothflow', email: senderEmail },
+    to: [{ email: to }],
+    subject,
+    htmlContent: html || `<p>${String(text).replace(/\n/g, '<br/>')}</p>`,
+    textContent: String(text),
+  });
 
-        const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
-        console.log(`✅ Email sent to ${to} via Brevo SDK, messageId: ${result?.body?.messageId || 'N/A'}`);
-        return { success: true };
-    } catch (err) {
-        console.error(`❌ Brevo SDK error:`, err.message);
-        throw err;
-    }
-
-    const info = { rejected: [] };
-
-    if (info.rejected && info.rejected.length > 0) {
-        throw new Error(`Email rejected for ${to}`);
-    }
-
-    return { provider: 'smtp', status: 'sent', info };
+  try {
+    await apiInstance.sendTransacEmail(message);
+    return { provider: 'brevo', status: 'sent' };
+  } catch (err) {
+    console.error('Brevo SDK error:', err);
+    throw new Error(`Brevo email failed: ${err.message}`);
+  }
 }
+
 
 
 // ── PERSONALISED EMAIL BUILDER ────────────────────────────────────────────────
