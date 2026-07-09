@@ -136,9 +136,14 @@ export default function ManagerLeads() {
     { key: 'Export',    icon: 'download', iconOff: 'download-outline' },
   ];
 
+  // FIXED AND OPTIMIZED FILTER COMPONENT LOGIC
   const filteredLeads = useMemo(() => {
     return leads.filter(l => {
-      const matchesFilter = filter === 'ALL' || l.status?.toUpperCase() === filter.toUpperCase();
+      const currentFilter = filter.trim().toUpperCase();
+      const leadStatus = (l.status || 'NEW').trim().toUpperCase();
+      
+      const matchesFilter = currentFilter === 'ALL' || leadStatus === currentFilter;
+      
       const matchesSearch = searchQuery.trim() === '' || 
         l.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         l.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
