@@ -133,42 +133,67 @@ async function sendEmail({ to, subject, text, from, html }) {
     }
 
     const brevoApiKey = process.env.BREVO_API_KEY;
-    const senderEmail = process.env.BREVO_SENDER_EMAIL || process.env.EMAIL_FROM || process.env.EMAIL_USER || 'no-reply@boothflow.local';
+    const senderEmail = process.env.BREVO_SENDER_EMAIL 
+        || process.env.EMAIL_FROM 
+        || process.env.EMAIL_USER 
+        || 'no-reply@boothflow.local';
 
+    // --- Brevo API ---
     if (brevoApiKey) {
-        const apiInstance = new brevo.TransactionalEmailsApi();
-        apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, brevoApiKey);
+        try {
+            const apiInstance = new brevo.TransactionalEmailsApi();
+            apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, brevoApiKey);
 
-        const message = new brevo.SendSmtpEmail();
-        message.sender = { name: 'Boothflow', email: senderEmail };
-        message.to = [{ email: to }];
-        message.subject = subject;
-        message.htmlContent = html || `<p>${String(text).replace(/\n/g, '<br/>')}</p>`;
-        message.textContent = String(text);
+            const message = new brevo.SendSmtpEmail();
+            message.sender = { name: 'Boothflow', email: senderEmail };
+            message.to = [{ email: to }];
+            message.subject = subject;
+            message.htmlContent = html || `<p>${String(text).replace(/\n/g, '<br/>')}</p>`;
+            message.textContent = String(text);
 
-        await apiInstance.sendTransacEmail(message);
-        return { provider: 'brevo' };
-    }
-
-    const emailUser = process.env.EMAIL_USER;
-    const emailPass = process.env.EMAIL_PASS;
-    if (!emailUser || !emailPass) {
-        if (!process.env.EMAIL_HOST) {
-            throw new Error('Email service is not configured. Set BREVO_API_KEY or EMAIL_USER/EMAIL_PASS (or EMAIL_HOST/EMAIL_PORT/EMAIL_SECURE).');
+            await apiInstance.sendTransacEmail(message);
+            return { provider: 'brevo', status: 'sent' };
+        } catch (err) {
+            throw new Error(`Brevo email failed: ${err.message}`);
         }
     }
 
+    // --- SMTP fallback ---
+    const emailUser = process.env.EMAIL_USER;
+    const emailPass = process.env.EMAIL_PASS;
+    const emailHost = process.env.EMAIL_HOST;
+    const emailPort = process.env.EMAIL_PORT || 587;
+    const emailSecure = process.env.EMAIL_SECURE === 'true';
+
+    if (!emailUser || !emailPass || !emailHost) {
+        throw new Error('Email service is not fully configured. Set BREVO_API_KEY or EMAIL_USER/EMAIL_PASS/EMAIL_HOST.');
+    }
+
+    const transporter = nodemailer.createTransport({
+        host: emailHost,
+        port: emailPort,
+        secure: emailSecure,
+        auth: {
+            user: emailUser,
+            pass: emailPass,
+        },
+    });
+
     const info = await transporter.sendMail({
-        from: from || `"Boothflow" <${emailUser || senderEmail}>`,
+        from: from || `"Boothflow" <${senderEmail}>`,
         to,
         subject,
         text,
+        html: html || `<p>${String(text).replace(/\n/g, '<br/>')}</p>`,
     });
+
     if (info.rejected && info.rejected.length > 0) {
         throw new Error(`Email rejected for ${to}`);
     }
-    return info;
+
+    return { provider: 'smtp', status: 'sent', info };
 }
+
 
 // ── PERSONALISED EMAIL BUILDER ────────────────────────────────────────────────
 function buildFollowUpEmail(lead, aiData, interests) {
