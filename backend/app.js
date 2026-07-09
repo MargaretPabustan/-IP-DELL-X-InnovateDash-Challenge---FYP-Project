@@ -101,45 +101,16 @@ if (!process.env.GEMINI_API_KEY) {
 }
 
 // ── SEND EMAIL (Brevo HTTP API) ───────────────────────────────────────────────
-async function sendEmail({ to, subject, text }) {
-    console.log(`📧 sendEmail called — to: ${to}, subject: ${subject}`);
-    console.log(`📧 BREVO_API_KEY set: ${!!process.env.BREVO_API_KEY}`);
-    console.log(`📧 BREVO_SENDER_EMAIL set: ${!!process.env.BREVO_SENDER_EMAIL} (${process.env.BREVO_SENDER_EMAIL || 'NOT SET'})`);
+import { Resend } from 'resend';
 
-    if (!process.env.BREVO_API_KEY) throw new Error('BREVO_API_KEY is not set in environment');
-    if (!process.env.BREVO_SENDER_EMAIL) throw new Error('BREVO_SENDER_EMAIL is not set in environment');
+const resend = new Resend('re_Cb5iWuMR_FVaVywdnnZVKWEqBx2kri9gm');
 
-    const payload = {
-        sender: { name: 'Boothflow', email: process.env.BREVO_SENDER_EMAIL },
-        to: [{ email: to }],
-        subject,
-        textContent: text,
-    };
-
-    console.log(`📧 Sending payload: ${JSON.stringify(payload).substring(0, 200)}`);
-
-    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-        method: 'POST',
-        headers: {
-            'accept': 'application/json',
-            'api-key': process.env.BREVO_API_KEY,
-            'content-type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-    });
-
-    const responseText = await response.text();
-    console.log(`📧 Brevo status: ${response.status}`);
-    console.log(`📧 Brevo body: ${responseText}`);
-
-    if (!response.ok) {
-        throw new Error(`Brevo API error ${response.status}: ${responseText}`);
-    }
-
-    console.log(`✅ Email sent to ${to} via Brevo`);
-    return JSON.parse(responseText);
-}
-
+resend.emails.send({
+  from: 'onboarding@resend.dev',
+  to: '24022638@myrp.edu.sg',
+  subject: 'Hello World',
+  html: '<p>Congrats on sending your <strong>first email</strong>!</p>'
+});
 
 // ── PERSONALISED EMAIL BUILDER ────────────────────────────────────────────────
 function buildFollowUpEmail(lead, aiData, interests) {
