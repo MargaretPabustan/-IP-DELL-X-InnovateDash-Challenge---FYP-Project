@@ -210,18 +210,6 @@ export default function ManagerActivity() {
           <Text style={styles.headerTitle}>Activity Logs</Text>
           <Text style={styles.headerSub}>{visibleLogs.length} activities</Text>
         </View>
-
-        <View style={styles.headerActions}>
-          <TouchableOpacity onPress={() => fetchLogs(true)} style={styles.actionBtn}>
-            <Ionicons name="refresh-outline" size={20} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => toggleTheme && toggleTheme()} style={styles.actionBtn}>
-            <Ionicons name={theme.bg === '#020617' || theme.bg === '#0d0d1f' ? "sunny-outline" : "moon-outline"} size={20} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.profileBtn}>
-            <Ionicons name="person-circle" size={26} color="#fff" />
-          </TouchableOpacity>
-        </View>
       </View>
 
       {/* BODY */}

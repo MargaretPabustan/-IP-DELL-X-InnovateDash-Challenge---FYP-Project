@@ -142,7 +142,7 @@ export default function ManagerExport() {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* HEADER WITH MANAGER PANEL TEXT, REFRESH, THEME PICKER & PROFILE ICONS */}
+      {/* HEADER WITH MANAGER PANEL TEXT */}
       <View style={[styles.header, { backgroundColor: theme.navy, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
@@ -152,19 +152,6 @@ export default function ManagerExport() {
           <Text style={styles.headerPanelLabel}>MANAGER PANEL</Text>
           <Text style={styles.headerTitle}>Export Leads</Text>
           <Text style={styles.headerSub}>Download or preview team leads</Text>
-        </View>
-
-        {/* Action Controls Group from Dashboard */}
-        <View style={styles.headerActions}>
-          <TouchableOpacity onPress={handleRefreshData} style={styles.actionBtn}>
-            <Ionicons name="refresh-outline" size={20} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => toggleTheme && toggleTheme()} style={styles.actionBtn}>
-            <Ionicons name={theme.bg === '#020617' || theme.bg === '#0d0d1f' ? "sunny-outline" : "moon-outline"} size={20} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.profileBtn}>
-            <Ionicons name="person-circle" size={26} color="#fff" />
-          </TouchableOpacity>
         </View>
       </View>
 

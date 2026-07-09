@@ -150,9 +150,6 @@ export default function EmailsScreen() {
           <Text style={styles.logoSub}>MANAGER PANEL</Text>
           <Text style={styles.logo}>Email Follow-ups</Text>
         </View>
-        <TouchableOpacity onPress={onRefresh} style={styles.headerBtn}>
-          <Ionicons name="refresh-outline" size={20} color="#fff" />
-        </TouchableOpacity>
       </View>
 
       <ScrollView

@@ -212,7 +212,7 @@ export default function ManagerLeads() {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* HEADER WITH MANAGER PANEL, REFRESH, THEME, AND PROFILE CONTROLS */}
+      {/* HEADER WITH MANAGER PANEL CONTROLS */}
       <View style={[styles.header, { backgroundColor: theme.navy || '#0f172a', paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
@@ -222,18 +222,6 @@ export default function ManagerLeads() {
           <Text style={styles.headerPanelLabel}>MANAGER PANEL</Text>
           <Text style={styles.headerTitle}>Team Leads</Text>
           <Text style={styles.headerSub}>{filteredLeads.length} leads</Text>
-        </View>
-
-        <View style={styles.headerActions}>
-          <TouchableOpacity onPress={() => fetchLeads(true)} style={styles.actionBtn}>
-            <Ionicons name="refresh-outline" size={20} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => toggleTheme && toggleTheme()} style={styles.actionBtn}>
-            <Ionicons name={theme.bg === '#020617' || theme.bg === '#0d0d1f' ? "sunny-outline" : "moon-outline"} size={20} color="#fff" />
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.profileBtn}>
-            <Ionicons name="person-circle" size={26} color="#fff" />
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -446,5 +434,5 @@ const modal = StyleSheet.create({
   fieldLabel: { fontSize: 11, fontWeight: '700', color: '#999', textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 10, marginBottom: 3 },
   fieldValue: { fontSize: 13, fontWeight: '500', lineHeight: 20 },
   closeBtn: { borderRadius: 10, paddingVertical: 13, alignItems: 'center', marginTop: 16 },
-  closeBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  closeBtnText: { color: '#fff', fontSize: 14, fontWeight: '600' },
 });
