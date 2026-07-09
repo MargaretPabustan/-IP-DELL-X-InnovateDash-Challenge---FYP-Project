@@ -101,30 +101,26 @@ if (!process.env.GEMINI_API_KEY) {
 }
 
 // Pure fetch (sends correct body)
-await fetch('https://api.brevo.com/v3/smtp/email', {
-  method: 'POST',
-  headers: {
-    'api-key': process.env.BREVO_API_KEY,
-    'content-type': 'application/json',
-  },
-  body: JSON.stringify({
-    sender: { name: 'Boothflow', email: process.env.BREVO_SENDER_EMAIL },
-    to: [{ email: to }],
-    subject,
-    textContent: text,
-  }),
-});
+// BREVO: helper to send transactional emails via Brevo API
+async function sendEmail(to, subject, text) {
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+    method: 'POST',
+    headers: {
+      'api-key': process.env.BREVO_API_KEY,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sender: { name: 'Boothflow', email: process.env.BREVO_SENDER_EMAIL },
+      to: [{ email: to }],
+      subject,
+      textContent: text,
+    }),
+  });
 
-
-  try {
-    await apiInstance.sendTransacEmail(message);
-    return { provider: 'brevo', status: 'sent' };
-  } catch (err) {
-    console.error('Brevo SDK error:', err);
-    throw new Error(`Brevo email failed: ${err.message}`);
-  }
+  const data = await response.json();
+  console.log('Brevo response:', data);
+  return data;
 }
-
 
 
 // ── PERSONALISED EMAIL BUILDER ────────────────────────────────────────────────
