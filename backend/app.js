@@ -8,7 +8,6 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const ExcelJS = require('exceljs');
-const nodemailer = require('nodemailer');
 const brevo = require('@getbrevo/brevo');
 const RateLimit = require('express-rate-limit');
 const cron = require('node-cron');
@@ -101,91 +100,42 @@ if (!process.env.GEMINI_API_KEY) {
     console.warn('❌ GEMINI_API_KEY is missing from environment configuration');
 }
 
-// ── EMAIL TRANSPORTER ───────────────────────────────────────────────────────
-function createEmailTransporter() {
-    const emailHost = process.env.EMAIL_HOST;
-    const emailPort = Number(process.env.EMAIL_PORT || 587);
-    const emailSecure = process.env.EMAIL_SECURE === 'true' || process.env.EMAIL_SECURE === '1';
-    const emailUser = process.env.EMAIL_USER;
-    const emailPass = process.env.EMAIL_PASS;
-
-    if (emailHost) {
-        return nodemailer.createTransport({
-            host: emailHost,
-            port: Number.isFinite(emailPort) ? emailPort : 587,
-            secure: emailSecure,
-            auth: emailUser && emailPass ? { user: emailUser, pass: emailPass } : undefined,
-        });
-    }
-
-    return nodemailer.createTransport({
-        service: process.env.EMAIL_SERVICE || 'gmail',
-        auth: emailUser && emailPass ? { user: emailUser, pass: emailPass } : undefined,
-    });
-}
-
-const transporter = createEmailTransporter();
-
-// ── SEND EMAIL HELPER ─────────────────────────────────────────────────────────
-async function sendEmail({ to, subject, text, from, html }) {
+// ── SEND EMAIL HELPER (Brevo SDK) ────────────────────────────────────────────
+async function sendEmail({ to, subject, text }) {
     if (!to || !subject || !text) {
         throw new Error('Email recipient, subject, and message body are required.');
     }
 
-    const brevoApiKey = process.env.BREVO_API_KEY;
-    const senderEmail = process.env.BREVO_SENDER_EMAIL 
-        || process.env.EMAIL_FROM 
-        || process.env.EMAIL_USER 
-        || 'no-reply@boothflow.local';
+    console.log(`📧 Attempting to send email to: ${to}`);
+    console.log(`📧 BREVO_API_KEY configured: ${!!process.env.BREVO_API_KEY}`);
+    console.log(`📧 BREVO_SENDER_EMAIL configured: ${!!process.env.BREVO_SENDER_EMAIL}`);
 
-    // --- Brevo API ---
-    if (brevoApiKey) {
-        try {
-            const apiInstance = new brevo.TransactionalEmailsApi();
-            apiInstance.setApiKey(brevo.TransactionalEmailsApiApiKeys.apiKey, brevoApiKey);
+    try {
+        const defaultClient = brevo.ApiClient.instance;
+        const apiKey = defaultClient.authentications['api-key'];
+        apiKey.apiKey = process.env.BREVO_API_KEY;
 
-            const message = new brevo.SendSmtpEmail();
-            message.sender = { name: 'Boothflow', email: senderEmail };
-            message.to = [{ email: to }];
-            message.subject = subject;
-            message.htmlContent = html || `<p>${String(text).replace(/\n/g, '<br/>')}</p>`;
-            message.textContent = String(text);
+        const apiInstance = new brevo.TransactionalEmailsApi();
+        const sendSmtpEmail = new brevo.SendSmtpEmail();
 
-            await apiInstance.sendTransacEmail(message);
-            return { provider: 'brevo', status: 'sent' };
-        } catch (err) {
-            throw new Error(`Brevo email failed: ${err.message}`);
-        }
+        sendSmtpEmail.sender = {
+            name: 'Boothflow',
+            email: process.env.BREVO_SENDER_EMAIL,
+        };
+        sendSmtpEmail.to = [{ email: to }];
+        sendSmtpEmail.subject = subject;
+        sendSmtpEmail.textContent = text;
+        sendSmtpEmail.htmlContent = `<p>${String(text).replace(/\n/g, '<br/>')}</p>`;
+
+        const result = await apiInstance.sendTransacEmail(sendSmtpEmail);
+        console.log(`✅ Email sent to ${to} via Brevo SDK, messageId: ${result?.body?.messageId || 'N/A'}`);
+        return { success: true };
+    } catch (err) {
+        console.error(`❌ Brevo SDK error:`, err.message);
+        throw err;
     }
 
-    // --- SMTP fallback ---
-    const emailUser = process.env.EMAIL_USER;
-    const emailPass = process.env.EMAIL_PASS;
-    const emailHost = process.env.EMAIL_HOST;
-    const emailPort = process.env.EMAIL_PORT || 587;
-    const emailSecure = process.env.EMAIL_SECURE === 'true';
-
-    if (!emailUser || !emailPass || !emailHost) {
-        throw new Error('Email service is not fully configured. Set BREVO_API_KEY or EMAIL_USER/EMAIL_PASS/EMAIL_HOST.');
-    }
-
-    const transporter = nodemailer.createTransport({
-        host: emailHost,
-        port: emailPort,
-        secure: emailSecure,
-        auth: {
-            user: emailUser,
-            pass: emailPass,
-        },
-    });
-
-    const info = await transporter.sendMail({
-        from: from || `"Boothflow" <${senderEmail}>`,
-        to,
-        subject,
-        text,
-        html: html || `<p>${String(text).replace(/\n/g, '<br/>')}</p>`,
-    });
+    const info = { rejected: [] };
 
     if (info.rejected && info.rejected.length > 0) {
         throw new Error(`Email rejected for ${to}`);
