@@ -101,7 +101,6 @@ if (!process.env.GEMINI_API_KEY) {
 }
 
 // ── SEND EMAIL HELPER (Brevo SDK) ────────────────────────────────────────────
-const brevo = require('@getbrevo/brevo');
 
 async function sendEmail({ to, subject, text, from, html }) {
   const brevoApiKey = process.env.BREVO_API_KEY;
