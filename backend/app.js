@@ -102,7 +102,7 @@ if (!process.env.GEMINI_API_KEY) {
 
 // Pure fetch (sends correct body)
 // BREVO: helper to send transactional emails via Brevo API
-async function sendEmail(to, subject, text) {
+async function sendEmail({ to, subject, text }) {
   const response = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
     headers: {
