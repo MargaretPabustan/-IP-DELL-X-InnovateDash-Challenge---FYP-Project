@@ -100,26 +100,44 @@ if (!process.env.GEMINI_API_KEY) {
     console.warn('❌ GEMINI_API_KEY is missing from environment configuration');
 }
 
-// Pure fetch (sends correct body)
-// BREVO: helper to send transactional emails via Brevo API
+// ── SEND EMAIL (Brevo HTTP API) ───────────────────────────────────────────────
 async function sendEmail({ to, subject, text }) {
-  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-    method: 'POST',
-    headers: {
-      'api-key': process.env.BREVO_API_KEY,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      sender: { name: 'Boothflow', email: process.env.BREVO_SENDER_EMAIL },
-      to: [{ email: to }],
-      subject,
-      textContent: text,
-    }),
-  });
+    console.log(`📧 sendEmail called — to: ${to}, subject: ${subject}`);
+    console.log(`📧 BREVO_API_KEY set: ${!!process.env.BREVO_API_KEY}`);
+    console.log(`📧 BREVO_SENDER_EMAIL set: ${!!process.env.BREVO_SENDER_EMAIL} (${process.env.BREVO_SENDER_EMAIL || 'NOT SET'})`);
 
-  const data = await response.json();
-  console.log('Brevo response:', data);
-  return data;
+    if (!process.env.BREVO_API_KEY) throw new Error('BREVO_API_KEY is not set in environment');
+    if (!process.env.BREVO_SENDER_EMAIL) throw new Error('BREVO_SENDER_EMAIL is not set in environment');
+
+    const payload = {
+        sender: { name: 'Boothflow', email: process.env.BREVO_SENDER_EMAIL },
+        to: [{ email: to }],
+        subject,
+        textContent: text,
+    };
+
+    console.log(`📧 Sending payload: ${JSON.stringify(payload).substring(0, 200)}`);
+
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+            'accept': 'application/json',
+            'api-key': process.env.BREVO_API_KEY,
+            'content-type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+    });
+
+    const responseText = await response.text();
+    console.log(`📧 Brevo status: ${response.status}`);
+    console.log(`📧 Brevo body: ${responseText}`);
+
+    if (!response.ok) {
+        throw new Error(`Brevo API error ${response.status}: ${responseText}`);
+    }
+
+    console.log(`✅ Email sent to ${to} via Brevo`);
+    return JSON.parse(responseText);
 }
 
 
