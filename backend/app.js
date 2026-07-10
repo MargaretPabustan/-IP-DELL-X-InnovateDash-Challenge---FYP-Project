@@ -647,7 +647,7 @@ app.post('/manager/followup/cancel', authenticateToken, authorizeRoles('admin', 
 // 3. PUT FOLLOW-UP STATUS: Update status and gracefully resolve duplicate records
 app.put('/manager/followup/:leadId', authenticateToken, async (req, res) => {
     const leadId = req.params.leadId; 
-    const { followup_status, followup_action, notes } = req.body; // Expects 'pending', 'done', or 'cancelled'
+    const { followup_status, followup_action, notes } = req.body; 
 
     if (!leadId) {
         return res.status(400).json({ success: false, message: 'Missing lead identifier parameter.' });
@@ -656,21 +656,32 @@ app.put('/manager/followup/:leadId', authenticateToken, async (req, res) => {
     try {
         await pool.query('BEGIN');
 
-        // FIXED UPSERT: Uses the targeted (lead_id) constraint and dynamically checks for payload action updates
         const actionLabel = followup_action || `Status Updated to ${followup_status}`;
         
+        // Safe Upsert: Updates status tracking without wiping out scheduled email parameters
         await pool.query(
-            `INSERT INTO lead_followups (lead_id, followup_action, followup_status, notes, created_at, updated_at)
-             VALUES ($1, $2, $3, $4, NOW(), NOW())
+            `INSERT INTO lead_followups (
+                lead_id, 
+                followup_action, 
+                followup_status, 
+                notes, 
+                created_at, 
+                updated_at
+             ) VALUES ($1, $2, $3, $4, NOW(), NOW())
              ON CONFLICT (lead_id) DO UPDATE SET
-               followup_status = EXCLUDED.followup_status,
-               followup_action = COALESCE(EXCLUDED.followup_action, lead_followups.followup_action),
-               notes = COALESCE(EXCLUDED.notes, lead_followups.notes),
-               updated_at = NOW()`,
+                followup_status = EXCLUDED.followup_status,
+                followup_action = COALESCE(EXCLUDED.followup_action, lead_followups.followup_action),
+                notes = COALESCE(EXCLUDED.notes, lead_followups.notes),
+                -- Keep existing email configurations intact if they exist
+                email_subject = lead_followups.email_subject,
+                scheduled_at = lead_followups.scheduled_at,
+                sent_at = lead_followups.sent_at,
+                due_date = COALESCE(lead_followups.due_date, CURRENT_DATE),
+                updated_at = NOW()`,
             [leadId, actionLabel, followup_status, notes || null]
         );
 
-        // Record trace inside historical log table
+        // Record historical log event tracking trace
         await pool.query(
             `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description, created_at)
              VALUES ($1, 'STATUS_CHANGED', $2, NOW())`,
@@ -948,101 +959,87 @@ Return ONLY valid JSON in this exact format, no extra text:
 
 // ── GENERIC EMAIL SENDING ROUTE ─────────────────────────────────────────────
 // ── GENERIC EMAIL SENDING ROUTE ─────────────────────────────────────────────
-app.post('/send-email', authenticateToken, authorizeRoles('admin', 'manager'), async (req, res) => {
-    const { to, subject, text, lead_id, followupDate } = req.body || {};
+app.post('/send-email', authenticateToken, async (req, res) => {
+    const { to, subject, text, lead_id, followupDate } = req.body;
 
-    if (!to || !subject || !text) {
-        return res.status(400).json({ success: false, message: 'Recipient, subject, and text are required.' });
+    if (!lead_id) {
+        return res.status(400).json({ success: false, message: 'Missing lead identification parameter.' });
     }
 
     try {
-        let finalSubject = subject;
-        let finalBody = text;
+        await pool.query('BEGIN');
 
-        if (lead_id) {
-            const leadIdParsed = parseInt(lead_id, 10);
-            
-            // Query state to prevent any duplicate followup records matching schema constraints
-            const existing = await pool.query(
-                `SELECT followup_status FROM lead_followups WHERE lead_id = $1`,
-                [leadIdParsed]
-            );
-            
-            if (existing.rowCount > 0 && existing.rows[0].followup_status !== 'cancelled') {
-                return res.status(409).json({ success: false, message: 'Error - No duplicate followups' });
-            }
+        // 1. Check if an actual scheduled email with this subject already exists for this lead
+        const activeEmailCheck = await pool.query(
+            `SELECT * FROM lead_followups 
+             WHERE lead_id = $1 
+               AND followup_status = 'pending' 
+               AND email_subject = $2`, 
+            [lead_id, subject]
+        );
 
-            // Extract accurate categories linked from relational intermediate tables
-            const interestsResult = await pool.query(
-                `SELECT ic.category_name FROM lead_interest_categories lic
-                 JOIN interest_categories ic ON lic.category_id = ic.category_id 
-                 WHERE lic.lead_id = $1`,
-                [leadIdParsed]
-            );
-            
-            const categoriesString = interestsResult.rows.map(r => r.category_name).join(', ');
-            const interests = categoriesString || 'Dell Technologies solutions';
-
-            const leadResult = await pool.query('SELECT * FROM leads WHERE lead_id = $1', [leadIdParsed]);
-            if (leadResult.rows.length > 0) {
-                const lead = leadResult.rows[0];
-                const aiData = {
-                    intent: lead.status === 'URGENT' ? 'High' : lead.status === 'FOLLOW-UP' ? 'Medium' : 'Low',
-                    notes: lead.ai_notes || 'Thank you for visiting our booth.',
-                };
-
-                if (typeof buildFollowUpEmail === 'function') {
-                    finalBody = buildFollowUpEmail(lead, aiData, interests);
-                }
-                finalSubject = `Your Dell Technologies Follow-up — ${interests}`;
-            }
+        if (activeEmailCheck.rowCount > 0) {
+            await pool.query('ROLLBACK');
+            return res.status(409).json({ success: false, message: 'Error - No duplicate followups' });
         }
 
-        // Trigger external provider transmission pipeline
-        await sendEmail({ to, subject: finalSubject, text: finalBody });
+        // 2. Clear out any unassigned status placeholder loops for this lead 
+        // to prevent false-positives caused by status updates.
+        await pool.query(
+            `DELETE FROM lead_followups 
+             WHERE lead_id = $1 
+               AND followup_status = 'pending' 
+               AND email_subject IS NULL`,
+            [lead_id]
+        );
 
-        if (lead_id) {
-            const leadIdParsed = parseInt(lead_id, 10);
-            const scheduledAt = followupDate || new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString();
-            const dateObj = new Date(scheduledAt);
-            const localDueDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+        // 3. Perform a clean upsert into the tracking schema layout
+        const dateString = followupDate ? followupDate.split('T')[0] : new Date().toISOString().split('T')[0];
+        
+        await pool.query(
+            `INSERT INTO lead_followups (
+                lead_id, 
+                followup_action, 
+                followup_status, 
+                due_date, 
+                scheduled_at, 
+                email_subject, 
+                notes, 
+                created_at, 
+                updated_at
+             ) VALUES ($1, $2, 'pending', $3, $4, $5, $6, NOW(), NOW())
+             ON CONFLICT (lead_id) DO UPDATE SET
+                followup_action = EXCLUDED.followup_action,
+                followup_status = EXCLUDED.followup_status,
+                due_date = EXCLUDED.due_date,
+                scheduled_at = EXCLUDED.scheduled_at,
+                email_subject = EXCLUDED.email_subject,
+                notes = EXCLUDED.notes,
+                updated_at = NOW()`,
+            [
+                lead_id,
+                'Email Follow-up Scheduled',
+                dateString,
+                followupDate,
+                subject,
+                text
+            ]
+        );
 
-            await pool.query('BEGIN');
+        // 4. Record history trace log point tracking event
+        await pool.query(
+            `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description, created_at)
+             VALUES ($1, 'EMAIL_SCHEDULED', $2, NOW())`,
+            [lead_id, `Follow-up email scheduled to be sent to ${to}`]
+        );
 
-            // Persist information inside lead_followups matching ERD layout requirements
-            await pool.query(
-                `INSERT INTO lead_followups (
-                    lead_id, followup_action, followup_status, due_date, 
-                    scheduled_at, sent_at, email_subject, notes, created_at, updated_at
-                 )
-                 VALUES ($1, 'Manual Follow-up Email', 'done', $2, $3, NOW(), $4, $5, NOW(), NOW())
-                 ON CONFLICT (lead_id) DO UPDATE SET
-                   followup_action = EXCLUDED.followup_action,
-                   followup_status = 'done',
-                   due_date = EXCLUDED.due_date,
-                   scheduled_at = EXCLUDED.scheduled_at,
-                   sent_at = NOW(),
-                   email_subject = EXCLUDED.email_subject,
-                   notes = EXCLUDED.notes,
-                   updated_at = NOW()`,
-                [leadIdParsed, localDueDate, scheduledAt, finalSubject, finalBody]
-            );
+        await pool.query('COMMIT');
+        res.json({ success: true, message: 'Follow-up email scheduled successfully.' });
 
-            // Log entity state interaction timeline update
-            await pool.query(
-                `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description, created_at) 
-                 VALUES ($1, 'EMAIL_SENT', $2, NOW())`,
-                [leadIdParsed, `Manual follow-up email sent from the app dashboard.`]
-            );
-
-            await pool.query('COMMIT');
-        }
-
-        res.json({ success: true, message: 'Email sent successfully.' });
     } catch (err) {
         await pool.query('ROLLBACK').catch(() => {});
-        console.error('Email delivery error:', err);
-        res.status(500).json({ success: false, message: `Email delivery failed: ${err.message}` });
+        console.error('Error in send-email endpoint:', err);
+        res.status(500).json({ success: false, message: 'Server error processing email scheduling.' });
     }
 });
 
