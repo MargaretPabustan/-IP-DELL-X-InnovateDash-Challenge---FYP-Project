@@ -211,6 +211,9 @@ function buildFollowUpEmailHtml(lead, aiData, interests) {
 </body>
 </html>`;
 }
+
+// ── PLAIN TEXT EMAIL BUILDER ──────────────────────────────────────────────────
+function buildFollowUpEmail(lead, aiData, interests) {
     let body = `Hi ${lead.name},\n\n`;
     body += `Thank you for visiting the Dell Technologies booth at the Dell Technologies Forum Singapore. It was great connecting with you!\n\n`;
 
@@ -252,7 +255,7 @@ function buildFollowUpEmailHtml(lead, aiData, interests) {
     body += `forum.dell.com/singapore`;
 
     return body;
-
+}
 
 // ── INTEREST → TEAM MAPPING ───────────────────────────────────────────────────
 const INTEREST_TEAM_MAP = {
