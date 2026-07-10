@@ -8,9 +8,10 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const ExcelJS = require('exceljs');
-const brevo = require('@getbrevo/brevo');
 const RateLimit = require('express-rate-limit');
 const cron = require('node-cron');
+const { Resend } = require('resend');
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 const app = express();
 const allowedOrigins = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : [];
@@ -100,17 +101,30 @@ if (!process.env.GEMINI_API_KEY) {
     console.warn('❌ GEMINI_API_KEY is missing from environment configuration');
 }
 
-// ── SEND EMAIL (Brevo HTTP API) ───────────────────────────────────────────────
-import { Resend } from 'resend';
+// ── SEND EMAIL (Resend) ──────────────────────────────────────────────────────
+async function sendEmail({ to, subject, text }) {
+    console.log(`📧 sendEmail called — to: ${to}`);
+    console.log(`📧 RESEND_API_KEY set: ${!!process.env.RESEND_API_KEY}`);
+    console.log(`📧 RESEND_FROM_EMAIL set: ${!!process.env.RESEND_FROM_EMAIL} (${process.env.RESEND_FROM_EMAIL || 'NOT SET'})`);
 
-const resend = new Resend('re_Cb5iWuMR_FVaVywdnnZVKWEqBx2kri9gm');
+    if (!process.env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not set');
+    if (!process.env.RESEND_FROM_EMAIL) throw new Error('RESEND_FROM_EMAIL is not set');
 
-resend.emails.send({
-  from: 'onboarding@resend.dev',
-  to: '24022638@myrp.edu.sg',
-  subject: 'Hello World',
-  html: '<p>Congrats on sending your <strong>first email</strong>!</p>'
-});
+    try {
+        const result = await resend.emails.send({
+            from: `Boothflow <${process.env.RESEND_FROM_EMAIL}>`,
+            to,
+            subject,
+            text,
+        });
+        console.log(`✅ Email sent to ${to} via Resend, id: ${result?.data?.id || 'N/A'}`);
+        if (result.error) throw new Error(result.error.message);
+        return result;
+    } catch (err) {
+        console.error(`❌ Resend error:`, err.message);
+        throw err;
+    }
+}
 
 // ── PERSONALISED EMAIL BUILDER ────────────────────────────────────────────────
 function buildFollowUpEmail(lead, aiData, interests) {
