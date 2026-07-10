@@ -917,7 +917,7 @@ Return ONLY valid JSON in this exact format, no extra text:
         try {
             await pool.query(
                 `INSERT INTO lead_followups (lead_id, followup_action, followup_status, due_date, scheduled_at, email_subject, notes)
-                 VALUES ($1, 'Automated Follow-up Email', 'pending', NOW() + INTERVAL '3 hours', NOW() + INTERVAL '3 hours', $2, $3)
+                 VALUES ($1, 'Automated Follow-up Email', 'pending', NOW() + INTERVAL '3 minutes', NOW() + INTERVAL '3 minutes', $2, $3)
                  ON CONFLICT (lead_id) DO NOTHING`,
                 [lead.lead_id, `Your Dell Technologies Follow-up — ${interests}`, buildFollowUpEmail(lead, aiData, interests)]
             );
@@ -1067,13 +1067,13 @@ app.post('/send-followup/:id', authenticateToken, async (req, res) => {
         }
         const lead = leadResult.rows[0];
 
-        // 2. State machine protection validation on lead_followups
+        // 2. State machine protection — block only if already sent (done), allow overwrite of pending
         const existing = await pool.query(
             `SELECT followup_status FROM lead_followups WHERE lead_id = $1`,
             [leadId]
         );
-        if (existing.rowCount > 0 && existing.rows[0].followup_status !== 'cancelled') {
-            return res.status(409).json({ success: false, message: 'Cannot perform more than one active follow-up execution structure for this lead context.' });
+        if (existing.rowCount > 0 && existing.rows[0].followup_status === 'done') {
+            return res.status(409).json({ success: false, message: 'A follow-up email has already been sent for this lead.' });
         }
 
         // 3. Extract mapped contextual identities from joining tables (Double checked with ERD)
