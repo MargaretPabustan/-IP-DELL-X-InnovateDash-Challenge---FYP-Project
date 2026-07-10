@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import {
   View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
   StatusBar, Platform, ActivityIndicator, RefreshControl, 
@@ -29,7 +30,7 @@ async function getAuthHeaders() {
 }
 
 export default function ManagerActivity() {
-  const router = useRouter();
+  const router    = useRouter();
   const { theme, toggleTheme } = useAppTheme() as any;
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -38,7 +39,7 @@ export default function ManagerActivity() {
   const tabs = [
     { key: 'Dashboard', icon: 'grid',     iconOff: 'grid-outline',     route: '/manager/dashboard' },
     { key: 'Leads',     icon: 'people',   iconOff: 'people-outline',   route: '/manager/leads' },
-    { key: 'Activity',  icon: 'pulse',    iconOff: 'pulse-outline',    route: null },
+    { key: 'Activity',  icon: 'pulse',    iconOff: 'pulse-outline',    route: '/manager/activity' },
     { key: 'Emails',    icon: 'mail',     iconOff: 'mail-outline',     route: '/manager/emails' },
     { key: 'Export',    icon: 'download', iconOff: 'download-outline', route: '/manager/export' },
   ];
@@ -62,7 +63,7 @@ export default function ManagerActivity() {
       uniqueMap.set(uniqueKey, log);
     });
     if (duplicateDetected) {
-      console.warn("Database Data Integrity Warning: Duplicate records automatically handled.");
+      console.warn("Database Data Integrity Warning: Duplicate records identified and merged.");
     }
     return Array.from(uniqueMap.values());
   };
@@ -89,7 +90,11 @@ export default function ManagerActivity() {
     }
   }, []);
 
-  useEffect(() => { fetchLogs(); }, [fetchLogs]);
+  useFocusEffect(
+    useCallback(() => {
+      fetchLogs(true);
+    }, [fetchLogs])
+  );
 
   const handleCancelFollowup = async (log: ActivityLog) => {
     Alert.alert(
@@ -193,6 +198,7 @@ export default function ManagerActivity() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
+        
         <View style={{ flex: 1 }}>
           <Text style={styles.headerPanelLabel}>MANAGER PANEL</Text>
           <Text style={styles.headerTitle}>Activity Logs</Text>
@@ -221,7 +227,11 @@ export default function ManagerActivity() {
           contentContainerStyle={[styles.content, { paddingBottom: 24 }]}
           showsVerticalScrollIndicator={false}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={() => fetchLogs(true)} tintColor={theme.navy} />
+            <RefreshControl 
+              refreshing={refreshing} 
+              onRefresh={() => fetchLogs(true)} 
+              tintColor={theme.navy} 
+            />
           }
           ListEmptyComponent={
             <View style={styles.centered}>
@@ -239,7 +249,7 @@ export default function ManagerActivity() {
             <TouchableOpacity
               key={tab.key}
               style={styles.navItem}
-              onPress={() => { if (tab.route && !isActive) router.replace(tab.route as any); }}
+              onPress={() => { if (!isActive) router.replace(tab.route as any); }}
             >
               <Ionicons name={isActive ? tab.icon as any : tab.iconOff as any} size={24} color={isActive ? theme.accent : theme.subText} />
               <Text style={[styles.navLabel, { color: isActive ? theme.accent : theme.subText }]}>{tab.key}</Text>
@@ -272,7 +282,7 @@ const styles = StyleSheet.create({
   activityTime: { fontSize: 11, marginTop: 4 },
   cancelBtn: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4, backgroundColor: '#ef444412', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, marginTop: 10, borderWidth: 1, borderColor: '#ef444425' },
   cancelBtnText: { color: '#ef4444', fontSize: 11, fontWeight: '700' },
-  bottomNav: { flexDirection: 'row', borderTopWidth: 1, paddingTop: 10, paddingHorizontal: 24, justifyContent: 'space-around', alignItems: 'center' },
-  navItem: { flex: 1, alignItems: 'center', gap: 2 },
-  navLabel: { fontSize: 10, fontWeight: '600', marginTop: 4 },
+  bottomNav: { flexDirection: 'row', borderTopWidth: 1, paddingTop: 10, justifyContent: 'space-around', alignItems: 'center' },
+  navItem: { alignItems: 'center', justifyContent: 'center', flex: 1 },
+  navLabel: { fontSize: 11, marginTop: 4, fontWeight: '500' },
 });
