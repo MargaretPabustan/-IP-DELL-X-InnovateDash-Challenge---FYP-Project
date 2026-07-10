@@ -111,13 +111,15 @@ async function sendEmail({ to, subject, text, html }) {
 
     try {
         const resend = new Resend(process.env.RESEND_API_KEY);
-        const result = await resend.emails.send({
+        const payload = {
             from: `Boothflow <${process.env.RESEND_FROM_EMAIL}>`,
             to,
             subject,
             text,
-            ...(html ? { html } : {}),
-        });
+        };
+        if (html) payload.html = html;
+        console.log(`📧 Sending with HTML: ${!!html}`);
+        const result = await resend.emails.send(payload);
         console.log(`✅ Email sent to ${to} via Resend, id: ${result?.data?.id || 'N/A'}`);
         if (result.error) throw new Error(result.error.message);
         return result;
