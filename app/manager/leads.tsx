@@ -49,6 +49,15 @@ function formatDate(iso: string) {
 const FILTERS = ['ALL', 'NEW', 'FOLLOW-UP', 'URGENT', 'CLOSED'];
 const STATUS_OPTIONS = ['pending', 'done', 'cancelled'];
 
+// Standardized Manager Tabs
+const TABS = [
+  { id: 'dashboard', label: 'Dashboard', icon: 'grid-outline', route: '/manager/dashboard' },
+  { id: 'leads', label: 'Leads', icon: 'people', route: '/manager/leads' },
+  { id: 'activity', label: 'Activity', icon: 'pulse-outline', route: '/manager/activity' },
+  { id: 'emails', label: 'Emails', icon: 'mail-outline', route: '/manager/emails' },
+  { id: 'export', label: 'Export', icon: 'download-outline', route: '/manager/export' },
+];
+
 type Lead = {
   lead_id: number;
   name: string;
@@ -220,6 +229,8 @@ export default function ManagerLeads() {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      
+      {/* Unified Header Layout */}
       <View style={[styles.header, { backgroundColor: theme.navy || '#0f172a', paddingTop: headerPaddingTop }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
@@ -231,6 +242,7 @@ export default function ManagerLeads() {
         </View>
       </View>
 
+      {/* Main Content Area */}
       <View style={{ flex: 1 }}>
         {loading ? (
           <View style={styles.centered}><ActivityIndicator size="large" color={theme.navy || '#0f172a'} /></View>
@@ -259,6 +271,8 @@ export default function ManagerLeads() {
                     </TouchableOpacity>
                   )}
                 </View>
+                
+                {/* Horizontal Segment Filter Category Row */}
                 <View style={[styles.filterRow, { backgroundColor: theme.card }]}>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 10 }}>
                     {FILTERS.map(f => (
@@ -336,6 +350,7 @@ export default function ManagerLeads() {
         )}
       </View>
 
+      {/* Action Sheet Status Picker Modal */}
       {statusPickerVisible && (
         <Modal transparent animationType="fade" visible={statusPickerVisible}>
           <Pressable style={styles.backdropOverlay} onPress={() => setStatusPickerVisible(false)}>
@@ -358,35 +373,30 @@ export default function ManagerLeads() {
         </Modal>
       )}
 
+      {/* Inspect Target Details Sheet */}
       {viewingLead && (
         <ViewModal lead={viewingLead} theme={theme} onClose={() => setViewingLead(null)} />
       )}
 
-      <View style={[styles.bottomNav, { backgroundColor: theme.navBg }]}>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.replace('/manager/dashboard' as any)}>
-          <Ionicons name="grid-outline" size={22} color={theme.subText} />
-          <Text style={[styles.navLabel, { color: theme.subText }]}>Dashboard</Text>
-        </TouchableOpacity>
+      {/* Standardized Bottom Navigation Bar */}
+      <View style={[styles.bottomNav, { backgroundColor: theme.navBg || theme.card }]}>
+        {TABS.map((tab) => {
+          const isActive = tab.id === 'leads';
+          const activeColor = theme.accent || '#6366f1';
+          const inactiveColor = theme.subText || '#94a3b8';
+          const currentTabColor = isActive ? activeColor : inactiveColor;
 
-        <TouchableOpacity style={styles.navItem}>
-          <Ionicons name="people" size={22} color={theme.accent} />
-          <Text style={[styles.navLabel, { color: theme.accent }]}>Leads</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navItem} onPress={() => router.replace('/manager/activity' as any)}>
-          <Ionicons name="pulse-outline" size={22} color={theme.subText} />
-          <Text style={[styles.navLabel, { color: theme.subText }]}>Activity</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navItem} onPress={() => router.replace('/manager/emails' as any)}>
-          <Ionicons name="mail-outline" size={22} color={theme.subText} />
-          <Text style={[styles.navLabel, { color: theme.subText }]}>Emails</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.navItem} onPress={() => router.replace('/manager/export' as any)}>
-          <Ionicons name="download-outline" size={22} color={theme.subText} />
-          <Text style={[styles.navLabel, { color: theme.subText }]}>Export</Text>
-        </TouchableOpacity>
+          return (
+            <TouchableOpacity 
+              key={tab.id}
+              style={styles.navItem} 
+              onPress={() => !isActive && router.replace(tab.route as any)}
+            >
+              <Ionicons name={tab.icon as any} size={22} color={currentTabColor} />
+              <Text style={[styles.navLabel, { color: currentTabColor }]}>{tab.label}</Text>
+            </TouchableOpacity>
+          );
+        })}
       </View>
     </SafeAreaView>
   );
@@ -397,7 +407,7 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 16, paddingBottom: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
   backBtn: { padding: 4 },
   headerPanelLabel: { color: 'rgba(255,255,255,0.45)', fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginBottom: 1 },
-  headerTitle: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700' }, // Standardized to 18 to align perfectly with siblings
   headerSub: { color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 1 },
   searchContainer: { flexDirection: 'row', alignItems: 'center', borderRadius: 10, paddingHorizontal: 12, height: 44, marginVertical: 8, borderWidth: 1, borderColor: '#e2e8f0' },
   searchIcon: { marginRight: 8 },
