@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ScrollView,
   ActivityIndicator, RefreshControl, TouchableOpacity,
-  Platform, StatusBar, Alert
+  Platform, StatusBar, Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -34,7 +34,7 @@ function getStatusColor(status: string) {
 
 export default function EmailsScreen() {
   const router = useRouter();
-  const { theme } = useAppTheme() as any;
+  const { theme, toggleTheme } = useAppTheme() as any;
   const isMounted = useRef(true);
 
   const [loading,      setLoading]      = useState(true);
@@ -47,6 +47,14 @@ export default function EmailsScreen() {
   const [showPicker,   setShowPicker]   = useState(false);
   const [metrics,      setMetrics]      = useState({ sentCount: 0, sentThisWeek: 0, overdue: 0 });
   const [scheduling,   setScheduling]   = useState(false);
+
+  const tabs = [
+    { key: 'Dashboard', icon: 'grid',     iconOff: 'grid-outline',     route: '/manager/dashboard' },
+    { key: 'Leads',     icon: 'people',   iconOff: 'people-outline',   route: '/manager/leads' },
+    { key: 'Activity',  icon: 'pulse',    iconOff: 'pulse-outline',    route: '/manager/activity' },
+    { key: 'Emails',    icon: 'mail',     iconOff: 'mail-outline',     route: null },
+    { key: 'Export',    icon: 'download', iconOff: 'download-outline', route: '/manager/export' },
+  ];
 
   const fetchLeads = useCallback(async () => {
     try {
@@ -81,44 +89,31 @@ export default function EmailsScreen() {
   const onRefresh = () => { setRefreshing(true); fetchLeads(); };
 
   const sendFollowup = async () => {
-    if (!selectedLead) { Alert.alert('No Lead', 'Please select a lead first.'); return; }
-
+    if (!selectedLead) return;
     const scheduledDate = new Date(
-      followupDate.getFullYear(),
-      followupDate.getMonth(),
-      followupDate.getDate(),
-      followupTime.getHours(),
-      followupTime.getMinutes(),
-      0,
-      0
+      followupDate.getFullYear(), followupDate.getMonth(), followupDate.getDate(),
+      followupTime.getHours(), followupTime.getMinutes(), 0, 0
     );
     setScheduling(true);
     try {
       const headers = await getAuthHeaders();
       const response = await fetch(`${BACKEND_URL}/send-email`, {
-        method: 'POST', 
-        headers,
+        method: 'POST', headers,
         body: JSON.stringify({
           to: selectedLead.email,
           subject: 'Your Dell Technologies Follow-up',
-          text: `Hello ${selectedLead.name},\n\nThank you for visiting our booth. We would love to continue the conversation about Dell solutions and help with your requirements.\n\nBest regards,\nDell Boothflow Team`,
+          text: `Hello ${selectedLead.name},`,
           lead_id: selectedLead.lead_id,
           followupDate: scheduledDate.toISOString(),
         }),
       });
-
-      if (response.status === 409) {
-        Alert.alert('Error', 'Error - No duplicate followups');
-        return;
-      }
-
       const data = await response.json();
       if (response.ok && data.success) {
-        Alert.alert('✅ Scheduled', `Follow-up email for ${selectedLead.name} has been scheduled.`);
+        Alert.alert('✅ Scheduled', `Follow-up email for ${selectedLead.name} configured.`);
         setSelectedLead(null);
         fetchLeads();
       } else {
-        Alert.alert('Error', data.message || 'Failed to schedule follow-up.');
+        Alert.alert('Error', data.message || 'Failed to schedule.');
       }
     } catch {
       Alert.alert('Error', 'Unable to connect to server.');
@@ -126,14 +121,6 @@ export default function EmailsScreen() {
       setScheduling(false);
     }
   };
-
-  const tabs = [
-    { key: 'Dashboard', icon: 'grid',     iconOff: 'grid-outline',     route: '/manager/dashboard' },
-    { key: 'Leads',     icon: 'people',   iconOff: 'people-outline',   route: '/manager/leads' },
-    { key: 'Activity',  icon: 'pulse',    iconOff: 'pulse-outline',    route: '/manager/activity' },
-    { key: 'Emails',    icon: 'mail',     iconOff: 'mail-outline',     route: null },
-    { key: 'Export',    icon: 'download', iconOff: 'download-outline', route: '/manager/export' },
-  ];
 
   if (loading) {
     return (
@@ -146,15 +133,18 @@ export default function EmailsScreen() {
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: theme.bg }}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
-
-      {/* HEADER */}
-      <View style={[styles.header, { backgroundColor: theme.navy, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 16 }]}>
-        <TouchableOpacity onPress={() => router.replace('/manager/dashboard' as any)} style={styles.backBtn}>
+      <View style={[styles.header, { backgroundColor: theme.navy, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12 }]}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.logoSub}>MANAGER PANEL</Text>
-          <Text style={styles.logo}>Email Follow-ups</Text>
+          <Text style={styles.headerPanelLabel}>MANAGER PANEL</Text>
+          <Text style={styles.headerTitle}>Email Follow-ups</Text>
+        </View>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={() => toggleTheme && toggleTheme()} style={styles.actionBtn}>
+            <Ionicons name={theme.bg === '#020617' || theme.bg === '#0d0d1f' ? "sunny-outline" : "moon-outline"} size={20} color="#fff" />
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -163,7 +153,6 @@ export default function EmailsScreen() {
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.navy} />}
       >
-        {/* KPI Cards */}
         <View style={styles.metricsRow}>
           <View style={[styles.metricCard, { backgroundColor: theme.card }]}>
             <View style={[styles.metricIcon, { backgroundColor: '#3b82f618' }]}>
@@ -188,16 +177,13 @@ export default function EmailsScreen() {
           </View>
         </View>
 
-        {/* Select Lead */}
         <View style={[styles.section, { backgroundColor: theme.card }]}>
           <View style={styles.sectionHeader}>
             <Ionicons name="person-outline" size={16} color={theme.navy} />
             <Text style={[styles.sectionTitle, { color: theme.text }]}>Select Lead</Text>
           </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingVertical: 4 }}>
-            {leads.length === 0 ? (
-              <Text style={{ color: theme.subText, fontSize: 13 }}>No leads found</Text>
-            ) : leads.map(lead => (
+            {leads.map(lead => (
               <TouchableOpacity
                 key={lead.lead_id}
                 onPress={() => setSelectedLead(lead)}
@@ -212,7 +198,6 @@ export default function EmailsScreen() {
               </TouchableOpacity>
             ))}
           </ScrollView>
-
           {selectedLead && (
             <View style={[styles.leadInfo, { backgroundColor: theme.bg }]}>
               <View style={styles.leadInfoRow}>
@@ -236,17 +221,12 @@ export default function EmailsScreen() {
           )}
         </View>
 
-        {/* Date & Time Section */}
         <View style={[styles.section, { backgroundColor: theme.card }]}>
           <View style={styles.sectionHeader}>
             <Ionicons name="time-outline" size={16} color={theme.navy} />
-            <Text style={[styles.sectionTitle, { color: theme.text }]}>Schedule</Text>
+            <Text style={[styles.sectionTitle, { color: theme.text }]}>Schedule Parameters</Text>
           </View>
-
-          <TouchableOpacity
-            onPress={() => { setPickerMode('date'); setShowPicker(true); }}
-            style={styles.pickerRow}
-          >
+          <TouchableOpacity onPress={() => { setPickerMode('date'); setShowPicker(true); }} style={styles.pickerRow}>
             <View style={[styles.pickerIconBox, { backgroundColor: theme.navy + '15' }]}>
               <Ionicons name="calendar-outline" size={18} color={theme.navy} />
             </View>
@@ -256,13 +236,8 @@ export default function EmailsScreen() {
             </View>
             <Ionicons name="chevron-forward" size={16} color={theme.subText} />
           </TouchableOpacity>
-
           <View style={[styles.divider, { backgroundColor: theme.subText + '18' }]} />
-
-          <TouchableOpacity
-            onPress={() => { setPickerMode('time'); setShowPicker(true); }}
-            style={styles.pickerRow}
-          >
+          <TouchableOpacity onPress={() => { setPickerMode('time'); setShowPicker(true); }} style={styles.pickerRow}>
             <View style={[styles.pickerIconBox, { backgroundColor: theme.navy + '15' }]}>
               <Ionicons name="alarm-outline" size={18} color={theme.navy} />
             </View>
@@ -276,27 +251,20 @@ export default function EmailsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Schedule Button */}
         <TouchableOpacity
           onPress={sendFollowup}
           disabled={!selectedLead || scheduling}
           style={[styles.scheduleBtn, { backgroundColor: theme.navy, opacity: !selectedLead || scheduling ? 0.5 : 1 }]}
         >
-          {scheduling
-            ? <ActivityIndicator color="#fff" size="small" />
-            : <>
-                <Ionicons name="send" size={18} color="#fff" />
-                <Text style={styles.scheduleBtnText}>Schedule Follow-up</Text>
-              </>
-          }
+          {scheduling ? <ActivityIndicator color="#fff" size="small" /> : (
+            <>
+              <Ionicons name="send" size={18} color="#fff" />
+              <Text style={styles.scheduleBtnText}>Schedule Follow-up</Text>
+            </>
+          )}
         </TouchableOpacity>
-
-        {!selectedLead && (
-          <Text style={[styles.hint, { color: theme.subText }]}>Select a lead above to schedule a follow-up email</Text>
-        )}
       </ScrollView>
 
-      {/* BOTTOM NAV */}
       <View style={[styles.bottomNav, { backgroundColor: theme.navBg, borderTopColor: theme.subText + '22', paddingBottom: Platform.OS === 'ios' ? 28 : 12 }]}>
         {tabs.map(tab => {
           const isActive = tab.key === 'Emails';
@@ -306,14 +274,13 @@ export default function EmailsScreen() {
               style={styles.navItem}
               onPress={() => { if (tab.route && !isActive) router.replace(tab.route as any); }}
             >
-              <Ionicons name={isActive ? tab.icon as any : tab.iconOff as any} size={22} color={isActive ? theme.accent : theme.subText} />
+              <Ionicons name={isActive ? tab.icon as any : tab.iconOff as any} size={24} color={isActive ? theme.accent : theme.subText} />
               <Text style={[styles.navLabel, { color: isActive ? theme.accent : theme.subText }]}>{tab.key}</Text>
             </TouchableOpacity>
           );
         })}
       </View>
 
-      {/* Picker Modal */}
       <DateTimePickerModal
         isVisible={showPicker}
         mode={pickerMode}
@@ -324,9 +291,6 @@ export default function EmailsScreen() {
           else setFollowupTime(selected);
         }}
         onCancel={() => setShowPicker(false)}
-        display={pickerMode === 'time' ? 'spinner' : 'inline'}
-        is24Hour={false}
-        themeVariant={theme.bg === '#020617' || theme.bg === '#0d0d1f' ? 'dark' : 'light'}
       />
     </SafeAreaView>
   );
@@ -335,15 +299,17 @@ export default function EmailsScreen() {
 const styles = StyleSheet.create({
   header: { paddingHorizontal: 16, paddingBottom: 14, flexDirection: 'row', alignItems: 'center', gap: 12 },
   backBtn: { padding: 4 },
-  logo: { color: '#fff', fontSize: 18, fontWeight: '800' },
-  logoSub: { color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: '600', letterSpacing: 2 },
+  headerPanelLabel: { color: 'rgba(255,255,255,0.45)', fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginBottom: 1 },
+  headerTitle: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  actionBtn: { padding: 6 },
   container: { padding: 16, gap: 14 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   metricsRow: { flexDirection: 'row', gap: 10 },
   metricCard: { flex: 1, borderRadius: 14, padding: 14, alignItems: 'center', gap: 6, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
   metricIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   metricValue: { fontSize: 22, fontWeight: '800' },
-  metricLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center' },
+  metricLabel: { fontSize: 10, fontWeight: '600' },
   section: { borderRadius: 16, padding: 16, gap: 12, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4, elevation: 2 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   sectionTitle: { fontSize: 14, fontWeight: '700' },
@@ -361,8 +327,7 @@ const styles = StyleSheet.create({
   divider: { height: 1, marginVertical: 4 },
   scheduleBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, borderRadius: 14, padding: 16 },
   scheduleBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
-  hint: { fontSize: 12, textAlign: 'center', marginTop: -6 },
   bottomNav: { flexDirection: 'row', borderTopWidth: 1, paddingTop: 10, paddingHorizontal: 24, justifyContent: 'space-around', alignItems: 'center' },
   navItem: { flex: 1, alignItems: 'center', gap: 2 },
-  navLabel: { fontSize: 10, fontWeight: '600' },
+  navLabel: { fontSize: 10, fontWeight: '600', marginTop: 4 },
 });
