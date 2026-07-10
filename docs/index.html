@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Boothflow — AI-Powered Lead Capture</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #fff; }
+
+    /* HERO */
+    .hero {
+      position: relative;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 48px 48px 40px;
+      gap: 60px;
+    }
+    .hero-bg {
+      position: absolute;
+      inset: 0;
+      background: url('booth-bg.jpg') center/cover no-repeat;
+      z-index: 0;
+    }
+    .hero-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.85) 100%);
+      z-index: 1;
+    }
+    .hero > * { position: relative; z-index: 2; }
+
+    nav { display: flex; justify-content: space-between; align-items: center; }
+    .logo { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+    .logo span { color: #007DB8; font-size: 26px; }
+    .nav-tag { font-size: 11px; font-weight: 600; letter-spacing: 2px; color: rgba(255,255,255,0.5); }
+
+    .hero-content { max-width: 600px; padding-top: 40px; }
+    .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 2.5px; color: rgba(255,255,255,0.8); margin-bottom: 20px; }
+    .hero-title { font-size: clamp(42px, 6vw, 72px); font-weight: 800; line-height: 1.1; letter-spacing: -1px; margin-bottom: 24px; }
+    .hero-sub { font-size: 16px; color: rgba(255,255,255,0.65); line-height: 1.7; margin-bottom: 48px; max-width: 480px; }
+
+    .btn-row { display: flex; gap: 14px; flex-wrap: wrap; }
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 14px 24px; border-radius: 12px; font-size: 14px; font-weight: 700; text-decoration: none; transition: all 0.2s ease; }
+    .btn-primary { background: #007DB8; color: #fff; box-shadow: 0 4px 20px rgba(0,125,184,0.4); }
+    .btn-primary:hover { background: #0066a0; transform: translateY(-2px); }
+    .btn-outline { background: rgba(255,255,255,0.1); color: #fff; border: 1.5px solid rgba(255,255,255,0.25); backdrop-filter: blur(8px); }
+    .btn-outline:hover { background: rgba(255,255,255,0.18); transform: translateY(-2px); }
+
+    .hero-bottom { display: flex; justify-content: space-between; align-items: flex-end; }
+    .divider { width: 100%; height: 1px; background: rgba(255,255,255,0.15); margin-bottom: 24px; }
+    .stats { display: flex; gap: 40px; }
+    .stat-num { font-size: 28px; font-weight: 800; }
+    .stat-label { font-size: 11px; color: rgba(255,255,255,0.5); font-weight: 600; margin-top: 2px; }
+    .dell-badge { font-size: 11px; color: rgba(255,255,255,0.4); font-weight: 600; letter-spacing: 1px; text-align: right; }
+    .dell-badge strong { color: rgba(255,255,255,0.7); display: block; font-size: 13px; }
+
+    /* DOWNLOADS */
+    .downloads { background: #111827; padding: 100px 48px; }
+    .section-label { font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #007DB8; margin-bottom: 20px; }
+    .section-title { font-size: clamp(28px, 4vw, 42px); font-weight: 800; letter-spacing: -0.5px; margin-bottom: 56px; line-height: 1.2; }
+    .downloads-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
+    .download-card { background: #1e293b; border-radius: 16px; padding: 36px; border: 1px solid rgba(255,255,255,0.06); display: flex; flex-direction: column; gap: 20px; }
+    .download-icon { width: 52px; height: 52px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
+    .download-title { font-size: 17px; font-weight: 700; }
+    .download-desc { font-size: 13px; color: rgba(255,255,255,0.5); line-height: 1.6; flex: 1; }
+
+    /* FOOTER */
+    footer { background: #0a0f1e; padding: 32px 48px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.08); flex-wrap: wrap; gap: 16px; }
+    .footer-logo { font-size: 18px; font-weight: 700; }
+    .footer-logo span { color: #007DB8; }
+    .footer-text { font-size: 12px; color: rgba(255,255,255,0.35); text-align: right; }
+
+    @media (max-width: 640px) {
+      .hero { padding: 28px 24px; }
+      .downloads { padding: 60px 24px; }
+      footer { padding: 24px; flex-direction: column; text-align: center; }
+      .footer-text { text-align: center; }
+      .hero-bottom { flex-direction: column; gap: 24px; align-items: flex-start; }
+      .stats { gap: 24px; }
+      .nav-tag { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-bg"></div>
+    <div class="hero-overlay"></div>
+
+    <nav>
+      <div class="logo">boothflow<span>.</span></div>
+      <div class="nav-tag">REPUBLIC POLYTECHNIC × DELL TECHNOLOGIES</div>
+    </nav>
+
+    <div class="hero-content">
+      <p class="eyebrow">AI-POWERED LEAD CAPTURE SYSTEM</p>
+      <h1 class="hero-title">Smart leads,<br/>smarter<br/>follow-ups.</h1>
+      <p class="hero-sub">A mobile application built for Dell Technologies Forum Singapore — capturing, analysing and acting on leads in real time using Google Gemini 2.5 Flash AI.</p>
+      <div class="btn-row">
+        <a href="boothflow.apk" download class="btn btn-primary">📱 Download APK</a>
+        <a href="user-guide.pdf" target="_blank" class="btn btn-outline">📖 User Guide</a>
+        <a href="technical-guide.pdf" target="_blank" class="btn btn-outline">📄 Technical Guide</a>
+      </div>
+    </div>
+
+    <div class="hero-bottom">
+      <div>
+        <div class="divider"></div>
+        <div class="stats">
+          <div>
+            <div class="stat-num">46</div>
+            <div class="stat-label">TEST CASES</div>
+          </div>
+          <div>
+            <div class="stat-num">143</div>
+            <div class="stat-label">ASSERTIONS</div>
+          </div>
+          <div>
+            <div class="stat-num">5</div>
+            <div class="stat-label">TEAMS</div>
+          </div>
+          <div>
+            <div class="stat-num">3</div>
+            <div class="stat-label">USER ROLES</div>
+          </div>
+        </div>
+      </div>
+      <div class="dell-badge">
+        <strong>Dell Technologies Forum Singapore</strong>
+        FYP AY2025/2026
+      </div>
+    </div>
+  </section>
+
+  <!-- DOWNLOADS -->
+  <section class="downloads">
+    <p class="section-label">RESOURCES</p>
+    <h2 class="section-title">Everything you need.</h2>
+    <div class="downloads-grid">
+      <div class="download-card">
+        <div class="download-icon" style="background:#007DB820;">📱</div>
+        <div class="download-title">Boothflow APK</div>
+        <div class="download-desc">Download the Android application. Requires Android 10 or later.</div>
+        <a href="boothflow.apk" download class="btn btn-primary">Download APK</a>
+      </div>
+      <div class="download-card">
+        <div class="download-icon" style="background:#6366f120;">📖</div>
+        <div class="download-title">User Guide</div>
+        <div class="download-desc">Step-by-step instructions for booth representatives, managers and administrators.</div>
+        <a href="user-guide.pdf" target="_blank" class="btn btn-outline" style="color:#fff;">View Guide</a>
+      </div>
+      <div class="download-card">
+        <div class="download-icon" style="background:#22c55e20;">📄</div>
+        <div class="download-title">Technical Guide</div>
+        <div class="download-desc">Full technical documentation including architecture, API reference and deployment guide.</div>
+        <a href="technical-guide.pdf" target="_blank" class="btn btn-outline" style="color:#fff;">View Guide</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-logo">boothflow<span>.</span></div>
+    <div class="footer-text">
+      Republic Polytechnic · Diploma in Information Technology · AY2025/2026<br/>
+      Developed for Dell Technologies Forum Singapore
+    </div>
+  </footer>
+
+</body>
+</html>
