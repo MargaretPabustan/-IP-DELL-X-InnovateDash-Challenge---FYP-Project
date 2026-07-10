@@ -6,99 +6,161 @@
   <title>Boothflow — AI-Powered Lead Capture</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f172a; color: #fff; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      color: #fff;
+      background-image: url('booth-bg.jpg');
+      background-size: cover;
+      background-position: center;
+      background-attachment: fixed;
+      background-color: #0f172a;
+    }
+
+    /* Full page dark overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.72);
+      z-index: 0;
+      pointer-events: none;
+    }
+
+    /* All sections sit above overlay */
+    nav, .hero, .downloads, footer { position: relative; z-index: 1; }
+
+    /* NAV */
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 32px 48px;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .logo { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+    .logo span { color: #007DB8; font-size: 26px; }
+    .nav-tag { font-size: 11px; font-weight: 600; letter-spacing: 2px; color: rgba(255,255,255,0.4); }
 
     /* HERO */
     .hero {
-      position: relative;
-      min-height: 100vh;
+      min-height: calc(100vh - 89px);
       display: flex;
       flex-direction: column;
-      justify-content: space-between;
-      padding: 48px 48px 40px;
+      justify-content: center;
+      padding: 80px 48px;
       gap: 60px;
     }
-    .hero-bg {
-      position: absolute;
-      inset: 0;
-      background: url('https://i.dell.com/is/image/DellContent/content/dam/ss2/page-specific/dell-com-landing-page/events/delltechworld/2026/images/overview/dtw26-home-recap.png?fmt=png-alpha&wid=1920&hei=1080') center/cover no-repeat;
-      z-index: 0;
+
+    .hero-box {
+      background: rgba(255,255,255,0.06);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 20px;
+      padding: 48px;
+      max-width: 640px;
     }
-    .hero-overlay {
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0.5) 50%, rgba(0,0,0,0.85) 100%);
-      z-index: 1;
-    }
-    .hero > * { position: relative; z-index: 2; }
 
-    nav { display: flex; justify-content: space-between; align-items: center; }
-    .logo { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
-    .logo span { color: #007DB8; font-size: 26px; }
-    .nav-tag { font-size: 11px; font-weight: 600; letter-spacing: 2px; color: rgba(255,255,255,0.5); }
+    .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 2.5px; color: rgba(255,255,255,0.6); margin-bottom: 16px; }
+    .hero-title { font-size: clamp(36px, 5vw, 60px); font-weight: 800; line-height: 1.1; letter-spacing: -1px; margin-bottom: 16px; }
+    .hero-sub { font-size: 15px; color: rgba(255,255,255,0.65); line-height: 1.7; margin-bottom: 36px; }
 
-    .hero-content { max-width: 600px; padding-top: 40px; }
-    .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 2.5px; color: rgba(255,255,255,0.8); margin-bottom: 20px; }
-    .hero-title { font-size: clamp(42px, 6vw, 72px); font-weight: 800; line-height: 1.1; letter-spacing: -1px; margin-bottom: 24px; }
-    .hero-sub { font-size: 16px; color: rgba(255,255,255,0.65); line-height: 1.7; margin-bottom: 48px; max-width: 480px; }
-
-    .btn-row { display: flex; gap: 14px; flex-wrap: wrap; }
-    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 14px 24px; border-radius: 12px; font-size: 14px; font-weight: 700; text-decoration: none; transition: all 0.2s ease; }
+    .btn-row { display: flex; gap: 12px; flex-wrap: wrap; }
+    .btn { display: inline-flex; align-items: center; gap: 8px; padding: 13px 22px; border-radius: 10px; font-size: 13px; font-weight: 700; text-decoration: none; transition: all 0.2s; }
     .btn-primary { background: #007DB8; color: #fff; box-shadow: 0 4px 20px rgba(0,125,184,0.4); }
     .btn-primary:hover { background: #0066a0; transform: translateY(-2px); }
-    .btn-outline { background: rgba(255,255,255,0.1); color: #fff; border: 1.5px solid rgba(255,255,255,0.25); backdrop-filter: blur(8px); }
-    .btn-outline:hover { background: rgba(255,255,255,0.18); transform: translateY(-2px); }
+    .btn-outline { background: rgba(255,255,255,0.08); color: #fff; border: 1.5px solid rgba(255,255,255,0.2); }
+    .btn-outline:hover { background: rgba(255,255,255,0.15); transform: translateY(-2px); }
 
-    .hero-bottom { display: flex; justify-content: space-between; align-items: flex-end; }
-    .divider { width: 100%; height: 1px; background: rgba(255,255,255,0.15); margin-bottom: 24px; }
-    .stats { display: flex; gap: 40px; }
-    .stat-num { font-size: 28px; font-weight: 800; }
-    .stat-label { font-size: 11px; color: rgba(255,255,255,0.5); font-weight: 600; margin-top: 2px; }
-    .dell-badge { font-size: 11px; color: rgba(255,255,255,0.4); font-weight: 600; letter-spacing: 1px; text-align: right; }
-    .dell-badge strong { color: rgba(255,255,255,0.7); display: block; font-size: 13px; }
+    /* STATS */
+    .stats-row {
+      display: flex;
+      gap: 40px;
+      flex-wrap: wrap;
+    }
+
+    .stat-box {
+      background: rgba(255,255,255,0.06);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 14px;
+      padding: 20px 28px;
+      text-align: center;
+    }
+
+    .stat-num { font-size: 32px; font-weight: 800; }
+    .stat-label { font-size: 10px; color: rgba(255,255,255,0.45); font-weight: 600; letter-spacing: 1.5px; margin-top: 4px; }
 
     /* DOWNLOADS */
-    .downloads { background: #111827; padding: 100px 48px; }
-    .section-label { font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #007DB8; margin-bottom: 20px; }
-    .section-title { font-size: clamp(28px, 4vw, 42px); font-weight: 800; letter-spacing: -0.5px; margin-bottom: 56px; line-height: 1.2; }
-    .downloads-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; }
-    .download-card { background: #1e293b; border-radius: 16px; padding: 36px; border: 1px solid rgba(255,255,255,0.06); display: flex; flex-direction: column; gap: 20px; }
-    .download-icon { width: 52px; height: 52px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 24px; }
-    .download-title { font-size: 17px; font-weight: 700; }
+    .downloads { padding: 80px 48px; }
+
+    .section-label { font-size: 11px; font-weight: 700; letter-spacing: 2px; color: #007DB8; margin-bottom: 12px; }
+    .section-title { font-size: clamp(24px, 3vw, 36px); font-weight: 800; letter-spacing: -0.5px; margin-bottom: 40px; line-height: 1.2; }
+
+    .downloads-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; }
+
+    .download-card {
+      background: rgba(255,255,255,0.06);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+      padding: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      transition: border-color 0.2s;
+    }
+
+    .download-card:hover { border-color: #007DB8; }
+
+    .download-icon { font-size: 28px; }
+    .download-title { font-size: 16px; font-weight: 700; }
     .download-desc { font-size: 13px; color: rgba(255,255,255,0.5); line-height: 1.6; flex: 1; }
 
     /* FOOTER */
-    footer { background: #0a0f1e; padding: 32px 48px; display: flex; justify-content: space-between; align-items: center; border-top: 1px solid rgba(255,255,255,0.08); flex-wrap: wrap; gap: 16px; }
+    footer {
+      padding: 28px 48px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
     .footer-logo { font-size: 18px; font-weight: 700; }
     .footer-logo span { color: #007DB8; }
-    .footer-text { font-size: 12px; color: rgba(255,255,255,0.35); text-align: right; }
+    .footer-text { font-size: 12px; color: rgba(255,255,255,0.3); text-align: right; line-height: 1.6; }
 
     @media (max-width: 640px) {
-      .hero { padding: 28px 24px; }
+      nav { padding: 24px; }
+      .nav-tag { display: none; }
+      .hero { padding: 48px 24px; }
+      .hero-box { padding: 32px 24px; }
       .downloads { padding: 60px 24px; }
       footer { padding: 24px; flex-direction: column; text-align: center; }
       .footer-text { text-align: center; }
-      .hero-bottom { flex-direction: column; gap: 24px; align-items: flex-start; }
-      .stats { gap: 24px; }
-      .nav-tag { display: none; }
+      .stats-row { gap: 12px; }
     }
   </style>
 </head>
 <body>
 
+  <!-- NAV -->
+  <nav>
+    <div class="logo">boothflow<span>.</span></div>
+    <div class="nav-tag">REPUBLIC POLYTECHNIC × DELL TECHNOLOGIES</div>
+  </nav>
+
   <!-- HERO -->
   <section class="hero">
-    <div class="hero-bg"></div>
-    <div class="hero-overlay"></div>
-
-    <nav>
-      <div class="logo">boothflow<span>.</span></div>
-      <div class="nav-tag">REPUBLIC POLYTECHNIC × DELL TECHNOLOGIES</div>
-    </nav>
-
-    <div class="hero-content">
+    <div class="hero-box">
       <p class="eyebrow">AI-POWERED LEAD CAPTURE SYSTEM</p>
-      <h1 class="hero-title">Smart leads,<br/>smarter<br/>follow-ups.</h1>
+      <h1 class="hero-title">Smart leads,<br/>smarter follow-ups.</h1>
       <p class="hero-sub">A mobile application built for Dell Technologies Forum Singapore — capturing, analysing and acting on leads in real time using Google Gemini 2.5 Flash AI.</p>
       <div class="btn-row">
         <a href="boothflow.apk" download class="btn btn-primary">📱 Download APK</a>
@@ -107,31 +169,22 @@
       </div>
     </div>
 
-    <div class="hero-bottom">
-      <div>
-        <div class="divider"></div>
-        <div class="stats">
-          <div>
-            <div class="stat-num">46</div>
-            <div class="stat-label">TEST CASES</div>
-          </div>
-          <div>
-            <div class="stat-num">143</div>
-            <div class="stat-label">ASSERTIONS</div>
-          </div>
-          <div>
-            <div class="stat-num">5</div>
-            <div class="stat-label">TEAMS</div>
-          </div>
-          <div>
-            <div class="stat-num">3</div>
-            <div class="stat-label">USER ROLES</div>
-          </div>
-        </div>
+    <div class="stats-row">
+      <div class="stat-box">
+        <div class="stat-num">46</div>
+        <div class="stat-label">TEST CASES</div>
       </div>
-      <div class="dell-badge">
-        <strong>Dell Technologies Forum Singapore</strong>
-        FYP AY2025/2026
+      <div class="stat-box">
+        <div class="stat-num">143</div>
+        <div class="stat-label">ASSERTIONS</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num">5</div>
+        <div class="stat-label">TEAMS</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num">3</div>
+        <div class="stat-label">USER ROLES</div>
       </div>
     </div>
   </section>
@@ -142,22 +195,22 @@
     <h2 class="section-title">Everything you need.</h2>
     <div class="downloads-grid">
       <div class="download-card">
-        <div class="download-icon" style="background:#007DB820;">📱</div>
+        <div class="download-icon">📱</div>
         <div class="download-title">Boothflow APK</div>
         <div class="download-desc">Download the Android application. Requires Android 10 or later.</div>
         <a href="boothflow.apk" download class="btn btn-primary">Download APK</a>
       </div>
       <div class="download-card">
-        <div class="download-icon" style="background:#6366f120;">📖</div>
+        <div class="download-icon">📖</div>
         <div class="download-title">User Guide</div>
         <div class="download-desc">Step-by-step instructions for booth representatives, managers and administrators.</div>
-        <a href="user-guide.pdf" target="_blank" class="btn btn-outline" style="color:#fff;">View Guide</a>
+        <a href="user-guide.pdf" target="_blank" class="btn btn-outline">View Guide</a>
       </div>
       <div class="download-card">
-        <div class="download-icon" style="background:#22c55e20;">📄</div>
+        <div class="download-icon">📄</div>
         <div class="download-title">Technical Guide</div>
         <div class="download-desc">Full technical documentation including architecture, API reference and deployment guide.</div>
-        <a href="technical-guide.pdf" target="_blank" class="btn btn-outline" style="color:#fff;">View Guide</a>
+        <a href="technical-guide.pdf" target="_blank" class="btn btn-outline">View Guide</a>
       </div>
     </div>
   </section>
