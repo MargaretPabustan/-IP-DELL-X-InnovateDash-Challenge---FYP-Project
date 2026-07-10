@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, SafeAreaView, ScrollView,
   ActivityIndicator, RefreshControl, TouchableOpacity,
-  Platform, StatusBar, Alert,
+  Platform, StatusBar, Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -34,7 +34,7 @@ function getStatusColor(status: string) {
 
 export default function EmailsScreen() {
   const router = useRouter();
-  const { theme } = useAppTheme();
+  const { theme } = useAppTheme() as any;
   const isMounted = useRef(true);
 
   const [loading,      setLoading]      = useState(true);
@@ -74,8 +74,8 @@ export default function EmailsScreen() {
 
   useEffect(() => {
     isMounted.current = true;
-    const timer = setTimeout(() => { fetchLeads(); }, 0);
-    return () => { isMounted.current = false; clearTimeout(timer); };
+    fetchLeads();
+    return () => { isMounted.current = false; };
   }, [fetchLeads]);
 
   const onRefresh = () => { setRefreshing(true); fetchLeads(); };
@@ -83,7 +83,6 @@ export default function EmailsScreen() {
   const sendFollowup = async () => {
     if (!selectedLead) { Alert.alert('No Lead', 'Please select a lead first.'); return; }
 
-    // Construct date in local timezone to avoid UTC shift
     const scheduledDate = new Date(
       followupDate.getFullYear(),
       followupDate.getMonth(),
@@ -97,7 +96,8 @@ export default function EmailsScreen() {
     try {
       const headers = await getAuthHeaders();
       const response = await fetch(`${BACKEND_URL}/send-email`, {
-        method: 'POST', headers,
+        method: 'POST', 
+        headers,
         body: JSON.stringify({
           to: selectedLead.email,
           subject: 'Your Dell Technologies Follow-up',
@@ -107,7 +107,6 @@ export default function EmailsScreen() {
         }),
       });
 
-      // Catch the explicit 409 status code to display your requested duplicate error message
       if (response.status === 409) {
         Alert.alert('Error', 'Error - No duplicate followups');
         return;
@@ -129,11 +128,11 @@ export default function EmailsScreen() {
   };
 
   const tabs = [
-    { key: 'Dashboard', icon: 'grid',     iconOff: 'grid-outline' },
-    { key: 'Leads',     icon: 'people',   iconOff: 'people-outline' },
-    { key: 'Activity',  icon: 'pulse',    iconOff: 'pulse-outline' },
-    { key: 'Emails',    icon: 'mail',     iconOff: 'mail-outline' },
-    { key: 'Export',    icon: 'download', iconOff: 'download-outline' },
+    { key: 'Dashboard', icon: 'grid',     iconOff: 'grid-outline',     route: '/manager/dashboard' },
+    { key: 'Leads',     icon: 'people',   iconOff: 'people-outline',   route: '/manager/leads' },
+    { key: 'Activity',  icon: 'pulse',    iconOff: 'pulse-outline',    route: '/manager/activity' },
+    { key: 'Emails',    icon: 'mail',     iconOff: 'mail-outline',     route: null },
+    { key: 'Export',    icon: 'download', iconOff: 'download-outline', route: '/manager/export' },
   ];
 
   if (loading) {
@@ -305,7 +304,7 @@ export default function EmailsScreen() {
             <TouchableOpacity
               key={tab.key}
               style={styles.navItem}
-              onPress={() => { if (tab.key !== 'Emails') router.replace(`/manager/${tab.key.toLowerCase()}` as any); }}
+              onPress={() => { if (tab.route && !isActive) router.replace(tab.route as any); }}
             >
               <Ionicons name={isActive ? tab.icon as any : tab.iconOff as any} size={22} color={isActive ? theme.accent : theme.subText} />
               <Text style={[styles.navLabel, { color: isActive ? theme.accent : theme.subText }]}>{tab.key}</Text>
@@ -338,7 +337,6 @@ const styles = StyleSheet.create({
   backBtn: { padding: 4 },
   logo: { color: '#fff', fontSize: 18, fontWeight: '800' },
   logoSub: { color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: '600', letterSpacing: 2 },
-  headerBtn: { padding: 6 },
   container: { padding: 16, gap: 14 },
   centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   metricsRow: { flexDirection: 'row', gap: 10 },

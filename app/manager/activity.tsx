@@ -30,7 +30,7 @@ async function getAuthHeaders() {
 
 export default function ManagerActivity() {
   const router    = useRouter();
-  const { theme, toggleTheme } = useAppTheme() as any;
+  const { theme } = useAppTheme() as any;
 
   const [logs, setLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,7 +44,6 @@ export default function ManagerActivity() {
     { key: 'Export',    icon: 'download', iconOff: 'download-outline', route: '/manager/export' },
   ];
 
-  // Guaranteed Unique Lookups Engine with duplication data integrity guards
   const processUniqueLogs = (incomingLogs: ActivityLog[]): ActivityLog[] => {
     const uniqueMap = new Map<string | number, ActivityLog>();
     let duplicateDetected = false;
@@ -65,7 +64,7 @@ export default function ManagerActivity() {
     });
 
     if (duplicateDetected) {
-      console.warn("Database Data Integrity Warning: Duplicate follow-up/activity records were identified and automatically merged.");
+      console.warn("Database Data Integrity Warning: Duplicate records identified.");
     }
 
     return Array.from(uniqueMap.values());
@@ -98,7 +97,7 @@ export default function ManagerActivity() {
   const handleCancelFollowup = async (log: ActivityLog) => {
     Alert.alert(
       "Cancel Followup",
-      "Are you sure you want to cancel the scheduled followup for this record?",
+      "Are you sure you want to cancel the scheduled followup?",
       [
         { text: "No", style: "cancel" },
         {
@@ -118,14 +117,15 @@ export default function ManagerActivity() {
               const data = await res.json();
               if (data.success) {
                 Alert.alert("Cancelled", "Followup status updated successfully.");
-                
-                // Real-time local state adjustment layout update
                 setLogs(currentLogs => 
-                  currentLogs.map(item => 
-                    item.lead_id === log.lead_id 
-                      ? { ...item, followup_status: 'cancelled' } 
-                      : item
-                  )
+                  currentLogs.map(item => {
+                    const matchByFollowup = log.followup_id && item.followup_id === log.followup_id;
+                    const matchByLead = !log.followup_id && item.lead_id === log.lead_id && item.followup_status === 'pending';
+                    if (matchByFollowup || matchByLead) {
+                      return { ...item, followup_status: 'cancelled' };
+                    }
+                    return item;
+                  })
                 );
               } else {
                 Alert.alert("Error", data.message || "Failed to cancel.");
@@ -179,10 +179,7 @@ export default function ManagerActivity() {
           </Text>
 
           {isFollowupType && !isCancelled && log.followup_status === 'pending' && (
-            <TouchableOpacity 
-              style={styles.cancelBtn} 
-              onPress={() => handleCancelFollowup(log)}
-            >
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => handleCancelFollowup(log)}>
               <Ionicons name="close-circle" size={14} color="#ef4444" />
               <Text style={styles.cancelBtnText}>Cancel Followup</Text>
             </TouchableOpacity>
@@ -192,23 +189,19 @@ export default function ManagerActivity() {
     );
   };
 
-  // Keep all operational items ('pending' or 'done') visible on screen
-  const visibleLogs = logs.filter(log => log.followup_status === 'pending' || log.followup_status === 'done');
-
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* FIXED HEADER WITH UNIFORM PANEL LABELS AND SYSTEM ACTIONS */}
+      {/* HEADER */}
       <View style={[styles.header, { backgroundColor: theme.navy, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12 }]}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
-        
         <View style={{ flex: 1 }}>
           <Text style={styles.headerPanelLabel}>MANAGER PANEL</Text>
           <Text style={styles.headerTitle}>Activity Logs</Text>
-          <Text style={styles.headerSub}>{visibleLogs.length} activities</Text>
+          <Text style={styles.headerSub}>{logs.length} activities</Text>
         </View>
       </View>
 
@@ -217,20 +210,12 @@ export default function ManagerActivity() {
         <View style={[styles.centered, { paddingTop: 0 }]}><ActivityIndicator size="large" color={theme.navy} /></View>
       ) : (
         <FlatList
-          data={visibleLogs}
+          data={logs}
           renderItem={renderLogItem}
           keyExtractor={(item, index) => item.followup_id ? `followup-${item.followup_id}` : item.activity_id ? `activity-${item.activity_id}` : `idx-${index}`}
           contentContainerStyle={[styles.content, { paddingBottom: 24 }]}
           showsVerticalScrollIndicator={false}
-          initialNumToRender={10}
-          windowSize={5}
-          refreshControl={
-            <RefreshControl 
-              refreshing={refreshing} 
-              onRefresh={() => fetchLogs(true)} 
-              tintColor="#fff" 
-            />
-          }
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => fetchLogs(true)} tintColor={theme.navy} />}
           ListEmptyComponent={
             <View style={styles.centered}>
               <Ionicons name="pulse-outline" size={48} color={theme.subText} />
@@ -250,7 +235,7 @@ export default function ManagerActivity() {
               style={styles.navItem}
               onPress={() => { if (tab.route && !isActive) router.replace(tab.route as any); }}
             >
-              <Ionicons name={isActive ? tab.icon as any : tab.iconOff as any} size={24} color={isActive ? theme.accent : theme.subText} />
+              <Ionicons name={isActive ? tab.icon as any : tab.iconOff as any} size={22} color={isActive ? theme.accent : theme.subText} />
               <Text style={[styles.navLabel, { color: isActive ? theme.accent : theme.subText }]}>{tab.key}</Text>
             </TouchableOpacity>
           );
@@ -267,9 +252,6 @@ const styles = StyleSheet.create({
   headerPanelLabel: { color: 'rgba(255,255,255,0.45)', fontSize: 10, fontWeight: '800', letterSpacing: 0.8, marginBottom: 1 },
   headerTitle: { color: '#fff', fontSize: 17, fontWeight: '700' },
   headerSub: { color: 'rgba(255,255,255,0.6)', fontSize: 11, marginTop: 1 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  actionBtn: { padding: 6 },
-  profileBtn: { paddingLeft: 4 },
   content: { padding: 16, gap: 10 },
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 80, gap: 12 },
   emptyText: { fontSize: 15, fontWeight: '600' },
@@ -279,21 +261,9 @@ const styles = StyleSheet.create({
   activityLead: { fontSize: 12, marginTop: 2 },
   activityDesc: { fontSize: 12, marginTop: 2 },
   activityTime: { fontSize: 11, marginTop: 4 },
-  cancelBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 4,
-    backgroundColor: '#ef444412',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: '#ef444425'
-  },
+  cancelBtn: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4, backgroundColor: '#ef444412', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, marginTop: 10, borderWidth: 1, borderColor: '#ef444425' },
   cancelBtnText: { color: '#ef4444', fontSize: 11, fontWeight: '700' },
-  bottomNav: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', paddingTop: 10, borderTopWidth: 1 },
-  navItem: { alignItems: 'center', justifyContent: 'center', flex: 1 },
-  navLabel: { fontSize: 11, marginTop: 4, fontWeight: '500' },
+  bottomNav: { flexDirection: 'row', borderTopWidth: 1, paddingTop: 10, paddingHorizontal: 24, justifyContent: 'space-around', alignItems: 'center' },
+  navItem: { flex: 1, alignItems: 'center', gap: 2 },
+  navLabel: { fontSize: 10, fontWeight: '600' },
 });
