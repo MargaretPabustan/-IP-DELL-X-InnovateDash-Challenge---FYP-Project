@@ -11,7 +11,6 @@ const ExcelJS = require('exceljs');
 const RateLimit = require('express-rate-limit');
 const cron = require('node-cron');
 const { Resend } = require('resend');
-const resend = new Resend(process.env.RESEND_API_KEY);
 
 const app = express();
 const allowedOrigins = process.env.CORS_ORIGINS ? process.env.CORS_ORIGINS.split(',') : [];
@@ -101,7 +100,7 @@ if (!process.env.GEMINI_API_KEY) {
     console.warn('❌ GEMINI_API_KEY is missing from environment configuration');
 }
 
-// ── SEND EMAIL (Resend) ──────────────────────────────────────────────────────
+// ── SEND EMAIL (Resend — lazy init) ──────────────────────────────────────────
 async function sendEmail({ to, subject, text }) {
     console.log(`📧 sendEmail called — to: ${to}`);
     console.log(`📧 RESEND_API_KEY set: ${!!process.env.RESEND_API_KEY}`);
@@ -111,6 +110,7 @@ async function sendEmail({ to, subject, text }) {
     if (!process.env.RESEND_FROM_EMAIL) throw new Error('RESEND_FROM_EMAIL is not set');
 
     try {
+        const resend = new Resend(process.env.RESEND_API_KEY);
         const result = await resend.emails.send({
             from: `Boothflow <${process.env.RESEND_FROM_EMAIL}>`,
             to,
