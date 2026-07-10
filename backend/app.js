@@ -111,13 +111,15 @@ async function sendEmail({ to, subject, text, html }) {
 
     try {
         const resend = new Resend(process.env.RESEND_API_KEY);
-        const result = await resend.emails.send({
+        const payload = {
             from: `Boothflow <${process.env.RESEND_FROM_EMAIL}>`,
             to,
             subject,
             text,
-            ...(html ? { html } : {}),
-        });
+        };
+        if (html) payload.html = html;
+        console.log(`📧 Sending with HTML: ${!!html}`);
+        const result = await resend.emails.send(payload);
         console.log(`✅ Email sent to ${to} via Resend, id: ${result?.data?.id || 'N/A'}`);
         if (result.error) throw new Error(result.error.message);
         return result;
@@ -1264,10 +1266,22 @@ cron.schedule('* * * * *', async () => {
             if (leadResult.rows.length === 0) continue;
             const lead = leadResult.rows[0];
             try {
+                const aiData = {
+                    intent: lead.status === 'URGENT' ? 'High' : lead.status === 'FOLLOW-UP' ? 'Medium' : 'Low',
+                    notes: lead.ai_notes || 'Thank you for stopping by our exhibition space.',
+                };
+                const interestsResult = await pool.query(
+                    `SELECT ic.category_name FROM lead_interest_categories lic
+                     JOIN interest_categories ic ON lic.category_id = ic.category_id
+                     WHERE lic.lead_id = $1`, [lead.lead_id]
+                );
+                const interests = interestsResult.rows.map(r => r.category_name).join(', ') || 'Dell Technologies solutions';
+                const cronHtml = buildFollowUpEmailHtml(lead, aiData, interests);
                 await sendEmail({
                     to:      lead.email,
                     subject: followup.email_subject,
                     text:    followup.notes,
+                    html:    cronHtml,
                 });
                 await pool.query(`UPDATE lead_followups SET followup_status='done', sent_at=NOW() WHERE followup_id=$1`, [followup.followup_id]);
                 await pool.query(
