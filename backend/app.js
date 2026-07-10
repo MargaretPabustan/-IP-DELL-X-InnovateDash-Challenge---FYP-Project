@@ -101,7 +101,7 @@ if (!process.env.GEMINI_API_KEY) {
 }
 
 // ── SEND EMAIL (Resend — lazy init) ──────────────────────────────────────────
-async function sendEmail({ to, subject, text }) {
+async function sendEmail({ to, subject, text, html }) {
     console.log(`📧 sendEmail called — to: ${to}`);
     console.log(`📧 RESEND_API_KEY set: ${!!process.env.RESEND_API_KEY}`);
     console.log(`📧 RESEND_FROM_EMAIL set: ${!!process.env.RESEND_FROM_EMAIL} (${process.env.RESEND_FROM_EMAIL || 'NOT SET'})`);
@@ -116,6 +116,7 @@ async function sendEmail({ to, subject, text }) {
             to,
             subject,
             text,
+            ...(html ? { html } : {}),
         });
         console.log(`✅ Email sent to ${to} via Resend, id: ${result?.data?.id || 'N/A'}`);
         if (result.error) throw new Error(result.error.message);
@@ -127,33 +128,131 @@ async function sendEmail({ to, subject, text }) {
 }
 
 // ── PERSONALISED EMAIL BUILDER ────────────────────────────────────────────────
-function buildFollowUpEmail(lead, aiData, interests) {
+function buildFollowUpEmailHtml(lead, aiData, interests) {
+    let mainContent = '';
+
+    if (aiData.intent === 'High' || lead.status === 'URGENT') {
+        mainContent += `<p>We noticed your strong interest in <strong>${interests}</strong>. ${aiData.notes}</p>`;
+        mainContent += `<p>Given your enthusiasm, we'd love to schedule a personalised call this week to walk you through how Dell's ${interests} solutions can address your organisation's specific needs.</p>`;
+        mainContent += `<ul>
+            <li>A tailored product demonstration of ${interests}</li>
+            <li>Detailed pricing and deployment options</li>
+            <li>A dedicated Dell solutions consultant for your account</li>
+        </ul>`;
+    } else if (aiData.intent === 'Medium' || lead.status === 'FOLLOW-UP') {
+        if (lead.customer_intent?.toLowerCase().includes('pricing')) {
+            mainContent += `<p>You mentioned interest in pricing for <strong>${interests}</strong>. ${aiData.notes}</p>`;
+            mainContent += `<p>We'll be sending you a tailored pricing proposal shortly. Feel free to reply if you'd like to arrange a personalised demo.</p>`;
+        } else if (lead.customer_intent?.toLowerCase().includes('demo')) {
+            mainContent += `<p>You expressed interest in a demonstration for <strong>${interests}</strong>. ${aiData.notes}</p>`;
+            mainContent += `<p>We'd be happy to schedule a demo session at your convenience. Please reply to confirm a suitable time.</p>`;
+        } else {
+            mainContent += `<p>${aiData.notes}</p>`;
+            mainContent += `<p>We'll follow up with tailored information on <strong>${interests}</strong> soon.</p>`;
+        }
+    } else {
+        mainContent += `<p>We're glad you stopped by to explore <strong>${interests}</strong>. ${aiData.notes}</p>`;
+        mainContent += `<p>We'd love to share more about how Dell's solutions can support your organisation's technology journey.</p>`;
+    }
+
+    return `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f4f4f4;font-family:Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f4;padding:24px 0;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        
+        <!-- HEADER -->
+        <tr>
+          <td style="background:#0076CE;padding:24px 32px;text-align:center;">
+            <img src="https://upload.wikimedia.org/wikipedia/commons/4/48/Dell_Logo.svg" alt="Dell Technologies" width="80" style="display:block;margin:0 auto 8px auto;" />
+            <p style="color:rgba(255,255,255,0.85);font-size:13px;margin:0;letter-spacing:1px;">DELL TECHNOLOGIES FORUM SINGAPORE</p>
+          </td>
+        </tr>
+
+        <!-- BODY -->
+        <tr>
+          <td style="padding:32px;">
+            <p style="font-size:16px;color:#333;margin-top:0;">Hi <strong>${lead.name}</strong>,</p>
+            <p style="color:#555;line-height:1.6;">Thank you for visiting the Dell Technologies booth at the Dell Technologies Forum Singapore. It was great connecting with you!</p>
+            <div style="color:#555;line-height:1.8;">${mainContent}</div>
+
+            <!-- WEBINAR BOX -->
+            <table width="100%" cellpadding="0" cellspacing="0" style="margin:28px 0;">
+              <tr>
+                <td style="background:#f0f7ff;border-left:4px solid #0076CE;border-radius:4px;padding:20px 24px;">
+                  <p style="color:#0076CE;font-weight:bold;font-size:14px;margin:0 0 10px 0;">📅 UPCOMING WEBINAR</p>
+                  <p style="color:#333;margin:4px 0;font-size:14px;">🖥️ <strong>Dell Technologies Innovation Series</strong></p>
+                  <p style="color:#333;margin:4px 0;font-size:14px;">📆 <strong>31 July 2026 | 3:00 PM SGT</strong></p>
+                  <p style="color:#333;margin:4px 0;font-size:14px;">🌐 Online — Reply to register your interest</p>
+                  <p style="color:#555;margin:12px 0 0 0;font-size:13px;">We'll be showcasing the latest in <strong>${interests}</strong> and other Dell innovations.</p>
+                </td>
+              </tr>
+            </table>
+
+            <p style="color:#555;line-height:1.6;">Please reply to this email or contact your assigned Dell representative to arrange a follow-up session.</p>
+          </td>
+        </tr>
+
+        <!-- FOOTER -->
+        <tr>
+          <td style="background:#f8f8f8;padding:20px 32px;border-top:1px solid #eee;text-align:center;">
+            <p style="color:#888;font-size:12px;margin:0;">Best regards,</p>
+            <p style="color:#333;font-size:13px;font-weight:bold;margin:4px 0;">Dell Technologies Forum Team</p>
+            <p style="color:#888;font-size:12px;margin:4px 0;">Dell Technologies Singapore</p>
+            <img src="https://upload.wikimedia.org/wikipedia/commons/4/48/Dell_Logo.svg" alt="Dell" width="40" style="margin-top:12px;opacity:0.4;" />
+          </td>
+        </tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+}
     let body = `Hi ${lead.name},\n\n`;
+    body += `Thank you for visiting the Dell Technologies booth at the Dell Technologies Forum Singapore. It was great connecting with you!\n\n`;
 
     if (aiData.intent === 'High' || lead.status === 'URGENT') {
         body += `We noticed your strong interest in ${interests}. ${aiData.notes}\n\n`;
-        body += `We'd love to schedule a call with you this week to discuss Dell solutions in detail. Please reply to this email or contact your assigned Dell representative to arrange a time.\n`;
+        body += `Given your enthusiasm, we'd love to schedule a personalised call this week to walk you through how Dell's ${interests} solutions can address your organisation's specific needs. Please reply to this email or reach out to your assigned Dell representative to arrange a time.\n\n`;
+        body += `In the meantime, here's what we can offer:\n`;
+        body += `  • A tailored product demonstration of ${interests}\n`;
+        body += `  • Detailed pricing and deployment options\n`;
+        body += `  • A dedicated Dell solutions consultant for your account\n`;
     } else if (aiData.intent === 'Medium' || lead.status === 'FOLLOW-UP') {
         if (lead.customer_intent?.toLowerCase().includes('pricing')) {
-            body += `You mentioned pricing for ${interests}. ${aiData.notes}\n\n`;
-            body += `We'll send you tailored pricing information shortly. In the meantime, feel free to reply if you'd like to arrange a personalised demo.\n`;
+            body += `You mentioned interest in pricing for ${interests}. ${aiData.notes}\n\n`;
+            body += `We'll be sending you a tailored pricing proposal shortly. In the meantime, feel free to reply if you'd like to arrange a personalised demo or speak to one of our solutions consultants.\n\n`;
         } else if (lead.customer_intent?.toLowerCase().includes('demo')) {
-            body += `You expressed interest in a demo for ${interests}. ${aiData.notes}\n\n`;
-            body += `We'd be happy to schedule a demonstration session at your convenience. Please reply to this email to confirm a time.\n`;
+            body += `You expressed interest in a demonstration for ${interests}. ${aiData.notes}\n\n`;
+            body += `We'd be happy to schedule a demo session at your convenience. Our team will walk you through the full capabilities of Dell's ${interests} portfolio. Please reply to confirm a suitable time.\n\n`;
         } else {
             body += `${aiData.notes}\n\n`;
-            body += `We'll follow up with more details on ${interests} soon. Feel free to reach out if you have any questions in the meantime.\n`;
+            body += `We'll follow up with tailored information on ${interests} soon. In the meantime, feel free to reach out if you have any questions.\n\n`;
         }
     } else {
         body += `We're glad you stopped by to explore ${interests}. ${aiData.notes}\n\n`;
-        body += `Here are some resources you may find useful — no pressure, just insights into how Dell can support your organisation's technology needs.\n`;
+        body += `We'd love to share more about how Dell's solutions in ${interests} can support your organisation's technology journey. No pressure — just valuable insights tailored to your needs.\n\n`;
     }
 
-    body += `\n📢 Don't miss our upcoming webinar on June 25th at 3:00 PM (SGT), where we'll showcase solutions related to your interests.\n`;
-    body += `\nBest regards,\nDell Boothflow Team`;
+    body += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    body += `📅 UPCOMING EVENT\n`;
+    body += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
+    body += `Don't miss our upcoming webinar:\n\n`;
+    body += `  🖥️  Dell Technologies Innovation Series\n`;
+    body += `  📆  31 July 2026 | 3:00 PM SGT\n`;
+    body += `  🌐  Online — Register to receive your link\n\n`;
+    body += `We'll be showcasing the latest in ${interests} and other Dell innovations. Reply to this email to register your interest.\n\n`;
+    body += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    body += `Best regards,\n`;
+    body += `Dell Technologies Forum Team\n`;
+    body += `Dell Technologies Singapore\n`;
+    body += `forum.dell.com/singapore`;
 
     return body;
-}
+
 
 // ── INTEREST → TEAM MAPPING ───────────────────────────────────────────────────
 const INTEREST_TEAM_MAP = {
@@ -928,7 +1027,7 @@ Return ONLY valid JSON in this exact format, no extra text:
         try {
             await pool.query(
                 `INSERT INTO lead_followups (lead_id, followup_action, followup_status, due_date, scheduled_at, email_subject, notes)
-                 VALUES ($1, 'Automated Follow-up Email', 'pending', NOW() + INTERVAL '3 minutes', NOW() + INTERVAL '3 minutes', $2, $3)
+                 VALUES ($1, 'Automated Follow-up Email', 'pending', NOW() + INTERVAL '3 hours', NOW() + INTERVAL '3 hours', $2, $3)
                  ON CONFLICT (lead_id) DO NOTHING`,
                 [lead.lead_id, `Your Dell Technologies Follow-up — ${interests}`, buildFollowUpEmail(lead, aiData, interests)]
             );
@@ -1098,9 +1197,10 @@ app.post('/send-followup/:id', authenticateToken, async (req, res) => {
         
         // Compile email template utilizing relational entities
         const emailBody = buildFollowUpEmail(lead, aiData, interests);
+        const emailHtml = buildFollowUpEmailHtml(lead, aiData, interests);
 
         // 4. Trigger transactional email pipeline execution
-        await sendEmail({ to: lead.email, subject: emailSubject, text: emailBody });
+        await sendEmail({ to: lead.email, subject: emailSubject, text: emailBody, html: emailHtml });
 
         // 5. Commit state persistence inside an atomic transaction scope
         await pool.query('BEGIN');
