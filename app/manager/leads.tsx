@@ -215,6 +215,8 @@ export default function ManagerLeads() {
       const data = await res.json();
       if (!data.success) { Alert.alert('Error', data.message || 'Update failed'); return; }
       setLeads(prev => prev.map(l => l.lead_id === leadId ? { ...l, followup_status: status } : l));
+      // Also update viewingLead if it's open for same lead
+      setViewingLead(prev => prev?.lead_id === leadId ? { ...prev, followup_status: status } : prev);
       Alert.alert('Success', 'Follow-up status updated');
     } catch (err) {
       Alert.alert('Error', 'Failed to update follow-up status');

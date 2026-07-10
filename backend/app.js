@@ -1235,7 +1235,7 @@ app.post('/send-followup/:id', authenticateToken, async (req, res) => {
         await pool.query(
             `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description, created_at) 
              VALUES ($1, 'EMAIL_SENT', $2, NOW())`,
-            [leadId, `Manager successfully generated and delivered manual follow-up email exploring: ${interests}. Summary text: ${emailBody}`]
+            [leadId, `Manual follow-up email sent to ${lead.email} regarding ${interests}.`]
         );
 
         await pool.query('COMMIT');

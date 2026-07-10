@@ -89,6 +89,7 @@ export default function EmailsScreen() {
 
   const sendFollowup = async () => {
     if (!selectedLead) { Alert.alert('No Lead', 'Please select a lead first.'); return; }
+    if (selectedLead.followup_status === 'done') { Alert.alert('Already Sent', 'A follow-up email has already been sent for this lead.'); return; }
     
     const scheduledDate = new Date(
       followupDate.getFullYear(),
@@ -225,6 +226,15 @@ export default function EmailsScreen() {
                   <Text style={[styles.statusBadgeText, { color: getStatusColor(selectedLead.status) }]}>{selectedLead.status}</Text>
                 </View>
               </View>
+              <View style={styles.leadInfoRow}>
+                <Ionicons name="mail-outline" size={13} color={theme.subText} />
+                <Text style={[styles.leadInfoLabel, { color: theme.subText }]}>Follow-up</Text>
+                <View style={[styles.statusBadge, { backgroundColor: selectedLead.followup_status === 'done' ? '#22c55e18' : '#f59e0b18' }]}>
+                  <Text style={[styles.statusBadgeText, { color: selectedLead.followup_status === 'done' ? '#22c55e' : '#f59e0b' }]}>
+                    {selectedLead.followup_status === 'done' ? '✓ Sent' : selectedLead.followup_status === 'cancelled' ? 'Cancelled' : 'Pending'}
+                  </Text>
+                </View>
+              </View>
             </View>
           )}
         </View>
@@ -267,14 +277,16 @@ export default function EmailsScreen() {
 
         <TouchableOpacity
           onPress={sendFollowup}
-          disabled={!selectedLead || scheduling}
-          style={[styles.scheduleBtn, { backgroundColor: theme.navy, opacity: !selectedLead || scheduling ? 0.5 : 1 }]}
+          disabled={!selectedLead || scheduling || selectedLead?.followup_status === 'done'}
+          style={[styles.scheduleBtn, { backgroundColor: theme.navy, opacity: !selectedLead || scheduling || selectedLead?.followup_status === 'done' ? 0.5 : 1 }]}
         >
           {scheduling
             ? <ActivityIndicator color="#fff" size="small" />
             : <>
-                <Ionicons name="send" size={18} color="#fff" />
-                <Text style={styles.scheduleBtnText}>Schedule Follow-up</Text>
+                <Ionicons name={selectedLead?.followup_status === 'done' ? 'checkmark-circle' : 'send'} size={18} color="#fff" />
+                <Text style={styles.scheduleBtnText}>
+                  {selectedLead?.followup_status === 'done' ? 'Already Sent' : 'Schedule Follow-up'}
+                </Text>
               </>
           }
         </TouchableOpacity>
