@@ -233,11 +233,15 @@ export default function ManagerLeads() {
     Alert.alert('Cancel Follow-up', `Cancel follow-up email for ${lead.name}?`, [
       { text: 'No', style: 'cancel' },
       { text: 'Yes', style: 'destructive', onPress: async () => {
-        try {
+       try {
           const headers = await getAuthHeaders();
-          const res = await fetch(`${BACKEND_URL}/manager/leads/${lead.lead_id}/followup`, {
-            method: 'PUT', headers,
-            body: JSON.stringify({ followup_status: 'cancelled' }),
+          const res = await fetch(`${BACKEND_URL}/manager/followup/cancel`, {
+            method: 'POST', 
+            headers,
+            body: JSON.stringify({ 
+              lead_id: lead.lead_id, // 🌟 FIXED: Pass the ID so the backend knows who to cancel!
+              followup_id: null 
+            }),
           });
           const data = await res.json();
           if (data.success) {
