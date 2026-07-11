@@ -425,6 +425,11 @@ app.put('/leads/:id', async (req, res) => {
 
 app.delete('/leads/:id', async (req, res) => {
     try {
+        // Cancel any pending followups first to stop cron from retrying
+        await pool.query(
+            `UPDATE lead_followups SET followup_status = 'cancelled' WHERE lead_id = $1 AND followup_status = 'pending'`,
+            [req.params.id]
+        );
         const result = await pool.query('DELETE FROM leads WHERE lead_id = $1', [req.params.id]);
         if (result.rowCount === 0) return res.status(404).json({ success: false, message: 'Lead not found' });
         res.json({ success: true, message: 'Lead deleted successfully' });
@@ -1258,15 +1263,20 @@ app.post('/send-followup/:id', authenticateToken, async (req, res) => {
 });
 
 
-// ── CRON JOB — runs every minute, sends pending emails ───────────────────────
-cron.schedule('* * * * *', async () => {
+// ── CRON JOB — runs every 6 hours, sends pending emails ─────────────────────
+cron.schedule('0 */6 * * *', async () => {
     try {
         const followups = await pool.query(`
             SELECT * FROM lead_followups WHERE followup_status = 'pending' AND scheduled_at <= NOW()
         `);
         for (const followup of followups.rows) {
             const leadResult = await pool.query('SELECT * FROM leads WHERE lead_id = $1', [followup.lead_id]);
-            if (leadResult.rows.length === 0) continue;
+            if (leadResult.rows.length === 0) {
+                // Lead deleted — cancel the orphaned followup
+                await pool.query(`UPDATE lead_followups SET followup_status='cancelled' WHERE followup_id=$1`, [followup.followup_id]);
+                console.log(`⚠️ Cancelled orphaned followup ${followup.followup_id} — lead no longer exists`);
+                continue;
+            }
             const lead = leadResult.rows[0];
             try {
                 const aiData = {

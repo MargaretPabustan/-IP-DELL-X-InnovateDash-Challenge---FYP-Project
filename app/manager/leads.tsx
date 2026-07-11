@@ -225,6 +225,32 @@ export default function ManagerLeads() {
     }
   };
 
+  const handleCancelFollowup = async (lead: Lead) => {
+    if (lead.followup_status === 'cancelled') {
+      Alert.alert('Already Cancelled', 'This follow-up is already cancelled.');
+      return;
+    }
+    Alert.alert('Cancel Follow-up', `Cancel follow-up email for ${lead.name}?`, [
+      { text: 'No', style: 'cancel' },
+      { text: 'Yes', style: 'destructive', onPress: async () => {
+        try {
+          const headers = await getAuthHeaders();
+          const res = await fetch(`${BACKEND_URL}/manager/leads/${lead.lead_id}/followup`, {
+            method: 'PUT', headers,
+            body: JSON.stringify({ followup_status: 'cancelled' }),
+          });
+          const data = await res.json();
+          if (data.success) {
+            setLeads(prev => prev.map(l => l.lead_id === lead.lead_id ? { ...l, followup_status: 'cancelled' } : l));
+            setViewingLead(prev => prev?.lead_id === lead.lead_id ? { ...prev, followup_status: 'cancelled' } : prev);
+          } else {
+            Alert.alert('Error', data.message || 'Failed to cancel follow-up.');
+          }
+        } catch { Alert.alert('Error', 'Failed to cancel follow-up.'); }
+      }},
+    ]);
+  };
+
   const leadsLengthLabel = `${filteredLeads.length} leads`;
   const headerPaddingTop = Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12;
 
@@ -338,6 +364,14 @@ export default function ManagerLeads() {
                     >
                       <Text style={[styles.editBtnText, { color: accentColor }]}>Edit Follow-Up</Text>
                     </TouchableOpacity>
+                    {lead.followup_status === 'pending' && (
+                      <TouchableOpacity
+                        style={[styles.editBtn, { borderColor: '#ef4444' }]}
+                        onPress={() => handleCancelFollowup(lead)}
+                      >
+                        <Text style={[styles.editBtnText, { color: '#ef4444' }]}>Cancel</Text>
+                      </TouchableOpacity>
+                    )}
                     <TouchableOpacity
                       style={[styles.viewBtn, { backgroundColor: accentColor }]}
                       onPress={() => setViewingLead(lead)}
