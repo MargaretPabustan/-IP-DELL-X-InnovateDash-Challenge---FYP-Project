@@ -1168,13 +1168,16 @@ app.post('/send-followup/:id', authenticateToken, async (req, res) => {
         }
         const lead = leadResult.rows[0];
 
-        // 2. State machine protection — block only if already sent (done), allow overwrite of pending
+        // 2. State machine protection — block if done or cancelled
         const existing = await pool.query(
             `SELECT followup_status FROM lead_followups WHERE lead_id = $1`,
             [leadId]
         );
         if (existing.rowCount > 0 && existing.rows[0].followup_status === 'done') {
             return res.status(409).json({ success: false, message: 'A follow-up email has already been sent for this lead.' });
+        }
+        if (existing.rowCount > 0 && existing.rows[0].followup_status === 'cancelled') {
+            return res.status(409).json({ success: false, message: 'This follow-up has been cancelled. Please set it back to pending first.' });
         }
 
         // 3. Extract mapped contextual identities from joining tables (Double checked with ERD)

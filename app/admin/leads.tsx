@@ -35,6 +35,17 @@ function getStatusLabel(status: string) {
 }
 
 const TEAM_COLORS = ['#3b82f6', '#22c55e', '#f59e0b', '#6366f1', '#ef4444'];
+const INTENT_OPTIONS = [
+  'High - Ready to Buy',
+  'Medium - Pricing Inquiry',
+  'Medium - Demo Request',
+  'Low - Just Browsing',
+  'Low - Not Interested',
+];
+const INTEREST_OPTIONS = ['AI PCs', 'Multi-cloud', 'Storage', 'Service', 'Others'];
+const INTEREST_TEAM_MAP: Record<string, number> = {
+  'AI PCs': 1, 'Multi-cloud': 2, 'Storage': 3, 'Service': 4, 'Others': 5,
+};
 const TEAM_NAMES: Record<number, string> = {
   1: 'AI PCs', 2: 'Multi-cloud', 3: 'Storage', 4: 'Service', 5: 'Others',
 };
@@ -111,11 +122,20 @@ function ViewModal({ lead, onClose, theme }: { lead: Lead; onClose: () => void; 
 
 // ─── Edit Modal ───────────────────────────────────────────────────────────────
 function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () => void; onSave: (updated: Lead) => void; theme: any }) {
-  const [intent,  setIntent]  = useState(lead.customer_intent || '');
-  const [aiNotes, setAiNotes] = useState(lead.ai_notes || '');
-  const [teamId,  setTeamId]  = useState<number>(lead.assigned_team_id ?? 0);
-  const [status,  setStatus]  = useState(lead.status || 'NEW');
-  const [saving,  setSaving]  = useState(false);
+  const [intent,           setIntent]           = useState(lead.customer_intent || '');
+  const [aiNotes,          setAiNotes]          = useState(lead.ai_notes || '');
+  const [teamId,           setTeamId]           = useState<number>(lead.assigned_team_id ?? 0);
+  const [status,           setStatus]           = useState(lead.status || 'NEW');
+  const [interests,        setInterests]        = useState<string[]>([]);
+  const [showIntentPicker, setShowIntentPicker] = useState(false);
+  const [saving,           setSaving]           = useState(false);
+
+  useEffect(() => {
+    if (interests.length > 0) {
+      const suggested = INTEREST_TEAM_MAP[interests[0]];
+      if (suggested) setTeamId(suggested);
+    }
+  }, [interests]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -168,18 +188,45 @@ function EditModal({ lead, onClose, onSave, theme }: { lead: Lead; onClose: () =
               ))}
             </View>
             <Text style={modal.fieldLabel}>CUSTOMER INTENT</Text>
-            <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={intent} onChangeText={setIntent} placeholder="e.g. Pricing Inquiry, Demo Request..." placeholderTextColor={theme.subText} />
+            <TouchableOpacity
+              style={[modal.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderColor: theme.subText + '44' }]}
+              onPress={() => setShowIntentPicker(v => !v)}
+            >
+              <Text style={{ color: intent ? theme.text : theme.subText, fontSize: 13 }}>
+                {intent || 'Select intent...'}
+              </Text>
+              <Ionicons name={showIntentPicker ? 'chevron-up' : 'chevron-down'} size={16} color={theme.subText} />
+            </TouchableOpacity>
+            {showIntentPicker && (
+              <View style={{ borderRadius: 10, borderWidth: 1, borderColor: theme.subText + '44', overflow: 'hidden', marginTop: 4, marginBottom: 8 }}>
+                {INTENT_OPTIONS.map(opt => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={{ padding: 12, backgroundColor: intent === opt ? theme.accent + '18' : theme.bg, borderBottomWidth: 1, borderBottomColor: theme.subText + '22' }}
+                    onPress={() => { setIntent(opt); setShowIntentPicker(false); }}
+                  >
+                    <Text style={{ color: intent === opt ? theme.accent : theme.text, fontWeight: intent === opt ? '700' : '500', fontSize: 13 }}>{opt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+            <Text style={modal.fieldLabel}>INTERESTS</Text>
+            <View style={modal.chipRow}>
+              {INTEREST_OPTIONS.map(opt => {
+                const selected = interests.includes(opt);
+                return (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[modal.chip, { backgroundColor: selected ? theme.navy : theme.bg, borderColor: selected ? theme.navy : theme.subText + '44' }]}
+                    onPress={() => setInterests(prev => selected ? prev.filter(i => i !== opt) : [...prev, opt])}
+                  >
+                    <Text style={[modal.chipText, { color: selected ? '#fff' : theme.text }]}>{opt}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
             <Text style={modal.fieldLabel}>AI NOTES (OVERRIDE)</Text>
             <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44', minHeight: 80, textAlignVertical: 'top' }]} value={aiNotes} onChangeText={setAiNotes} multiline placeholder="Override AI analysis notes..." placeholderTextColor={theme.subText} />
-            <Text style={modal.fieldLabel}>ASSIGN TEAM</Text>
-            <View style={modal.chipRow}>
-              {[0, 1, 2, 3, 4, 5].map(t => (
-                <TouchableOpacity key={t} style={[modal.chip, { backgroundColor: teamId === t ? theme.navy : theme.bg, borderColor: theme.navy }]} onPress={() => setTeamId(t)}>
-                  <Text style={[modal.chipText, { color: teamId === t ? '#fff' : theme.navy }]}>{t === 0 ? 'None' : `T${t}`}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            {teamId > 0 && <Text style={{ fontSize: 11, color: theme.subText, marginTop: 4, marginBottom: 8 }}>Team {teamId} — {TEAM_NAMES[teamId]}</Text>}
           </ScrollView>
           <View style={modal.modalBtns}>
             <TouchableOpacity style={[modal.cancelBtn, { borderColor: theme.accent }]} onPress={onClose} disabled={saving}>
@@ -205,6 +252,15 @@ function AddLeadModal({ onClose, onAdded, theme }: { onClose: () => void; onAdde
   const [intent,  setIntent]  = useState('');
   const [teamId,  setTeamId]  = useState(0);
   const [saving,  setSaving]  = useState(false);
+  const [interests,        setInterests]        = useState<string[]>([]);
+  const [showIntentPicker, setShowIntentPicker] = useState(false);
+
+  useEffect(() => {
+    if (interests.length > 0) {
+      const suggested = INTEREST_TEAM_MAP[interests[0]];
+      if (suggested) setTeamId(suggested);
+    }
+  }, [interests]);
 
   const handleAdd = async () => {
     if (!name.trim() || !email.trim() || !company.trim() || !title.trim() || !phone.trim()) {
@@ -258,17 +314,43 @@ function AddLeadModal({ onClose, onAdded, theme }: { onClose: () => void; onAdde
             <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={phone} onChangeText={setPhone} placeholder="e.g. +65 9123 4567" placeholderTextColor={theme.subText} keyboardType="phone-pad" />
 
             <Text style={modal.fieldLabel}>CUSTOMER INTENT</Text>
-            <TextInput style={[modal.input, { color: theme.text, borderColor: theme.subText + '44' }]} value={intent} onChangeText={setIntent} placeholder="e.g. Pricing Inquiry, Demo Request..." placeholderTextColor={theme.subText} />
-
-            <Text style={modal.fieldLabel}>ASSIGN TEAM</Text>
+            <TouchableOpacity
+              style={[modal.input, { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderColor: theme.subText + '44' }]}
+              onPress={() => setShowIntentPicker(v => !v)}
+            >
+              <Text style={{ color: intent ? theme.text : theme.subText, fontSize: 13 }}>
+                {intent || 'Select intent...'}
+              </Text>
+              <Ionicons name={showIntentPicker ? 'chevron-up' : 'chevron-down'} size={16} color={theme.subText} />
+            </TouchableOpacity>
+            {showIntentPicker && (
+              <View style={{ borderRadius: 10, borderWidth: 1, borderColor: theme.subText + '44', overflow: 'hidden', marginTop: 4, marginBottom: 8 }}>
+                {INTENT_OPTIONS.map(opt => (
+                  <TouchableOpacity
+                    key={opt}
+                    style={{ padding: 12, backgroundColor: intent === opt ? theme.accent + '18' : theme.bg, borderBottomWidth: 1, borderBottomColor: theme.subText + '22' }}
+                    onPress={() => { setIntent(opt); setShowIntentPicker(false); }}
+                  >
+                    <Text style={{ color: intent === opt ? theme.accent : theme.text, fontWeight: intent === opt ? '700' : '500', fontSize: 13 }}>{opt}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+            <Text style={modal.fieldLabel}>INTERESTS</Text>
             <View style={modal.chipRow}>
-              {[0, 1, 2, 3, 4, 5].map(t => (
-                <TouchableOpacity key={t} style={[modal.chip, { backgroundColor: teamId === t ? theme.navy : theme.bg, borderColor: theme.navy }]} onPress={() => setTeamId(t)}>
-                  <Text style={[modal.chipText, { color: teamId === t ? '#fff' : theme.navy }]}>{t === 0 ? 'None' : `T${t}`}</Text>
-                </TouchableOpacity>
-              ))}
+              {INTEREST_OPTIONS.map(opt => {
+                const selected = interests.includes(opt);
+                return (
+                  <TouchableOpacity
+                    key={opt}
+                    style={[modal.chip, { backgroundColor: selected ? theme.navy : theme.bg, borderColor: selected ? theme.navy : theme.subText + '44' }]}
+                    onPress={() => setInterests(prev => selected ? prev.filter(i => i !== opt) : [...prev, opt])}
+                  >
+                    <Text style={[modal.chipText, { color: selected ? '#fff' : theme.text }]}>{opt}</Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
-            {teamId > 0 && <Text style={{ fontSize: 11, color: theme.subText, marginTop: 4, marginBottom: 8 }}>Team {teamId} — {TEAM_NAMES[teamId]}</Text>}
           </ScrollView>
 
           <View style={modal.modalBtns}>

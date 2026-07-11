@@ -90,6 +90,7 @@ export default function EmailsScreen() {
   const sendFollowup = async () => {
     if (!selectedLead) { Alert.alert('No Lead', 'Please select a lead first.'); return; }
     if (selectedLead.followup_status === 'done') { Alert.alert('Already Sent', 'A follow-up email has already been sent for this lead.'); return; }
+    if (selectedLead.followup_status === 'cancelled') { Alert.alert('Cancelled', 'This follow-up has been cancelled. Please set it back to pending first.'); return; }
     
     const scheduledDate = new Date(
       followupDate.getFullYear(),
@@ -277,15 +278,15 @@ export default function EmailsScreen() {
 
         <TouchableOpacity
           onPress={sendFollowup}
-          disabled={!selectedLead || scheduling || selectedLead?.followup_status === 'done'}
-          style={[styles.scheduleBtn, { backgroundColor: theme.navy, opacity: !selectedLead || scheduling || selectedLead?.followup_status === 'done' ? 0.5 : 1 }]}
+          disabled={!selectedLead || scheduling || selectedLead?.followup_status === 'done' || selectedLead?.followup_status === 'cancelled'}
+          style={[styles.scheduleBtn, { backgroundColor: theme.navy, opacity: !selectedLead || scheduling || selectedLead?.followup_status === 'done' || selectedLead?.followup_status === 'cancelled' ? 0.5 : 1 }]}
         >
           {scheduling
             ? <ActivityIndicator color="#fff" size="small" />
             : <>
-                <Ionicons name={selectedLead?.followup_status === 'done' ? 'checkmark-circle' : 'send'} size={18} color="#fff" />
+                <Ionicons name={selectedLead?.followup_status === 'done' ? 'checkmark-circle' : selectedLead?.followup_status === 'cancelled' ? 'close-circle' : 'send'} size={18} color="#fff" />
                 <Text style={styles.scheduleBtnText}>
-                  {selectedLead?.followup_status === 'done' ? 'Already Sent' : 'Schedule Follow-up'}
+                  {selectedLead?.followup_status === 'done' ? 'Already Sent' : selectedLead?.followup_status === 'cancelled' ? 'Follow-up Cancelled' : 'Schedule Follow-up'}
                 </Text>
               </>
           }
