@@ -87,11 +87,30 @@ export default function EmailsScreen() {
 
   const onRefresh = () => { setRefreshing(true); fetchLeads(); };
 
+  const deleteFollowup = async () => {
+    if (!selectedLead) return;
+    Alert.alert('Reset Follow-up', `Reset follow-up for ${selectedLead.name}? This allows sending a new email.`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Reset', style: 'destructive', onPress: async () => {
+        try {
+          const headers = await getAuthHeaders();
+          await fetch(`${BACKEND_URL}/manager/leads/${selectedLead.lead_id}/followup`, {
+            method: 'PUT', headers,
+            body: JSON.stringify({ followup_status: 'pending' }),
+          });
+          setLeads(prev => prev.map(l => l.lead_id === selectedLead.lead_id ? { ...l, followup_status: 'pending' } : l));
+          setSelectedLead((prev: any) => prev ? { ...prev, followup_status: 'pending' } : prev);
+          Alert.alert('Reset', 'Follow-up reset to pending. You can now send a new email.');
+        } catch { Alert.alert('Error', 'Failed to reset follow-up.'); }
+      }},
+    ]);
+  };
+
   const sendFollowup = async () => {
     if (!selectedLead) { Alert.alert('No Lead', 'Please select a lead first.'); return; }
     if (selectedLead.followup_status === 'done') { Alert.alert('Already Sent', 'A follow-up email has already been sent for this lead.'); return; }
     if (selectedLead.followup_status === 'cancelled') { Alert.alert('Cancelled', 'This follow-up has been cancelled. Please set it back to pending first.'); return; }
-    
+
     const scheduledDate = new Date(
       followupDate.getFullYear(),
       followupDate.getMonth(),
@@ -103,31 +122,32 @@ export default function EmailsScreen() {
     );
     setScheduling(true);
     try {
+      console.log('📧 Sending followup for lead:', selectedLead.lead_id, 'to:', selectedLead.email);
       const headers = await getAuthHeaders();
-      const response = await fetch(`${BACKEND_URL}/send-email`, {
+      const response = await fetch(`${BACKEND_URL}/send-followup/${selectedLead.lead_id}`, {
         method: 'POST', headers,
-        body: JSON.stringify({
-          to: selectedLead.email,
-          subject: 'Your Dell Technologies Follow-up',
-          text: `Hello ${selectedLead.name},\n\nThank you for visiting our booth. We would love to continue the conversation about Dell solutions and help with your requirements.\n\nBest regards,\nDell Boothflow Team`,
-          lead_id: selectedLead.lead_id,
-          followupDate: scheduledDate.toISOString(),
-        }),
+        body: JSON.stringify({ followupDate: scheduledDate.toISOString() }),
       });
-      
+
+      const data = await response.json();
+      console.log('📧 Response:', response.status, data);
+
       if (response.status === 409) {
-        Alert.alert('Error', 'Error - No duplicate followups');
+        Alert.alert('Already Sent', data.message || 'A follow-up already exists for this lead.');
         return;
       }
-      const data = await response.json();
       if (response.ok && data.success) {
-        Alert.alert('✅ Scheduled', `Follow-up email for ${selectedLead.name} has been scheduled.`);
+        const sentLeadId = selectedLead.lead_id;
+        const sentLeadName = selectedLead.name;
         setSelectedLead(null);
-        fetchLeads();
+        setLeads(prev => prev.map(l => l.lead_id === sentLeadId ? { ...l, followup_status: 'done' } : l));
+        Alert.alert('✅ Sent', `Follow-up email for ${sentLeadName} has been sent successfully.`);
+        await fetchLeads();
       } else {
-        Alert.alert('Error', data.message || 'Failed to schedule follow-up.');
+        Alert.alert('Error', data.message || 'Failed to send follow-up.');
       }
-    } catch {
+    } catch (err: any) {
+      console.log('❌ sendFollowup error:', err.message);
       Alert.alert('Error', 'Unable to connect to server.');
     } finally {
       setScheduling(false);
@@ -230,10 +250,17 @@ export default function EmailsScreen() {
               <View style={styles.leadInfoRow}>
                 <Ionicons name="mail-outline" size={13} color={theme.subText} />
                 <Text style={[styles.leadInfoLabel, { color: theme.subText }]}>Follow-up</Text>
-                <View style={[styles.statusBadge, { backgroundColor: selectedLead.followup_status === 'done' ? '#22c55e18' : '#f59e0b18' }]}>
-                  <Text style={[styles.statusBadgeText, { color: selectedLead.followup_status === 'done' ? '#22c55e' : '#f59e0b' }]}>
-                    {selectedLead.followup_status === 'done' ? '✓ Sent' : selectedLead.followup_status === 'cancelled' ? 'Cancelled' : 'Pending'}
-                  </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <View style={[styles.statusBadge, { backgroundColor: selectedLead.followup_status === 'done' ? '#22c55e18' : '#f59e0b18' }]}>
+                    <Text style={[styles.statusBadgeText, { color: selectedLead.followup_status === 'done' ? '#22c55e' : '#f59e0b' }]}>
+                      {selectedLead.followup_status === 'done' ? '✓ Sent' : selectedLead.followup_status === 'cancelled' ? 'Cancelled' : 'Pending'}
+                    </Text>
+                  </View>
+                  {(selectedLead.followup_status === 'done' || selectedLead.followup_status === 'cancelled') && (
+                    <TouchableOpacity onPress={deleteFollowup} style={[styles.statusBadge, { backgroundColor: '#ef444418' }]}>
+                      <Text style={[styles.statusBadgeText, { color: '#ef4444' }]}>Reset</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
             </View>

@@ -1246,6 +1246,9 @@ app.post('/send-followup/:id', authenticateToken, async (req, res) => {
             [leadId, `Manual follow-up email sent to ${lead.email} regarding ${interests}.`]
         );
 
+        // Auto-close lead after email sent
+        await pool.query(`UPDATE leads SET status = 'CLOSED' WHERE lead_id = $1`, [leadId]);
+
         await pool.query('COMMIT');
         
         res.json({ 
@@ -1298,6 +1301,7 @@ cron.schedule('* * * * *', async () => {
                     html:    cronHtml,
                 });
                 await pool.query(`UPDATE lead_followups SET followup_status='done', sent_at=NOW() WHERE followup_id=$1`, [followup.followup_id]);
+                await pool.query(`UPDATE leads SET status = 'CLOSED' WHERE lead_id = $1`, [lead.lead_id]);
                 await pool.query(
                     `INSERT INTO lead_activity_logs (lead_id, activity_type, activity_description) VALUES ($1, 'EMAIL_SENT', 'Scheduled follow-up email sent via cron')`,
                     [lead.lead_id]

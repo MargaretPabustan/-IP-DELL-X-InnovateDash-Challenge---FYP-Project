@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "dell-lead-app",
+    "name": "Boothflow",
     "slug": "dell-lead-app",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -14,10 +14,8 @@
     "android": {
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
-        "foregroundImage": "./assets/images/android-icon-foreground.png",
-        "backgroundImage": "./assets/images/android-icon-background.png",
-        "monochromeImage": "./assets/images/android-icon-monochrome.png"
+        "backgroundColor": "#0f2557",
+        "foregroundImage": "./assets/images/android-icon-foreground.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
@@ -33,9 +31,9 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff",
+          "backgroundColor": "#0f2557",
           "dark": {
-            "backgroundColor": "#000000"
+            "backgroundColor": "#0f2557"
           }
         }
       ],

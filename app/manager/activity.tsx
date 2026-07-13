@@ -166,11 +166,22 @@ export default function ManagerActivity() {
         </View>
         <View style={{ flex: 1 }}>
           <Text style={[styles.activityType, { color: theme.text }]}>
-            {log.followup_status ? `FOLLOWUP_${log.followup_status.toUpperCase()}` : log.activity_type}
+            {log.activity_type?.replace(/_/g, ' ')}
           </Text>
           <Text style={[styles.activityLead, { color: theme.subText }]}>
             {log.lead_name || 'N/A'} {log.company ? `· ${log.company}` : ''}
           </Text>
+          {log.followup_status && (
+            <View style={[styles.followupBadge, { 
+              backgroundColor: log.followup_status === 'done' ? '#22c55e18' : log.followup_status === 'cancelled' ? '#ef444418' : '#f59e0b18'
+            }]}>
+              <Text style={[styles.followupBadgeText, { 
+                color: log.followup_status === 'done' ? '#22c55e' : log.followup_status === 'cancelled' ? '#ef4444' : '#f59e0b'
+              }]}>
+                {log.followup_status === 'done' ? '✓ Sent' : log.followup_status === 'cancelled' ? 'Cancelled' : '⏳ Pending'}
+              </Text>
+            </View>
+          )}
           <Text style={[styles.activityDesc, { color: theme.subText }]}>{log.activity_description}</Text>
           <Text style={[styles.activityTime, { color: theme.subText }]}>
             {log.created_at ? new Date(log.created_at).toLocaleString('en-SG') : '—'}
@@ -189,7 +200,7 @@ export default function ManagerActivity() {
     );
   };
 
-  const visibleLogs = logs.filter(log => log.followup_status === 'pending' || log.followup_status === 'done');
+  const visibleLogs = logs;
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.bg }]}>
@@ -267,6 +278,8 @@ const styles = StyleSheet.create({
   activityLead: { fontSize: 12, marginTop: 2 },
   activityDesc: { fontSize: 12, marginTop: 2 },
   activityTime: { fontSize: 11, marginTop: 4 },
+  followupBadge: { alignSelf: 'flex-start', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3, marginTop: 4 },
+  followupBadgeText: { fontSize: 11, fontWeight: '700' },
   cancelBtn: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 4, backgroundColor: '#ef444412', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, marginTop: 10, borderWidth: 1, borderColor: '#ef444425' },
   cancelBtnText: { color: '#ef4444', fontSize: 11, fontWeight: '700' },
   bottomNav: { flexDirection: 'row', borderTopWidth: 1, paddingTop: 10, justifyContent: 'space-around', alignItems: 'center' },
