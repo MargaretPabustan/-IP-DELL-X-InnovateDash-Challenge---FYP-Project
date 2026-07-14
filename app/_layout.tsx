@@ -4,19 +4,10 @@ import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, AppState } from
 import NetInfo from '@react-native-community/netinfo';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
-import { syncOfflineLeads } from '../src/hooks/Offlinesync';
+import * as ScreenCapture from 'expo-screen-capture';
 
-const API_URL     = process.env.EXPO_PUBLIC_API_URL || '';
-const ANON_KEY    = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
-
 const SESSION_TIMEOUT = 30 * 60 * 1000;
-
-const SUPABASE_HEADERS = {
-  'apikey':        ANON_KEY,
-  'Authorization': `Bearer ${ANON_KEY}`,
-  'Content-Type':  'application/json',
-};
 
 function NoInternetScreen({ onRetry }: { onRetry: () => void }) {
   const [checking, setChecking] = useState(false);
@@ -34,7 +25,7 @@ function NoInternetScreen({ onRetry }: { onRetry: () => void }) {
         <Ionicons name="wifi-outline" size={72} color="#94a3b8" />
         <Text style={styles.title}>No Internet Connection</Text>
         <Text style={styles.subtitle}>
-          {'Don\'t worry — leads you capture will be saved and synced automatically when you\'re back online.'}
+          {'Please reconnect to continue using Boothflow.'}
         </Text>
         <TouchableOpacity style={styles.retryBtn} onPress={handleRetry} activeOpacity={0.8}>
           <Text style={styles.retryText}>{checking ? 'Checking...' : 'Retry'}</Text>
@@ -45,14 +36,14 @@ function NoInternetScreen({ onRetry }: { onRetry: () => void }) {
 }
 
 export default function RootLayout() {
-  const router                                          = useRouter();
-  const segments                                        = useSegments();
-  const [wasPreviouslyOffline, setWasPreviouslyOffline] = useState(false);
+  const router   = useRouter();
+  const segments = useSegments();
+  const [isConnected, setIsConnected] = useState<boolean | null>(null);
 
-  // ── Prevent screenshots & screen recording app-wide ──────────────────────
+  // ── Screenshot & screen recording prevention ──────────────────────────────
   useEffect(() => {
-    // ScreenCapture.preventScreenCaptureAsync();
-    // return () => { ScreenCapture.allowScreenCaptureAsync(); };
+    ScreenCapture.preventScreenCaptureAsync();
+    return () => { ScreenCapture.allowScreenCaptureAsync(); };
   }, []);
 
   // ── Auth guard ────────────────────────────────────────────────────────────
@@ -62,7 +53,6 @@ export default function RootLayout() {
         const token = await SecureStore.getItemAsync('token');
         const inAuthGroup   = segments[0] === 'auth';
         const inPublicGroup = segments[0] === 'lets-get-started' || segments[0] === 'index' || segments[0] === undefined;
-
         if (!token && !inAuthGroup && !inPublicGroup) {
           router.replace('/auth/login' as any);
         }
@@ -76,7 +66,6 @@ export default function RootLayout() {
   // ── Session timeout — auto logout after 30 mins in background ────────────
   useEffect(() => {
     let backgroundTime: number | null = null;
-
     const subscription = AppState.addEventListener('change', async (nextState) => {
       if (nextState === 'background') {
         backgroundTime = Date.now();
@@ -91,26 +80,51 @@ export default function RootLayout() {
         backgroundTime = null;
       }
     });
-
     return () => subscription.remove();
   }, [router]);
 
-  // ── Offline sync ──────────────────────────────────────────────────────────
+  // ── Network monitoring + offline sync ────────────────────────────────────
   useEffect(() => {
+    let wasPreviouslyOffline = false;
     const unsubscribe = NetInfo.addEventListener(async state => {
       const connected = !!state.isConnected;
+      setIsConnected(connected);
 
       if (connected && wasPreviouslyOffline) {
         console.log('🌐 Internet restored — syncing offline leads...');
-        await syncOfflineLeads(API_URL, BACKEND_URL, SUPABASE_HEADERS);
-        setWasPreviouslyOffline(false);
+        try {
+          const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+          const existing = await AsyncStorage.getItem('offline_leads');
+          const queue = JSON.parse(existing || '[]');
+          if (queue.length > 0) {
+            const token = await SecureStore.getItemAsync('token');
+            let synced = 0;
+            for (const lead of queue) {
+              try {
+                await fetch(`${BACKEND_URL}/leads`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                  body: JSON.stringify(lead),
+                });
+                synced++;
+              } catch {}
+            }
+            await AsyncStorage.removeItem('offline_leads');
+            if (synced > 0) console.log(`✅ Synced ${synced} offline leads`);
+          }
+        } catch (err) {
+          console.log('❌ Offline sync error:', err);
+        }
       }
-
-      if (!connected) setWasPreviouslyOffline(true);
+      wasPreviouslyOffline = !connected;
     });
-
     return () => unsubscribe();
-  }, [wasPreviouslyOffline]);
+  }, []);
+
+  // Show no internet screen when offline
+  if (isConnected === false) {
+    return <NoInternetScreen onRetry={() => NetInfo.fetch().then(s => setIsConnected(!!s.isConnected))} />;
+  }
 
   return (
     <Stack screenOptions={{ headerShown: false }}>

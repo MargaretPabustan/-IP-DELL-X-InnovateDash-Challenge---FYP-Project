@@ -1199,7 +1199,7 @@ app.post('/send-followup/:id', authenticateToken, async (req, res) => {
 
         const aiData = {
             intent: lead.status === 'URGENT' ? 'High' : lead.status === 'FOLLOW-UP' ? 'Medium' : 'Low',
-            notes: lead.ai_notes || 'Thank you for stopping by our exhibition space.',
+            notes: 'We appreciate your interest in Dell Technologies solutions.',
         };
 
         const emailSubject = `Your Dell Technologies Follow-up — ${interests}`;
@@ -1266,7 +1266,7 @@ app.post('/send-followup/:id', authenticateToken, async (req, res) => {
 });
 
 
-// ── CRON JOB — runs every 6 hours, sends pending emails ─────────────────────
+// ── CRON JOB — runs every minute, sends pending emails ──────────────────────
 cron.schedule('* * * * *', async () => {
     console.log('⏰ Cron running — checking pending followups...');
     try {
@@ -1285,7 +1285,7 @@ cron.schedule('* * * * *', async () => {
             try {
                 const aiData = {
                     intent: lead.status === 'URGENT' ? 'High' : lead.status === 'FOLLOW-UP' ? 'Medium' : 'Low',
-                    notes: lead.ai_notes || 'Thank you for stopping by our exhibition space.',
+                    notes: 'We appreciate your interest in Dell Technologies solutions.',
                 };
                 const interestsResult = await pool.query(
                     `SELECT ic.category_name FROM lead_interest_categories lic

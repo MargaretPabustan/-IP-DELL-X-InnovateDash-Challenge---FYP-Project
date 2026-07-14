@@ -16,7 +16,8 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useAppTheme } from '../../src/constants/useAppTheme';
 import { styles } from '../../src/styles/leadDetailsStyles';
-import { saveLeadOffline } from '../../src/hooks/Offlinesync';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
 import * as SecureStore from 'expo-secure-store';
 
 const API_URL     = process.env.EXPO_PUBLIC_API_URL || '';
@@ -191,6 +192,20 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
     if (onSubmit) onSubmit({ leadName, companyName, title, phone, email, allInterests, intent, additionalNotes });
 
     try {
+      // Check network — save offline if no connection
+      const netState = await NetInfo.fetch();
+      if (!netState.isConnected) {
+        const offlineLead = { leadName, companyName, title, phone, email, allInterests, intent, additionalNotes, savedAt: new Date().toISOString() };
+        const existing = await AsyncStorage.getItem('offline_leads');
+        const queue = JSON.parse(existing || '[]');
+        queue.push(offlineLead);
+        await AsyncStorage.setItem('offline_leads', JSON.stringify(queue));
+        Alert.alert('Saved Offline', `${leadName}'s details saved locally. Will sync automatically when internet is restored.`);
+        setLoading(false);
+        router.replace('/booth/dashboardscreen' as any);
+        return;
+      }
+
       const { id: scannedBy, name: scannedByName } = await getScannedBy();
       console.log('👤 scannedBy:', scannedBy, '| scannedByName:', scannedByName);
       const teamId = resolveTeamId(interest, selectedInterests);
