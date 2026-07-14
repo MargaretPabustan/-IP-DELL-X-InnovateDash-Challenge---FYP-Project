@@ -7,15 +7,14 @@
     "icon": "./assets/images/icon.png",
     "scheme": "dellleadapp",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true
     },
     "android": {
       "usesCleartextTraffic": true,
       "adaptiveIcon": {
-        "backgroundColor": "#0f2557",
-        "foregroundImage": "./assets/images/android-icon-foreground.png"
+        "foregroundImage": "./assets/images/icon.png",
+        "backgroundColor": "#0f2557"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,

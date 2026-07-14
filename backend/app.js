@@ -1266,8 +1266,8 @@ app.post('/send-followup/:id', authenticateToken, async (req, res) => {
 });
 
 
-// ── CRON JOB — runs every minute, sends pending emails ──────────────────────
-cron.schedule('* * * * *', async () => {
+// ── CRON JOB — runs every 5 minutes, sends pending emails ────────────────────
+cron.schedule('*/5 * * * *', async () => {
     console.log('⏰ Cron running — checking pending followups...');
     try {
         const followups = await pool.query(`

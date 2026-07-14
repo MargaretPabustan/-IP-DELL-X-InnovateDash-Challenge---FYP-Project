@@ -46,6 +46,7 @@ export default function EmailsScreen() {
   const [showPicker, setShowPicker] = useState(false);
   const [metrics, setMetrics] = useState({ sentCount: 0, sentThisWeek: 0, overdue: 0 });
   const [scheduling, setScheduling] = useState(false);
+  const isSubmitting = React.useRef(false);
 
   const tabs = [
     { key: 'Dashboard', icon: 'grid',     iconOff: 'grid-outline',     route: '/manager/dashboard' },
@@ -94,12 +95,12 @@ export default function EmailsScreen() {
       { text: 'Reset', style: 'destructive', onPress: async () => {
         try {
           const headers = await getAuthHeaders();
-          await fetch(`${BACKEND_URL}/manager/leads/${selectedLead.lead_id}/followup`, {
+          await fetch(`${BACKEND_URL}/manager/followup/${selectedLead.lead_id}`, {
             method: 'PUT', headers,
             body: JSON.stringify({ followup_status: 'pending' }),
           });
           setLeads(prev => prev.map(l => l.lead_id === selectedLead.lead_id ? { ...l, followup_status: 'pending' } : l));
-          setSelectedLead((prev: any) => prev ? { ...prev, followup_status: 'pending' } : prev);
+          setSelectedLead((prev: any) => prev ? { ...prev, followup_status: 'pending', previousStatus: 'done' } : prev);
           Alert.alert('Reset', 'Follow-up reset to pending. You can now send a new email.');
         } catch { Alert.alert('Error', 'Failed to reset follow-up.'); }
       }},
@@ -110,6 +111,12 @@ export default function EmailsScreen() {
     if (!selectedLead) { Alert.alert('No Lead', 'Please select a lead first.'); return; }
     if (selectedLead.followup_status === 'done') { Alert.alert('Already Sent', 'A follow-up email has already been sent for this lead.'); return; }
     if (selectedLead.followup_status === 'cancelled') { Alert.alert('Cancelled', 'This follow-up has been cancelled. Please set it back to pending first.'); return; }
+    if (isSubmitting.current) return;
+    isSubmitting.current = true;
+
+    const isResend = selectedLead.followup_status === 'pending' && selectedLead.previousStatus === 'done';
+    if (isSubmitting.current) return;
+    isSubmitting.current = true;
 
     const scheduledDate = new Date(
       followupDate.getFullYear(),
@@ -139,10 +146,16 @@ export default function EmailsScreen() {
       if (response.ok && data.success) {
         const sentLeadId = selectedLead.lead_id;
         const sentLeadName = selectedLead.name;
-        setSelectedLead(null);
         setLeads(prev => prev.map(l => l.lead_id === sentLeadId ? { ...l, followup_status: 'done' } : l));
-        Alert.alert('✅ Sent', `Follow-up email for ${sentLeadName} has been sent successfully.`);
-        await fetchLeads();
+        setTimeout(() => {
+          Alert.alert(
+            isResend ? '🔄 Resent' : '✅ Sent',
+            isResend
+              ? `Follow-up email for ${sentLeadName} has been resent successfully.`
+              : `Follow-up email for ${sentLeadName} has been sent successfully.`,
+            [{ text: 'OK', onPress: async () => { setSelectedLead(null); await fetchLeads(); } }]
+          );
+        }, 300);
       } else {
         Alert.alert('Error', data.message || 'Failed to send follow-up.');
       }
@@ -151,6 +164,7 @@ export default function EmailsScreen() {
       Alert.alert('Error', 'Unable to connect to server.');
     } finally {
       setScheduling(false);
+      isSubmitting.current = false;
     }
   };
 
