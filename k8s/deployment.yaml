@@ -22,7 +22,7 @@ spec:
 
       containers:
         - name: boothflow-backend
-          image: 896159010663.dkr.ecr.ap-southeast-1.amazonaws.com/boothflow-backend:v1
+          image: ghcr.io/renvrose/dell-lead-app-backend:latest
           imagePullPolicy: Always
 
           ports:
