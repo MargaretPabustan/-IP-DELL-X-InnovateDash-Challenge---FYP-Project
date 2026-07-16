@@ -115,8 +115,6 @@ export default function EmailsScreen() {
     isSubmitting.current = true;
 
     const isResend = selectedLead.followup_status === 'pending' && selectedLead.previousStatus === 'done';
-    if (isSubmitting.current) return;
-    isSubmitting.current = true;
 
     const scheduledDate = new Date(
       followupDate.getFullYear(),

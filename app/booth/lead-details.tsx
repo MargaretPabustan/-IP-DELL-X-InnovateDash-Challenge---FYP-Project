@@ -194,7 +194,7 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
     try {
       // Check network — save offline if no connection
       const netState = await NetInfo.fetch();
-      if (!netState.isConnected) {
+      if (netState.isConnected === false) {
         const offlineLead = { leadName, companyName, title, phone, email, allInterests, intent, additionalNotes, savedAt: new Date().toISOString() };
         const existing = await AsyncStorage.getItem('offline_leads');
         const queue = JSON.parse(existing || '[]');

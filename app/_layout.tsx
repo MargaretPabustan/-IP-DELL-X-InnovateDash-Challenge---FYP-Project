@@ -4,7 +4,6 @@ import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, AppState } from
 import NetInfo from '@react-native-community/netinfo';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
-import * as ScreenCapture from 'expo-screen-capture';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 const SESSION_TIMEOUT = 30 * 60 * 1000;
@@ -42,8 +41,6 @@ export default function RootLayout() {
 
   // ── Screenshot & screen recording prevention ──────────────────────────────
   useEffect(() => {
-    ScreenCapture.preventScreenCaptureAsync();
-    return () => { ScreenCapture.allowScreenCaptureAsync(); };
   }, []);
 
   // ── Auth guard ────────────────────────────────────────────────────────────
