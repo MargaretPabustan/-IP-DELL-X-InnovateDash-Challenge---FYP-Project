@@ -132,7 +132,7 @@ async function sendEmail({ to, subject, text, html }) {
 }
 
 // ── PERSONALISED EMAIL BUILDER ────────────────────────────────────────────────
-function buildFollowUpEmailHtml(lead, aiData, interests) {
+function buildFollowUpEmailHtml(lead, aiData, interests, followupAction = null) {
     let mainContent = '';
 
     if (aiData.intent === 'High' || lead.status === 'URGENT') {
@@ -217,7 +217,7 @@ function buildFollowUpEmailHtml(lead, aiData, interests) {
 }
 
 // ── PLAIN TEXT EMAIL BUILDER ──────────────────────────────────────────────────
-function buildFollowUpEmail(lead, aiData, interests, followupAction) {
+function buildFollowUpEmail(lead, aiData, interests, followupAction = null) {
     let body = `Hi ${lead.name},\n\n`;
     body += `Thank you for visiting the Dell Technologies booth at the Dell Technologies Forum Singapore. It was great connecting with you!\n\n`;
 
@@ -401,7 +401,7 @@ app.get('/leads/:id', async (req, res) => {
 });
 
 app.post('/leads', async (req, res) => {
-    const { name, email, company, title, phone_number, customer_intent, assigned_team_id, primary_interest, selected_interests, additional_notes, followup_action, scanned_by, scanned_by_name } = req.body;
+    const { name, email, company, title, phone_number, customer_intent, assigned_team_id, primary_interest, selected_interests, additional_notes, scanned_by, scanned_by_name } = req.body;
     const error = validateLead(name, email, company, title, phone_number);
     if (error) return res.status(400).json({ success: false, message: error });
     try {
@@ -1055,14 +1055,13 @@ Lead Details:
 - Primary Interests: ${interests}
 ${allInterests !== interests && allInterests !== 'Not specified' ? `- Other Interests Mentioned: ${allInterests}` : ''}
 ${repNotes ? `- Rep's Additional Notes: ${repNotes}` : ''}
-${followup_action ? `- Rep's Suggested Follow-up Action: ${followup_action}` : ''}
 
 Return ONLY valid JSON in this exact format, no extra text:
 {
   "intent": "Low" or "Medium" or "High",
   "confidence": a number between 0 and 1,
   "follow_up_required": true or false,
-  "notes": "a short 1-2 sentence personalised follow-up suggestion referencing their specific interests${followup_action ? ` and the suggested action: ${followup_action}` : ''}"
+  "notes": "a short 1-2 sentence personalised follow-up suggestion referencing their specific interests"
 }
 `;
 
@@ -1082,7 +1081,6 @@ Return ONLY valid JSON in this exact format, no extra text:
             console.log('✅ Gemini AI analysis successful');
         } catch (aiError) {
             console.warn(`⚠️ AI failed — using rule-based fallback. Error: ${aiError.message}`);
-            console.warn('⚠️ Gemini failed, using rule-based fallback:', aiError.message);
             const fallback = generateRuleBasedAnalysis(lead.customer_intent, interests);
             aiData = { intent: fallback.intent, confidence: fallback.confidence, follow_up_required: fallback.follow_up_required, notes: fallback.notes };
             usedFallback = true;
@@ -1110,10 +1108,10 @@ Return ONLY valid JSON in this exact format, no extra text:
                 `INSERT INTO lead_followups (lead_id, followup_action, followup_status, due_date, scheduled_at, email_subject, notes)
                  VALUES ($1, $2, 'pending', NOW() + INTERVAL '3 hours', NOW() + INTERVAL '3 hours', $3, $4)
                  ON CONFLICT (lead_id) DO NOTHING`,
-                [lead.lead_id, followup_action ? `Rep suggested: ${followup_action}` : `Automated Follow-up Email`, `Your Dell Technologies Follow-up — ${interests}`, buildFollowUpEmail(lead, aiData, interests, followup_action)]
+                [lead.lead_id, `Automated Follow-up Email`, `Your Dell Technologies Follow-up — ${interests}`, buildFollowUpEmail(lead, aiData, interests, null)]
             );
-            console.log(`✅ Lead created: ${lead.lead_id} | status: ${lead.status} | team: ${teamId}`);
-        console.log(`📅 Auto follow-up scheduled for lead ${lead.lead_id} in 3 hours`);
+            console.log(`✅ Lead created: ${lead.lead_id} | status: ${lead.status}`);
+            console.log(`📅 Auto follow-up scheduled for lead ${lead.lead_id} in 3 hours`);
         } catch (scheduleErr) {
             console.error('⚠️ Could not schedule follow-up email:', scheduleErr.message);
         }
@@ -1138,7 +1136,7 @@ Return ONLY valid JSON in this exact format, no extra text:
     }
 });
 
-// ── GENERIC EMAIL SENDING ROUTE ─────────────────────────────────────────────
+
 // ── GENERIC EMAIL SENDING ROUTE ─────────────────────────────────────────────
 app.post('/send-email', authenticateToken, async (req, res) => {
     const { to, subject, text, lead_id, followupDate } = req.body;
@@ -1281,8 +1279,8 @@ app.post('/send-followup/:id', authenticateToken, async (req, res) => {
         const localDueDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
         
         // Compile email template utilizing relational entities
-        const emailBody = buildFollowUpEmail(lead, aiData, interests, lead.followup_action);
-        const emailHtml = buildFollowUpEmailHtml(lead, aiData, interests, lead.followup_action);
+        const emailBody = buildFollowUpEmail(lead, aiData, interests, null);
+        const emailHtml = buildFollowUpEmailHtml(lead, aiData, interests);
 
         // 4. Trigger transactional email pipeline execution
         await sendEmail({ to: lead.email, subject: emailSubject, text: emailBody, html: emailHtml });
@@ -1365,7 +1363,7 @@ cron.schedule('*/5 * * * *', async () => {
                      WHERE lic.lead_id = $1`, [lead.lead_id]
                 );
                 const interests = interestsResult.rows.map(r => r.category_name).join(', ') || 'Dell Technologies solutions';
-                const cronHtml = buildFollowUpEmailHtml(lead, aiData, interests, lead.followup_action);
+                const cronHtml = buildFollowUpEmailHtml(lead, aiData, interests);
                 await sendEmail({
                     to:      lead.email,
                     subject: followup.email_subject,

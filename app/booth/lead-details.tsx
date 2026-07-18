@@ -16,7 +16,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useAppTheme } from '../../src/constants/useAppTheme';
 import { styles } from '../../src/styles/leadDetailsStyles';
-import { addToQueue } from '../../src/utils/offlineQueue';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import * as SecureStore from 'expo-secure-store';
 
@@ -61,13 +61,6 @@ const INTENT_COLORS = {
   medium: '#9A6700',
   low:    '#CF222E',
 };
-
-const FOLLOWUP_OPTIONS = [
-  { label: 'Send Whitepaper',    icon: 'document-text-outline',  value: 'whitepaper' },
-  { label: 'Schedule Demo',      icon: 'desktop-outline',        value: 'demo'       },
-  { label: 'Invite to Webinar',  icon: 'videocam-outline',       value: 'webinar'    },
-  { label: 'General Follow-up',  icon: 'mail-outline',           value: 'general'    },
-];
 
 function maskEmail(email: string): string {
   if (!email || !email.includes('@')) return email;
@@ -170,13 +163,6 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
   const email       = (params.email       as string) || '';
   const interest    = (params.interest    as string) || '';
 
-  const [showManualEdit,    setShowManualEdit]    = useState(false);
-  const [manualName,        setManualName]        = useState(leadName);
-  const [manualCompany,     setManualCompany]     = useState(companyName);
-  const [manualTitle,       setManualTitle]       = useState(title);
-  const [manualPhone,       setManualPhone]       = useState(phone);
-  const [manualEmail,       setManualEmail]       = useState(email);
-  const [selectedFollowup,  setSelectedFollowup]  = useState<string | null>(null);
   const [selectedInterests, setSelectedInterests] = useState<string[]>(
     interest && INTEREST_OPTIONS.includes(interest) ? [interest] : []
   );
@@ -187,35 +173,6 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
   const [additionalNotes, setAdditionalNotes] = useState('');
   const [consentGiven,    setConsentGiven]    = useState(false);
   const [loading,         setLoading]         = useState(false);
-  const [isOnline,         setIsOnline]         = useState(true);
-  const [draftSaved,       setDraftSaved]       = useState(false);
-
-  // Monitor network and auto-save draft when offline
-  React.useEffect(() => {
-    const unsub = NetInfo.addEventListener(state => {
-      setIsOnline(!!state.isConnected);
-    });
-    return () => unsub();
-  }, []);
-
-  // Auto-save draft every 30 seconds if offline
-  React.useEffect(() => {
-    if (isOnline) return;
-    const timer = setInterval(async () => {
-      if (selectedInterests.length > 0 || selectedIntent || additionalNotes) {
-        await addToQueue({
-          name: leadName, company: companyName, title, phone, email,
-          interests: [...selectedInterests, ...(interestOthers ? [interestOthers] : [])].join(', '),
-          intent: selectedIntent || '',
-          notes: additionalNotes,
-          scannedBy: '', scannedByName: '',
-        });
-        setDraftSaved(true);
-        setTimeout(() => setDraftSaved(false), 2000);
-      }
-    }, 30000);
-    return () => clearInterval(timer);
-  }, [isOnline, selectedInterests, selectedIntent, additionalNotes]);
 
   const toggleInterest = (option: string) => {
     setSelectedInterests(prev =>
@@ -234,45 +191,27 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
     setLoading(true);
     if (onSubmit) onSubmit({ leadName, companyName, title, phone, email, allInterests, intent, additionalNotes });
 
-    const activeName    = showManualEdit ? manualName    : leadName;
-    const activeCompany = showManualEdit ? manualCompany : companyName;
-    const activeTitle   = showManualEdit ? manualTitle   : title;
-    const activePhone   = showManualEdit ? manualPhone   : phone;
-    const activeEmail   = showManualEdit ? manualEmail   : email;
-    let scannedBy: any = null;
-    let scannedByName: any = null;
-
     try {
-      const scanned = await getScannedBy();
-      scannedBy = scanned.id;
-      scannedByName = scanned.name;
-      console.log('👤 scannedBy:', scannedBy, '| scannedByName:', scannedByName);
-
       // Check network — save offline if no connection
       const netState = await NetInfo.fetch();
       if (netState.isConnected === false) {
-        await addToQueue({
-          name: activeName,
-          company: activeCompany,
-          title: activeTitle,
-          phone: activePhone,
-          email: activeEmail,
-          interests: allInterests,
-          intent,
-          notes: additionalNotes,
-          scannedBy,
-          scannedByName,
-        });
-        Alert.alert('📶 Saved Offline', `${activeName}'s details saved locally. Will sync automatically when internet is restored.`);
+        const offlineLead = { leadName, companyName, title, phone, email, allInterests, intent, additionalNotes, savedAt: new Date().toISOString() };
+        const existing = await AsyncStorage.getItem('offline_leads');
+        const queue = JSON.parse(existing || '[]');
+        queue.push(offlineLead);
+        await AsyncStorage.setItem('offline_leads', JSON.stringify(queue));
+        Alert.alert('Saved Offline', `${leadName}'s details saved locally. Will sync automatically when internet is restored.`);
         setLoading(false);
         router.replace('/booth/dashboardscreen' as any);
         return;
       }
+
+      const { id: scannedBy, name: scannedByName } = await getScannedBy();
+      console.log('👤 scannedBy:', scannedBy, '| scannedByName:', scannedByName);
       const teamId = resolveTeamId(interest, selectedInterests);
 
       // ── Post through backend (JWT auth, bypasses RLS) ─────────────────────
       const token = await SecureStore.getItemAsync('token');
-      console.log(`📋 Submitting lead — teamId: ${teamId} | name: ${activeName} | interest: ${interest}`);
       const response = await fetch(`${BACKEND_URL}/leads`, {
         method: 'POST',
         headers: {
@@ -280,28 +219,23 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-          name:               activeName,
-          email:              activeEmail,
-          company:            activeCompany,
-          title:              activeTitle,
-          phone_number:       activePhone,
+          name:               leadName,
+          email,
+          company:            companyName,
+          title,
+          phone_number:       phone,
           customer_intent:    intent,
-          assigned_team_id:   Number(teamId),
+          assigned_team_id:   teamId,
           primary_interest:   interest || null,
           selected_interests: selectedInterests,
           additional_notes:   additionalNotes || null,
-          followup_action:    selectedFollowup || null,
           scanned_by:         scannedBy,
           scanned_by_name:    scannedByName,
         }),
       });
 
       if (response.status === 409) { routeToDuplicate(); return; }
-      if (!response.ok) {
-        const errText = await response.text();
-        console.error(`❌ Server response ${response.status}:`, errText);
-        throw new Error(`Server error: ${response.status} — ${errText}`);
-      }
+      if (!response.ok) throw new Error('Server error');
 
       const result = await response.json();
       const leadId = result.lead_id;
@@ -360,28 +294,9 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
         params: { assignedTeam, intent, interests: allInterests, aiNotes },
       });
 
-    } catch (error: any) {
+    } catch (error) {
       console.warn('Submit error:', error);
-      // If server is down but we have internet — save offline as fallback
-      try {
-        await addToQueue({
-          name: activeName || leadName,
-          company: activeCompany || companyName,
-          title: activeTitle || title,
-          phone: activePhone || phone,
-          email: activeEmail || email,
-          interests: allInterests,
-          intent,
-          notes: additionalNotes,
-          scannedBy: scannedBy || '',
-          scannedByName: scannedByName || '',
-        });
-        Alert.alert('⚠️ Saved Offline', 'Server is currently unavailable. Lead saved locally and will sync when server is back online.', [
-          { text: 'OK', onPress: () => router.replace('/booth/dashboardscreen' as any) }
-        ]);
-      } catch {
-        Alert.alert('Submission Failed', 'Failed to submit lead. Please check your connection and try again.');
-      }
+      Alert.alert('Submission Failed', 'Failed to submit lead. Please check your connection and try again.');
     } finally {
       setLoading(false);
     }
@@ -436,16 +351,6 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
         <Text style={[styles.headerText, { color: '#fff' }]}>Boothflow</Text>
       </View>
 
-      {/* Offline banner */}
-      {!isOnline && (
-        <View style={{ backgroundColor: '#f59e0b', paddingVertical: 8, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <Ionicons name="wifi-outline" size={16} color="#fff" />
-          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600', flex: 1 }}>
-            You're offline — {draftSaved ? '✓ Draft auto-saved' : 'data will be saved locally on submit'}
-          </Text>
-        </View>
-      )}
-
       <KeyboardAvoidingView
         style={[styles.flex, { backgroundColor: theme.bg }]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -458,7 +363,7 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
           keyboardShouldPersistTaps="handled"
         >
           {/* Lead Details */}
-          <SectionCard title="Scanned Details:">
+          <SectionCard title="Details:">
             <AutofillField label="Name"    value={leadName} />
             <AutofillField label="Company" value={maskCompany(companyName)} />
             <AutofillField label="Title"   value={title} />
@@ -513,38 +418,16 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
             })}
           </SectionCard>
 
-          {/* Notes + Follow-up Action — combined so rep fills both before AI runs */}
-          <SectionCard title="Notes & Follow-up Action:">
-            <Text style={{ fontSize: 11, color: theme.subText, marginBottom: 8, lineHeight: 16 }}>
-              Add any extra context for the AI. Tap a suggestion to add it to your notes.
-            </Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
-              {FOLLOWUP_OPTIONS.map(option => (
-                <TouchableOpacity
-                  key={option.value}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1.5, borderColor: selectedFollowup === option.value ? theme.accent : theme.subText + '44', backgroundColor: selectedFollowup === option.value ? theme.accent + '18' : theme.bg }}
-                  onPress={() => {
-                    setSelectedFollowup(option.value);
-                    setAdditionalNotes(prev => {
-                      const tag = `[${option.label}]`;
-                      if (prev.includes(tag)) return prev;
-                      return prev ? `${prev}\n${tag}` : tag;
-                    });
-                  }}
-                >
-                  <Ionicons name={option.icon as any} size={13} color={selectedFollowup === option.value ? theme.accent : theme.subText} />
-                  <Text style={{ fontSize: 12, fontWeight: '600', color: selectedFollowup === option.value ? theme.accent : theme.subText }}>{option.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+          {/* Additional notes — fed to AI as context, not saved to DB directly */}
+          <SectionCard title="Additional notes">
             <TextInput
-              style={[styles.notesInput, { marginBottom: 0 }]}
+              style={styles.notesInput}
               value={additionalNotes}
               onChangeText={setAdditionalNotes}
-              placeholder="e.g. Very interested in pricing, asked about Storage upgrade timeline..."
+              placeholder="Enter any additional notes here..."
               placeholderTextColor="#AAAAAA"
               multiline
-              numberOfLines={4}
+              numberOfLines={3}
               textAlignVertical="top"
             />
           </SectionCard>
