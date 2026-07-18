@@ -98,8 +98,6 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
 if (!process.env.GEMINI_API_KEY) {
     console.warn('❌ GEMINI_API_KEY is missing from environment configuration');
-} else {
-    console.log('✅ GEMINI_API_KEY configured');
 }
 
 // ── SEND EMAIL (Resend — lazy init) ──────────────────────────────────────────
@@ -217,7 +215,7 @@ function buildFollowUpEmailHtml(lead, aiData, interests) {
 }
 
 // ── PLAIN TEXT EMAIL BUILDER ──────────────────────────────────────────────────
-function buildFollowUpEmail(lead, aiData, interests, followupAction) {
+function buildFollowUpEmail(lead, aiData, interests) {
     let body = `Hi ${lead.name},\n\n`;
     body += `Thank you for visiting the Dell Technologies booth at the Dell Technologies Forum Singapore. It was great connecting with you!\n\n`;
 
@@ -242,18 +240,6 @@ function buildFollowUpEmail(lead, aiData, interests, followupAction) {
     } else {
         body += `We're glad you stopped by to explore ${interests}. ${aiData.notes}\n\n`;
         body += `We'd love to share more about how Dell's solutions in ${interests} can support your organisation's technology journey. No pressure — just valuable insights tailored to your needs.\n\n`;
-    }
-
-    // Add suggested followup action if provided
-    if (followupAction) {
-        const actionMap = {
-            'whitepaper': `📄 As requested, we'll be sending you a relevant Dell whitepaper on ${interests} shortly.`,
-            'demo':       `🖥️ We'd love to schedule a personalised demo of Dell's ${interests} solutions at your convenience. Please reply to book a time.`,
-            'webinar':    `📅 You're invited to our upcoming Dell Technologies Innovation Series webinar on 31 July 2026 at 3:00 PM SGT. Reply to register.`,
-            'general':    `📧 We'll be in touch shortly with more information tailored to your interest in ${interests}.`,
-        };
-        const actionText = actionMap[followupAction];
-        if (actionText) body += `\n${actionText}\n\n`;
     }
 
     body += `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n`;
@@ -401,7 +387,7 @@ app.get('/leads/:id', async (req, res) => {
 });
 
 app.post('/leads', async (req, res) => {
-    const { name, email, company, title, phone_number, customer_intent, assigned_team_id, primary_interest, selected_interests, additional_notes, followup_action, scanned_by, scanned_by_name } = req.body;
+    const { name, email, company, title, phone_number, customer_intent, assigned_team_id, primary_interest, selected_interests, additional_notes, scanned_by, scanned_by_name } = req.body;
     const error = validateLead(name, email, company, title, phone_number);
     if (error) return res.status(400).json({ success: false, message: error });
     try {
@@ -413,38 +399,13 @@ app.post('/leads', async (req, res) => {
         const interestsList = Array.isArray(selected_interests) ? selected_interests : [];
         teamId = resolveTeamId(primary_interest, interestsList);
     }
-    if (!teamId) teamId = 5; // Default to Others team if no match
-    console.log(`📋 Lead insert — teamId: ${teamId} | primary_interest: ${primary_interest}`);
     try {
         const result = await pool.query(
             `INSERT INTO leads (name, email, company, title, phone_number, customer_intent, assigned_team_id, ai_notes, scanned_by, scanned_by_name)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING lead_id`,
             [name, email, company, title, phone_number, customer_intent || null, teamId, additional_notes || null, scanned_by || null, scanned_by_name || null]
         );
-        const leadId = result.rows[0].lead_id;
-
-        // Insert interests into lead_interest_categories
-        if (Array.isArray(selected_interests) && selected_interests.length > 0) {
-            for (const interestName of selected_interests) {
-                try {
-                    const catResult = await pool.query(
-                        `SELECT category_id FROM interest_categories WHERE LOWER(category_name) = LOWER($1)`,
-                        [interestName]
-                    );
-                    if (catResult.rows.length > 0) {
-                        await pool.query(
-                            `INSERT INTO lead_interest_categories (lead_id, category_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
-                            [leadId, catResult.rows[0].category_id]
-                        );
-                    }
-                } catch (interestErr) {
-                    console.warn(`⚠️ Could not insert interest ${interestName}:`, interestErr.message);
-                }
-            }
-            console.log(`✅ Interests saved for lead ${leadId}: ${selected_interests.join(', ')}`);
-        }
-
-        res.status(201).json({ success: true, message: 'Lead created successfully', lead_id: leadId, assigned_team_id: teamId });
+        res.status(201).json({ success: true, message: 'Lead created successfully', lead_id: result.rows[0].lead_id, assigned_team_id: teamId });
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
@@ -863,36 +824,6 @@ app.post('/admin/users', authenticateToken, authorizeRoles('admin'), async (req,
     res.status(201).json({ success: true, user_id: result.rows[0].user_id });
 });
 
-// ── BULK CREATE USERS FROM CSV ─────────────────────────────────────────────
-app.post('/admin/users/bulk', authenticateToken, authorizeRoles('admin'), async (req, res) => {
-    const { users } = req.body;
-    if (!Array.isArray(users) || users.length === 0) {
-        return res.status(400).json({ success: false, message: 'No users provided' });
-    }
-    const results = { created: 0, failed: 0, errors: [] };
-    for (const user of users) {
-        try {
-            const { full_name, email, password, role, team_id } = user;
-            if (!full_name || !email || !password || !role) {
-                results.failed++;
-                results.errors.push(`Missing fields for ${email || 'unknown'}`);
-                continue;
-            }
-            const hashedPassword = await bcrypt.hash(password, 10);
-            await pool.query(
-                'INSERT INTO users (full_name, email, password_hash, role, team_id) VALUES ($1, $2, $3, $4, $5)',
-                [full_name, email, hashedPassword, role, team_id || null]
-            );
-            results.created++;
-        } catch (err) {
-            results.failed++;
-            results.errors.push(`${user.email}: ${err.message}`);
-        }
-    }
-    console.log(`✅ Bulk user import: ${results.created} created, ${results.failed} failed`);
-    res.status(201).json({ success: true, ...results });
-});
-
 app.put('/admin/users/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
   const { full_name, email, role, team_id, is_active, password } = req.body;
   try {
@@ -1037,7 +968,7 @@ app.post('/analyze-lead/:id', async (req, res) => {
         const allInterests = [interests !== 'Not specified' ? interests : '', othersInterestText || ''].filter(Boolean).join(', ') || 'Not specified';
 
         if (!lead.assigned_team_id) {
-            const resolvedTeam = resolveTeamId(null, interests.split(', ')) || 5;
+            const resolvedTeam = resolveTeamId(null, interests.split(', '));
             await pool.query('UPDATE leads SET assigned_team_id=$1 WHERE lead_id=$2', [resolvedTeam, lead.lead_id]);
             lead.assigned_team_id = resolvedTeam;
         }
@@ -1055,14 +986,13 @@ Lead Details:
 - Primary Interests: ${interests}
 ${allInterests !== interests && allInterests !== 'Not specified' ? `- Other Interests Mentioned: ${allInterests}` : ''}
 ${repNotes ? `- Rep's Additional Notes: ${repNotes}` : ''}
-${followup_action ? `- Rep's Suggested Follow-up Action: ${followup_action}` : ''}
 
 Return ONLY valid JSON in this exact format, no extra text:
 {
   "intent": "Low" or "Medium" or "High",
   "confidence": a number between 0 and 1,
   "follow_up_required": true or false,
-  "notes": "a short 1-2 sentence personalised follow-up suggestion referencing their specific interests${followup_action ? ` and the suggested action: ${followup_action}` : ''}"
+  "notes": "a short 1-2 sentence personalised follow-up suggestion referencing their specific interests"
 }
 `;
 
@@ -1081,7 +1011,6 @@ Return ONLY valid JSON in this exact format, no extra text:
             }
             console.log('✅ Gemini AI analysis successful');
         } catch (aiError) {
-            console.warn(`⚠️ AI failed — using rule-based fallback. Error: ${aiError.message}`);
             console.warn('⚠️ Gemini failed, using rule-based fallback:', aiError.message);
             const fallback = generateRuleBasedAnalysis(lead.customer_intent, interests);
             aiData = { intent: fallback.intent, confidence: fallback.confidence, follow_up_required: fallback.follow_up_required, notes: fallback.notes };
@@ -1108,12 +1037,11 @@ Return ONLY valid JSON in this exact format, no extra text:
         try {
             await pool.query(
                 `INSERT INTO lead_followups (lead_id, followup_action, followup_status, due_date, scheduled_at, email_subject, notes)
-                 VALUES ($1, $2, 'pending', NOW() + INTERVAL '3 hours', NOW() + INTERVAL '3 hours', $3, $4)
+                 VALUES ($1, 'Automated Follow-up Email', 'pending', NOW() + INTERVAL '3 hours', NOW() + INTERVAL '3 hours', $2, $3)
                  ON CONFLICT (lead_id) DO NOTHING`,
-                [lead.lead_id, followup_action ? `Rep suggested: ${followup_action}` : `Automated Follow-up Email`, `Your Dell Technologies Follow-up — ${interests}`, buildFollowUpEmail(lead, aiData, interests, followup_action)]
+                [lead.lead_id, `Your Dell Technologies Follow-up — ${interests}`, buildFollowUpEmail(lead, aiData, interests)]
             );
-            console.log(`✅ Lead created: ${lead.lead_id} | status: ${lead.status} | team: ${teamId}`);
-        console.log(`📅 Auto follow-up scheduled for lead ${lead.lead_id} in 3 hours`);
+            console.log(`📅 Auto follow-up scheduled for lead ${lead.lead_id} in 3 hours`);
         } catch (scheduleErr) {
             console.error('⚠️ Could not schedule follow-up email:', scheduleErr.message);
         }
@@ -1281,8 +1209,8 @@ app.post('/send-followup/:id', authenticateToken, async (req, res) => {
         const localDueDate = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
         
         // Compile email template utilizing relational entities
-        const emailBody = buildFollowUpEmail(lead, aiData, interests, lead.followup_action);
-        const emailHtml = buildFollowUpEmailHtml(lead, aiData, interests, lead.followup_action);
+        const emailBody = buildFollowUpEmail(lead, aiData, interests);
+        const emailHtml = buildFollowUpEmailHtml(lead, aiData, interests);
 
         // 4. Trigger transactional email pipeline execution
         await sendEmail({ to: lead.email, subject: emailSubject, text: emailBody, html: emailHtml });
@@ -1365,7 +1293,7 @@ cron.schedule('*/5 * * * *', async () => {
                      WHERE lic.lead_id = $1`, [lead.lead_id]
                 );
                 const interests = interestsResult.rows.map(r => r.category_name).join(', ') || 'Dell Technologies solutions';
-                const cronHtml = buildFollowUpEmailHtml(lead, aiData, interests, lead.followup_action);
+                const cronHtml = buildFollowUpEmailHtml(lead, aiData, interests);
                 await sendEmail({
                     to:      lead.email,
                     subject: followup.email_subject,
