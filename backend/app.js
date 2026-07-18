@@ -421,7 +421,30 @@ app.post('/leads', async (req, res) => {
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING lead_id`,
             [name, email, company, title, phone_number, customer_intent || null, teamId, additional_notes || null, scanned_by || null, scanned_by_name || null]
         );
-        res.status(201).json({ success: true, message: 'Lead created successfully', lead_id: result.rows[0].lead_id, assigned_team_id: teamId });
+        const leadId = result.rows[0].lead_id;
+
+        // Insert interests into lead_interest_categories
+        if (Array.isArray(selected_interests) && selected_interests.length > 0) {
+            for (const interestName of selected_interests) {
+                try {
+                    const catResult = await pool.query(
+                        `SELECT category_id FROM interest_categories WHERE LOWER(category_name) = LOWER($1)`,
+                        [interestName]
+                    );
+                    if (catResult.rows.length > 0) {
+                        await pool.query(
+                            `INSERT INTO lead_interest_categories (lead_id, category_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+                            [leadId, catResult.rows[0].category_id]
+                        );
+                    }
+                } catch (interestErr) {
+                    console.warn(`⚠️ Could not insert interest ${interestName}:`, interestErr.message);
+                }
+            }
+            console.log(`✅ Interests saved for lead ${leadId}: ${selected_interests.join(', ')}`);
+        }
+
+        res.status(201).json({ success: true, message: 'Lead created successfully', lead_id: leadId, assigned_team_id: teamId });
     } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
@@ -1014,7 +1037,7 @@ app.post('/analyze-lead/:id', async (req, res) => {
         const allInterests = [interests !== 'Not specified' ? interests : '', othersInterestText || ''].filter(Boolean).join(', ') || 'Not specified';
 
         if (!lead.assigned_team_id) {
-            const resolvedTeam = resolveTeamId(null, interests.split(', '));
+            const resolvedTeam = resolveTeamId(null, interests.split(', ')) || 5;
             await pool.query('UPDATE leads SET assigned_team_id=$1 WHERE lead_id=$2', [resolvedTeam, lead.lead_id]);
             lead.assigned_team_id = resolvedTeam;
         }

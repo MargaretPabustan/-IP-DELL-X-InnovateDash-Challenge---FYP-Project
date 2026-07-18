@@ -1,6 +1,6 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, AppState, Alert } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, AppState, Alert, ActivityIndicator } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
@@ -39,6 +39,7 @@ export default function RootLayout() {
   const router   = useRouter();
   const segments = useSegments();
   const [isConnected, setIsConnected] = useState<boolean | null>(null);
+  const [syncStatus,   setSyncStatus]   = useState<'idle' | 'syncing' | 'done'>('idle');
 
   // ── Screenshot & screen recording prevention ──────────────────────────────
   useEffect(() => {
@@ -93,6 +94,7 @@ export default function RootLayout() {
         if (queueSize === 0) { wasPreviouslyOffline = false; return; }
 
         console.log(`🌐 Internet restored — syncing ${queueSize} offline leads...`);
+        setSyncStatus('syncing');
         try {
           const token = await SecureStore.getItemAsync('token');
           const queue = await getQueue();
@@ -140,6 +142,8 @@ export default function RootLayout() {
             }
           }
 
+          setSyncStatus('done');
+          setTimeout(() => setSyncStatus('idle'), 3000);
           if (synced > 0) {
             Alert.alert('✅ Synced', `${synced} offline lead${synced > 1 ? 's' : ''} uploaded successfully.`);
           }
@@ -158,6 +162,18 @@ export default function RootLayout() {
   }
 
   return (
+    <>
+      {syncStatus === 'syncing' && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 999, backgroundColor: '#007DB8', paddingTop: 48, paddingBottom: 8, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <ActivityIndicator size="small" color="#fff" />
+          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>Syncing offline leads...</Text>
+        </View>
+      )}
+      {syncStatus === 'done' && (
+        <View style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 999, backgroundColor: '#22c55e', paddingTop: 48, paddingBottom: 8, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>✅ Offline leads synced successfully</Text>
+        </View>
+      )}
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="lets-get-started" />
@@ -166,6 +182,7 @@ export default function RootLayout() {
       <Stack.Screen name="manager" />
       <Stack.Screen name="admin" />
     </Stack>
+    </>
   );
 }
 

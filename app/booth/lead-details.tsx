@@ -187,6 +187,35 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
   const [additionalNotes, setAdditionalNotes] = useState('');
   const [consentGiven,    setConsentGiven]    = useState(false);
   const [loading,         setLoading]         = useState(false);
+  const [isOnline,         setIsOnline]         = useState(true);
+  const [draftSaved,       setDraftSaved]       = useState(false);
+
+  // Monitor network and auto-save draft when offline
+  React.useEffect(() => {
+    const unsub = NetInfo.addEventListener(state => {
+      setIsOnline(!!state.isConnected);
+    });
+    return () => unsub();
+  }, []);
+
+  // Auto-save draft every 30 seconds if offline
+  React.useEffect(() => {
+    if (isOnline) return;
+    const timer = setInterval(async () => {
+      if (selectedInterests.length > 0 || selectedIntent || additionalNotes) {
+        await addToQueue({
+          name: leadName, company: companyName, title, phone, email,
+          interests: [...selectedInterests, ...(interestOthers ? [interestOthers] : [])].join(', '),
+          intent: selectedIntent || '',
+          notes: additionalNotes,
+          scannedBy: '', scannedByName: '',
+        });
+        setDraftSaved(true);
+        setTimeout(() => setDraftSaved(false), 2000);
+      }
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [isOnline, selectedInterests, selectedIntent, additionalNotes]);
 
   const toggleInterest = (option: string) => {
     setSelectedInterests(prev =>
@@ -243,6 +272,7 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
 
       // ── Post through backend (JWT auth, bypasses RLS) ─────────────────────
       const token = await SecureStore.getItemAsync('token');
+      console.log(`📋 Submitting lead — teamId: ${teamId} | name: ${activeName} | interest: ${interest}`);
       const response = await fetch(`${BACKEND_URL}/leads`, {
         method: 'POST',
         headers: {
@@ -250,13 +280,13 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
           'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
-          name:               leadName,
-          email,
-          company:            companyName,
-          title,
-          phone_number:       phone,
+          name:               activeName,
+          email:              activeEmail,
+          company:            activeCompany,
+          title:              activeTitle,
+          phone_number:       activePhone,
           customer_intent:    intent,
-          assigned_team_id:   teamId,
+          assigned_team_id:   Number(teamId),
           primary_interest:   interest || null,
           selected_interests: selectedInterests,
           additional_notes:   additionalNotes || null,
@@ -406,6 +436,16 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
         <Text style={[styles.headerText, { color: '#fff' }]}>Boothflow</Text>
       </View>
 
+      {/* Offline banner */}
+      {!isOnline && (
+        <View style={{ backgroundColor: '#f59e0b', paddingVertical: 8, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Ionicons name="wifi-outline" size={16} color="#fff" />
+          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600', flex: 1 }}>
+            You're offline — {draftSaved ? '✓ Draft auto-saved' : 'data will be saved locally on submit'}
+          </Text>
+        </View>
+      )}
+
       <KeyboardAvoidingView
         style={[styles.flex, { backgroundColor: theme.bg }]}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -424,49 +464,7 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
             <AutofillField label="Title"   value={title} />
             <AutofillField label="Phone"   value={maskPhone(phone)} />
             <AutofillField label="Email"   value={maskEmail(email)} />
-            <TouchableOpacity
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#e2e8f0' }}
-              onPress={() => setShowManualEdit(v => !v)}
-            >
-              <Ionicons name={showManualEdit ? 'chevron-up-circle-outline' : 'create-outline'} size={16} color={theme.accent} />
-              <Text style={{ fontSize: 12, color: theme.accent, fontWeight: '600' }}>
-                {showManualEdit ? 'Cancel editing' : 'Details incorrect? Edit manually'}
-              </Text>
-            </TouchableOpacity>
           </SectionCard>
-
-          {showManualEdit && (
-            <SectionCard title="✏️ Edit Details:">
-              {[
-                { label: 'Name',    value: manualName,    setter: setManualName,    keyboard: 'default',       caps: 'words' as const },
-                { label: 'Company', value: manualCompany, setter: setManualCompany, keyboard: 'default',       caps: 'words' as const },
-                { label: 'Title',   value: manualTitle,   setter: setManualTitle,   keyboard: 'default',       caps: 'words' as const },
-                { label: 'Phone',   value: manualPhone,   setter: setManualPhone,   keyboard: 'phone-pad',     caps: 'none'  as const },
-                { label: 'Email',   value: manualEmail,   setter: setManualEmail,   keyboard: 'email-address', caps: 'none'  as const },
-              ].map(field => (
-                <View key={field.label} style={{ marginBottom: 10 }}>
-                  <Text style={{ fontSize: 11, fontWeight: '700', color: theme.subText, marginBottom: 4, letterSpacing: 1 }}>{field.label.toUpperCase()}</Text>
-                  <TextInput
-                    style={{ borderWidth: 1, borderColor: theme.subText + '44', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, color: theme.text, fontSize: 14, backgroundColor: theme.bg }}
-                    value={field.value}
-                    onChangeText={field.setter}
-                    placeholderTextColor={theme.subText}
-                    autoCapitalize={field.caps}
-                    keyboardType={field.keyboard as any}
-                  />
-                </View>
-              ))}
-              <TouchableOpacity
-                style={{ backgroundColor: theme.accent, borderRadius: 10, paddingVertical: 12, alignItems: 'center', marginTop: 4 }}
-                onPress={() => {
-                  setShowManualEdit(false);
-                  Alert.alert('✅ Saved', 'Details updated successfully.');
-                }}
-              >
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Save Changes</Text>
-              </TouchableOpacity>
-            </SectionCard>
-          )}
 
           {/* Interest chips */}
           <SectionCard title="Customer Interest:">
