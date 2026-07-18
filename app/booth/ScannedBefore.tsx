@@ -152,9 +152,9 @@ export default function ScannedBeforeScreen() {
 
       {/* BOTTOM NAV */}
       <View style={[styles.bottomNav, { backgroundColor: theme.navBg, borderTopColor: theme.subText + '22', paddingBottom: Platform.OS === 'ios' ? 28 : 12 }]}>
-        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/booth/recent-leads' as any)}>
-          <Ionicons name="person-outline" size={26} color={theme.subText} />
-          <Text style={[styles.navLabel, { color: theme.subText }]}>Leads</Text>
+        <TouchableOpacity style={styles.navItem} onPress={handleGoHome}>
+          <FontAwesome5 name="home" size={22} color={theme.subText} />
+          <Text style={[styles.navLabel, { color: theme.subText }]}>Home</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.navItemCenter} onPress={handleReScan}>
@@ -163,9 +163,9 @@ export default function ScannedBeforeScreen() {
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.navItem} onPress={handleGoHome}>
-          <FontAwesome5 name="home" size={22} color={theme.subText} />
-          <Text style={[styles.navLabel, { color: theme.subText }]}>Home</Text>
+        <TouchableOpacity style={styles.navItem} onPress={() => router.push('/booth/recent-leads' as any)}>
+          <Ionicons name="person-outline" size={26} color={theme.subText} />
+          <Text style={[styles.navLabel, { color: theme.subText }]}>Leads</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

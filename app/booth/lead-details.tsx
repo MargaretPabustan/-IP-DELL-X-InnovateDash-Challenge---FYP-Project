@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import NetInfo from '@react-native-community/netinfo';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   View,
   Text,
@@ -16,8 +18,6 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useAppTheme } from '../../src/constants/useAppTheme';
 import { styles } from '../../src/styles/leadDetailsStyles';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import NetInfo from '@react-native-community/netinfo';
 import * as SecureStore from 'expo-secure-store';
 
 const API_URL     = process.env.EXPO_PUBLIC_API_URL || '';
@@ -46,6 +46,10 @@ const INTEREST_TEAM_MAP: Record<string, number> = {
   'Service':     4,
 };
 const OTHERS_TEAM_ID = 5;
+
+const TEAM_NAMES: Record<number, string> = {
+  1: 'AI PCs', 2: 'Multi-cloud', 3: 'Storage', 4: 'Service', 5: 'Others',
+};
 
 const INTEREST_OPTIONS = ['AI PCs', 'Multi-cloud', 'Storage', 'Service'];
 
@@ -173,11 +177,44 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
   const [additionalNotes, setAdditionalNotes] = useState('');
   const [consentGiven,    setConsentGiven]    = useState(false);
   const [loading,         setLoading]         = useState(false);
+  const [isOnline,        setIsOnline]        = useState(true);
+  const [draftSaved,      setDraftSaved]      = useState(false);
+  const [showDraftToast,  setShowDraftToast]  = useState(false);
+  const draftKey = `draft_lead_${email}`;
+
+  const showToast = () => {
+    setShowDraftToast(true);
+    setTimeout(() => setShowDraftToast(false), 1500);
+  };
+
+  // Monitor network
+  useEffect(() => {
+    const unsub = NetInfo.addEventListener(state => {
+      setIsOnline(!!state.isConnected);
+    });
+    return () => unsub();
+  }, []);
+
+  // Auto-save draft every 30 seconds when offline
+  useEffect(() => {
+    if (isOnline) return;
+    const timer = setInterval(async () => {
+      try {
+        const draft = { selectedInterests, selectedIntent, additionalNotes, savedAt: new Date().toISOString() };
+        await AsyncStorage.setItem(draftKey, JSON.stringify(draft));
+        setDraftSaved(true);
+        setTimeout(() => setDraftSaved(false), 2000);
+        console.log('💾 Draft auto-saved');
+      } catch (err) { console.warn('Draft save error:', err); }
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [isOnline, selectedInterests, selectedIntent, additionalNotes]);
 
   const toggleInterest = (option: string) => {
     setSelectedInterests(prev =>
       prev.includes(option) ? prev.filter(o => o !== option) : [...prev, option]
     );
+    showToast();
   };
 
   const routeToDuplicate = () => {
@@ -225,7 +262,7 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
           title,
           phone_number:       phone,
           customer_intent:    intent,
-          assigned_team_id:   teamId,
+          assigned_team_id:   Number(teamId),
           primary_interest:   interest || null,
           selected_interests: selectedInterests,
           additional_notes:   additionalNotes || null,
@@ -272,7 +309,9 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
             console.log('✅ AI notes:', analyzeData.ai_analysis?.notes);
             console.log('✅ Used fallback:', analyzeData.used_fallback);
             aiNotes      = analyzeData.ai_analysis?.notes            || aiNotes;
-            assignedTeam = analyzeData.ai_analysis?.follow_up_status || assignedTeam;
+            const teamId = analyzeData.ai_analysis?.assigned_team_id;
+            const teamName = TEAM_NAMES[teamId] || 'Unassigned';
+            assignedTeam = teamId ? `Team ${teamId} — ${teamName}` : (analyzeData.ai_analysis?.follow_up_status || assignedTeam);
             aiSuccess    = true;
           } else {
             throw new Error('AI analysis returned failure');
@@ -299,6 +338,21 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
       Alert.alert('Submission Failed', 'Failed to submit lead. Please check your connection and try again.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    try {
+      const draft = {
+        selectedInterests,
+        selectedIntent,
+        additionalNotes,
+        savedAt: new Date().toISOString(),
+      };
+      await AsyncStorage.setItem(draftKey, JSON.stringify(draft));
+      Alert.alert('💾 Draft Saved', 'Your notes and selections have been saved. You can resume later.');
+    } catch {
+      Alert.alert('Error', 'Failed to save draft.');
     }
   };
 
@@ -347,9 +401,47 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.navy }]}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      <View style={[styles.header, { backgroundColor: theme.navy, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12 }]}>
+      <View style={[styles.header, { backgroundColor: theme.navy, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 24) + 8 : 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }]}>
         <Text style={[styles.headerText, { color: '#fff' }]}>Boothflow</Text>
+        <TouchableOpacity
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: isOnline ? 'rgba(255,255,255,0.15)' : 'rgba(245,158,11,0.3)', borderRadius: 12, paddingHorizontal: 10, paddingVertical: 4 }}
+          onPress={isOnline ? undefined : handleSaveDraft}
+        >
+          <Ionicons
+            name={isOnline ? 'cloud-done-outline' : 'cloud-offline-outline'}
+            size={14}
+            color={isOnline ? '#4ade80' : '#fbbf24'}
+          />
+          <Text style={{ color: isOnline ? '#4ade80' : '#fbbf24', fontSize: 11, fontWeight: '700' }}>
+            {isOnline ? 'Online' : draftSaved ? 'Saved' : 'Offline'}
+          </Text>
+        </TouchableOpacity>
       </View>
+
+      {/* Offline banner with save draft */}
+      {!isOnline && (
+        <View style={{ backgroundColor: '#f59e0b', paddingVertical: 8, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Ionicons name="wifi-outline" size={15} color="#fff" />
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>
+              {draftSaved ? '✓ Draft auto-saved' : 'You are offline'}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={{ backgroundColor: 'rgba(255,255,255,0.25)', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 4 }}
+            onPress={handleSaveDraft}
+          >
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Save Draft</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Draft saved toast */}
+      {showDraftToast && (
+        <View style={{ position: 'absolute', bottom: 100, alignSelf: 'center', backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: 20, paddingHorizontal: 16, paddingVertical: 8, zIndex: 999 }}>
+          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>💾 Draft saved</Text>
+        </View>
+      )}
 
       <KeyboardAvoidingView
         style={[styles.flex, { backgroundColor: theme.bg }]}
@@ -403,7 +495,7 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
                 <TouchableOpacity
                   key={option.label}
                   style={[styles.intentRow, active && { ...styles.intentRowActive, borderColor: theme.accent }]}
-                  onPress={() => setSelectedIntent(option.label)}
+                  onPress={() => { setSelectedIntent(option.label); showToast(); }}
                   activeOpacity={0.7}
                 >
                   <View style={[styles.intentDot, { backgroundColor: dotColor }]} />
