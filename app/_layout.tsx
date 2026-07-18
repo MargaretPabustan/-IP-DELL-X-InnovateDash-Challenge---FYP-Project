@@ -1,9 +1,10 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, AppState } from 'react-native';
+import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, AppState, Alert } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { Ionicons } from '@expo/vector-icons';
 import * as SecureStore from 'expo-secure-store';
+import { getQueue, removeFromQueue, getQueueSize } from '../src/utils/offlineQueue';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 const SESSION_TIMEOUT = 30 * 60 * 1000;
@@ -88,26 +89,49 @@ export default function RootLayout() {
       setIsConnected(connected);
 
       if (connected && wasPreviouslyOffline) {
-        console.log('🌐 Internet restored — syncing offline leads...');
+        const queueSize = await getQueueSize();
+        if (queueSize === 0) { wasPreviouslyOffline = false; return; }
+
+        console.log(`🌐 Internet restored — syncing ${queueSize} offline leads...`);
         try {
-          const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-          const existing = await AsyncStorage.getItem('offline_leads');
-          const queue = JSON.parse(existing || '[]');
-          if (queue.length > 0) {
-            const token = await SecureStore.getItemAsync('token');
-            let synced = 0;
-            for (const lead of queue) {
-              try {
-                await fetch(`${BACKEND_URL}/leads`, {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                  body: JSON.stringify(lead),
-                });
+          const token = await SecureStore.getItemAsync('token');
+          const queue = await getQueue();
+          let synced = 0;
+
+          for (let i = queue.length - 1; i >= 0; i--) {
+            try {
+              const lead = queue[i];
+              const res = await fetch(`${BACKEND_URL}/leads`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                  name: lead.name,
+                  company: lead.company,
+                  title: lead.title,
+                  phone: lead.phone,
+                  email: lead.email,
+                  allInterests: lead.interests,
+                  intent: lead.intent,
+                  additionalNotes: lead.notes,
+                  scannedBy: lead.scannedBy,
+                  scannedByName: lead.scannedByName,
+                }),
+              });
+              if (res.ok) {
+                removeFromQueue(i);
                 synced++;
-              } catch {}
+                console.log(`✅ Synced offline lead: ${lead.name}`);
+              }
+            } catch (err) {
+              console.log(`❌ Failed to sync lead:`, err);
             }
-            await AsyncStorage.removeItem('offline_leads');
-            if (synced > 0) console.log(`✅ Synced ${synced} offline leads`);
+          }
+
+          if (synced > 0) {
+            Alert.alert('✅ Synced', `${synced} offline lead${synced > 1 ? 's' : ''} uploaded successfully.`);
           }
         } catch (err) {
           console.log('❌ Offline sync error:', err);

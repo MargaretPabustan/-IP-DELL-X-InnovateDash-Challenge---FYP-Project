@@ -16,7 +16,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useAppTheme } from '../../src/constants/useAppTheme';
 import { styles } from '../../src/styles/leadDetailsStyles';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { addToQueue } from '../../src/utils/offlineQueue';
 import NetInfo from '@react-native-community/netinfo';
 import * as SecureStore from 'expo-secure-store';
 
@@ -61,6 +61,13 @@ const INTENT_COLORS = {
   medium: '#9A6700',
   low:    '#CF222E',
 };
+
+const FOLLOWUP_OPTIONS = [
+  { label: 'Send Whitepaper',    icon: 'document-text-outline',  value: 'whitepaper' },
+  { label: 'Schedule Demo',      icon: 'desktop-outline',        value: 'demo'       },
+  { label: 'Invite to Webinar',  icon: 'videocam-outline',       value: 'webinar'    },
+  { label: 'General Follow-up',  icon: 'mail-outline',           value: 'general'    },
+];
 
 function maskEmail(email: string): string {
   if (!email || !email.includes('@')) return email;
@@ -163,6 +170,13 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
   const email       = (params.email       as string) || '';
   const interest    = (params.interest    as string) || '';
 
+  const [showManualEdit,    setShowManualEdit]    = useState(false);
+  const [manualName,        setManualName]        = useState(leadName);
+  const [manualCompany,     setManualCompany]     = useState(companyName);
+  const [manualTitle,       setManualTitle]       = useState(title);
+  const [manualPhone,       setManualPhone]       = useState(phone);
+  const [manualEmail,       setManualEmail]       = useState(email);
+  const [selectedFollowup,  setSelectedFollowup]  = useState<string | null>(null);
   const [selectedInterests, setSelectedInterests] = useState<string[]>(
     interest && INTEREST_OPTIONS.includes(interest) ? [interest] : []
   );
@@ -192,22 +206,35 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
     if (onSubmit) onSubmit({ leadName, companyName, title, phone, email, allInterests, intent, additionalNotes });
 
     try {
+      const activeName    = showManualEdit ? manualName    : leadName;
+      const activeCompany = showManualEdit ? manualCompany : companyName;
+      const activeTitle   = showManualEdit ? manualTitle   : title;
+      const activePhone   = showManualEdit ? manualPhone   : phone;
+      const activeEmail   = showManualEdit ? manualEmail   : email;
+
+      const { id: scannedBy, name: scannedByName } = await getScannedBy();
+      console.log('👤 scannedBy:', scannedBy, '| scannedByName:', scannedByName);
+
       // Check network — save offline if no connection
       const netState = await NetInfo.fetch();
       if (netState.isConnected === false) {
-        const offlineLead = { leadName, companyName, title, phone, email, allInterests, intent, additionalNotes, savedAt: new Date().toISOString() };
-        const existing = await AsyncStorage.getItem('offline_leads');
-        const queue = JSON.parse(existing || '[]');
-        queue.push(offlineLead);
-        await AsyncStorage.setItem('offline_leads', JSON.stringify(queue));
-        Alert.alert('Saved Offline', `${leadName}'s details saved locally. Will sync automatically when internet is restored.`);
+        await addToQueue({
+          name: activeName,
+          company: activeCompany,
+          title: activeTitle,
+          phone: activePhone,
+          email: activeEmail,
+          interests: allInterests,
+          intent,
+          notes: additionalNotes,
+          scannedBy,
+          scannedByName,
+        });
+        Alert.alert('📶 Saved Offline', `${activeName}'s details saved locally. Will sync automatically when internet is restored.`);
         setLoading(false);
         router.replace('/booth/dashboardscreen' as any);
         return;
       }
-
-      const { id: scannedBy, name: scannedByName } = await getScannedBy();
-      console.log('👤 scannedBy:', scannedBy, '| scannedByName:', scannedByName);
       const teamId = resolveTeamId(interest, selectedInterests);
 
       // ── Post through backend (JWT auth, bypasses RLS) ─────────────────────
@@ -229,6 +256,7 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
           primary_interest:   interest || null,
           selected_interests: selectedInterests,
           additional_notes:   additionalNotes || null,
+          followup_action:    selectedFollowup || null,
           scanned_by:         scannedBy,
           scanned_by_name:    scannedByName,
         }),
@@ -363,13 +391,46 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
           keyboardShouldPersistTaps="handled"
         >
           {/* Lead Details */}
-          <SectionCard title="Details:">
+          <SectionCard title="Scanned Details:">
             <AutofillField label="Name"    value={leadName} />
             <AutofillField label="Company" value={maskCompany(companyName)} />
             <AutofillField label="Title"   value={title} />
             <AutofillField label="Phone"   value={maskPhone(phone)} />
             <AutofillField label="Email"   value={maskEmail(email)} />
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: '#e2e8f0' }}
+              onPress={() => setShowManualEdit(v => !v)}
+            >
+              <Ionicons name={showManualEdit ? 'chevron-up-circle-outline' : 'create-outline'} size={16} color={theme.accent} />
+              <Text style={{ fontSize: 12, color: theme.accent, fontWeight: '600' }}>
+                {showManualEdit ? 'Cancel editing' : 'Details incorrect? Edit manually'}
+              </Text>
+            </TouchableOpacity>
           </SectionCard>
+
+          {showManualEdit && (
+            <SectionCard title="✏️ Edit Details:">
+              {[
+                { label: 'Name',    value: manualName,    setter: setManualName,    keyboard: 'default',       caps: 'words' as const },
+                { label: 'Company', value: manualCompany, setter: setManualCompany, keyboard: 'default',       caps: 'words' as const },
+                { label: 'Title',   value: manualTitle,   setter: setManualTitle,   keyboard: 'default',       caps: 'words' as const },
+                { label: 'Phone',   value: manualPhone,   setter: setManualPhone,   keyboard: 'phone-pad',     caps: 'none'  as const },
+                { label: 'Email',   value: manualEmail,   setter: setManualEmail,   keyboard: 'email-address', caps: 'none'  as const },
+              ].map(field => (
+                <View key={field.label} style={{ marginBottom: 10 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: theme.subText, marginBottom: 4, letterSpacing: 1 }}>{field.label.toUpperCase()}</Text>
+                  <TextInput
+                    style={{ borderWidth: 1, borderColor: theme.subText + '44', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, color: theme.text, fontSize: 14, backgroundColor: theme.bg }}
+                    value={field.value}
+                    onChangeText={field.setter}
+                    placeholderTextColor={theme.subText}
+                    autoCapitalize={field.caps}
+                    keyboardType={field.keyboard as any}
+                  />
+                </View>
+              ))}
+            </SectionCard>
+          )}
 
           {/* Interest chips */}
           <SectionCard title="Customer Interest:">
@@ -418,16 +479,38 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
             })}
           </SectionCard>
 
-          {/* Additional notes — fed to AI as context, not saved to DB directly */}
-          <SectionCard title="Additional notes">
+          {/* Notes + Follow-up Action — combined so rep fills both before AI runs */}
+          <SectionCard title="Notes & Follow-up Action:">
+            <Text style={{ fontSize: 11, color: theme.subText, marginBottom: 8, lineHeight: 16 }}>
+              Add any extra context for the AI. Tap a suggestion to add it to your notes.
+            </Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+              {FOLLOWUP_OPTIONS.map(option => (
+                <TouchableOpacity
+                  key={option.value}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, borderWidth: 1.5, borderColor: selectedFollowup === option.value ? theme.accent : theme.subText + '44', backgroundColor: selectedFollowup === option.value ? theme.accent + '18' : theme.bg }}
+                  onPress={() => {
+                    setSelectedFollowup(option.value);
+                    setAdditionalNotes(prev => {
+                      const tag = `[${option.label}]`;
+                      if (prev.includes(tag)) return prev;
+                      return prev ? `${prev}\n${tag}` : tag;
+                    });
+                  }}
+                >
+                  <Ionicons name={option.icon as any} size={13} color={selectedFollowup === option.value ? theme.accent : theme.subText} />
+                  <Text style={{ fontSize: 12, fontWeight: '600', color: selectedFollowup === option.value ? theme.accent : theme.subText }}>{option.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
             <TextInput
-              style={styles.notesInput}
+              style={[styles.notesInput, { marginBottom: 0 }]}
               value={additionalNotes}
               onChangeText={setAdditionalNotes}
-              placeholder="Enter any additional notes here..."
+              placeholder="e.g. Very interested in pricing, asked about Storage upgrade timeline..."
               placeholderTextColor="#AAAAAA"
               multiline
-              numberOfLines={3}
+              numberOfLines={4}
               textAlignVertical="top"
             />
           </SectionCard>
