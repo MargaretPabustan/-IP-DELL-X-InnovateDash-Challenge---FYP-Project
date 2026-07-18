@@ -205,14 +205,18 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
     setLoading(true);
     if (onSubmit) onSubmit({ leadName, companyName, title, phone, email, allInterests, intent, additionalNotes });
 
-    try {
-      const activeName    = showManualEdit ? manualName    : leadName;
-      const activeCompany = showManualEdit ? manualCompany : companyName;
-      const activeTitle   = showManualEdit ? manualTitle   : title;
-      const activePhone   = showManualEdit ? manualPhone   : phone;
-      const activeEmail   = showManualEdit ? manualEmail   : email;
+    const activeName    = showManualEdit ? manualName    : leadName;
+    const activeCompany = showManualEdit ? manualCompany : companyName;
+    const activeTitle   = showManualEdit ? manualTitle   : title;
+    const activePhone   = showManualEdit ? manualPhone   : phone;
+    const activeEmail   = showManualEdit ? manualEmail   : email;
+    let scannedBy: any = null;
+    let scannedByName: any = null;
 
-      const { id: scannedBy, name: scannedByName } = await getScannedBy();
+    try {
+      const scanned = await getScannedBy();
+      scannedBy = scanned.id;
+      scannedByName = scanned.name;
       console.log('👤 scannedBy:', scannedBy, '| scannedByName:', scannedByName);
 
       // Check network — save offline if no connection
@@ -263,7 +267,11 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
       });
 
       if (response.status === 409) { routeToDuplicate(); return; }
-      if (!response.ok) throw new Error('Server error');
+      if (!response.ok) {
+        const errText = await response.text();
+        console.error(`❌ Server response ${response.status}:`, errText);
+        throw new Error(`Server error: ${response.status} — ${errText}`);
+      }
 
       const result = await response.json();
       const leadId = result.lead_id;
@@ -322,9 +330,28 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
         params: { assignedTeam, intent, interests: allInterests, aiNotes },
       });
 
-    } catch (error) {
+    } catch (error: any) {
       console.warn('Submit error:', error);
-      Alert.alert('Submission Failed', 'Failed to submit lead. Please check your connection and try again.');
+      // If server is down but we have internet — save offline as fallback
+      try {
+        await addToQueue({
+          name: activeName || leadName,
+          company: activeCompany || companyName,
+          title: activeTitle || title,
+          phone: activePhone || phone,
+          email: activeEmail || email,
+          interests: allInterests,
+          intent,
+          notes: additionalNotes,
+          scannedBy: scannedBy || '',
+          scannedByName: scannedByName || '',
+        });
+        Alert.alert('⚠️ Saved Offline', 'Server is currently unavailable. Lead saved locally and will sync when server is back online.', [
+          { text: 'OK', onPress: () => router.replace('/booth/dashboardscreen' as any) }
+        ]);
+      } catch {
+        Alert.alert('Submission Failed', 'Failed to submit lead. Please check your connection and try again.');
+      }
     } finally {
       setLoading(false);
     }
@@ -429,6 +456,15 @@ const LeadDetailsScreen = ({ onSubmit }: { onSubmit?: (formData: any) => void })
                   />
                 </View>
               ))}
+              <TouchableOpacity
+                style={{ backgroundColor: theme.accent, borderRadius: 10, paddingVertical: 12, alignItems: 'center', marginTop: 4 }}
+                onPress={() => {
+                  setShowManualEdit(false);
+                  Alert.alert('✅ Saved', 'Details updated successfully.');
+                }}
+              >
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>Save Changes</Text>
+              </TouchableOpacity>
             </SectionCard>
           )}
 

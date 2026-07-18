@@ -413,6 +413,8 @@ app.post('/leads', async (req, res) => {
         const interestsList = Array.isArray(selected_interests) ? selected_interests : [];
         teamId = resolveTeamId(primary_interest, interestsList);
     }
+    if (!teamId) teamId = 5; // Default to Others team if no match
+    console.log(`📋 Lead insert — teamId: ${teamId} | primary_interest: ${primary_interest}`);
     try {
         const result = await pool.query(
             `INSERT INTO leads (name, email, company, title, phone_number, customer_intent, assigned_team_id, ai_notes, scanned_by, scanned_by_name)

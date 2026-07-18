@@ -101,6 +101,16 @@ export default function RootLayout() {
           for (let i = queue.length - 1; i >= 0; i--) {
             try {
               const lead = queue[i];
+              // Check for duplicate before syncing
+              const checkRes = await fetch(`${BACKEND_URL}/leads?email=${encodeURIComponent(lead.email)}`, {
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+              });
+              const checkData = await checkRes.json();
+              if (checkData?.data?.length > 0) {
+                console.log(`⚠️ Duplicate skipped: ${lead.email}`);
+                await removeFromQueue(i);
+                continue;
+              }
               const res = await fetch(`${BACKEND_URL}/leads`, {
                 method: 'POST',
                 headers: {
