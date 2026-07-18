@@ -8,6 +8,8 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAppTheme } from '../../src/constants/useAppTheme';
 import * as SecureStore from 'expo-secure-store';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 
 const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
@@ -61,6 +63,53 @@ export default function AdminUsers() {
   const [editTeamId,   setEditTeamId]   = useState<number | null>(null);
   const [editPassword, setEditPassword] = useState('');
   const [editIsActive, setEditIsActive] = useState(true);
+
+  const [importing, setImporting] = useState(false);
+
+  const handleCSVImport = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['text/csv', 'text/comma-separated-values', 'text/plain'],
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled) return;
+      setImporting(true);
+      const file = result.assets[0];
+      const csvContent = await FileSystem.readAsStringAsync(file.uri);
+      const lines = csvContent.trim().split('\n');
+      const headers = lines[0].split(',').map((h: string) => h.trim().toLowerCase().replace(/\r/g, ''));
+      const users = lines.slice(1)
+        .filter((line: string) => line.trim())
+        .map((line: string) => {
+          const values = line.split(',').map((v: string) => v.trim().replace(/\r/g, ''));
+          const user: any = {};
+          headers.forEach((h: string, i: number) => { user[h] = values[i] || ''; });
+          return user;
+        })
+        .filter((u: any) => u.email && u.full_name);
+
+      if (users.length === 0) {
+        Alert.alert('Error', 'No valid users found.\n\nCSV format:\nfull_name,email,password,role,team_id');
+        setImporting(false);
+        return;
+      }
+
+      const headers2 = await getAuthHeaders();
+      const res = await fetch(`${BACKEND_URL}/admin/users/bulk`, {
+        method: 'POST', headers: headers2,
+        body: JSON.stringify({ users }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        Alert.alert('✅ Import Complete', `Created: ${data.created}\nFailed: ${data.failed}${data.errors?.length > 0 ? '\n\nErrors:\n' + data.errors.slice(0, 3).join('\n') : ''}`);
+        fetchUsers();
+      } else {
+        Alert.alert('Error', data.message || 'Import failed');
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err.message || 'Failed to import CSV');
+    } finally { setImporting(false); }
+  };
 
   const fetchUsers = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -201,9 +250,19 @@ export default function AdminUsers() {
           <Text style={styles.headerTitle}>User Accounts</Text>
           <Text style={styles.headerSub}>{users.length} users</Text>
         </View>
-        <TouchableOpacity style={styles.addBtn} onPress={() => setShowCreate(true)}>
-          <Ionicons name="add" size={22} color="#fff" />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <TouchableOpacity
+            style={[styles.addBtn, { flexDirection: 'row', gap: 4, paddingHorizontal: 10 }]}
+            onPress={handleCSVImport}
+            disabled={importing}
+          >
+            <Ionicons name="document-text-outline" size={16} color="#fff" />
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>{importing ? '...' : 'CSV'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.addBtn} onPress={() => setShowCreate(true)}>
+            <Ionicons name="add" size={22} color="#fff" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
