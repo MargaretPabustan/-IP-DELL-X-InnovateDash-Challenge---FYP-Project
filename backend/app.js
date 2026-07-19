@@ -8,8 +8,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const ExcelJS = require('exceljs');
-// Rate limiting disabled temporarily for testing
-// const RateLimit = require('express-rate-limit');
+const RateLimit = require('express-rate-limit');
 const cron = require('node-cron');
 const { Resend } = require('resend');
 
@@ -28,11 +27,25 @@ app.use(cors({
     credentials: true,
 }));
 
-// ── RATE LIMITING — disabled for testing ──────────────────────────────────────
-// const generalLimiter = RateLimit({ windowMs: 15 * 60 * 1000, max: 1000 });
-// const authLimiter = RateLimit({ windowMs: 15 * 60 * 1000, max: 200 });
-// app.use(generalLimiter);
-// app.use('/auth', authLimiter);
+// ── RATE LIMITING ─────────────────────────────────────────────────────────────
+const generalLimiter = RateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: process.env.NODE_ENV === 'test' ? 10000 : 1000,
+    message: { success: false, message: 'Too many requests, please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+const authLimiter = RateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: process.env.NODE_ENV === 'test' ? 10000 : 200,
+    message: { success: false, message: 'Too many login attempts, please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+app.use(generalLimiter);
+app.use('/auth', authLimiter);
 
 // ── REQUEST LOGGER ────────────────────────────────────────────────────────────
 app.use((req, res, next) => {
@@ -1126,6 +1139,10 @@ app.post('/send-email', authenticateToken, async (req, res) => {
 
     if (!lead_id) {
         return res.status(400).json({ success: false, message: 'Missing lead identification parameter.' });
+    }
+
+    if (!to || !subject || !text) {
+        return res.status(400).json({ success: false, message: 'Missing required fields: to, subject, text.' });
     }
 
     try {
