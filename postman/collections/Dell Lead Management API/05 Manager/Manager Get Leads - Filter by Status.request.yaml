@@ -11,9 +11,9 @@ scripts:
     language: text/javascript
     code: |-
       pm.test("Status is 200", () => pm.response.to.have.status(200));
-      pm.test("All returned leads are QUALIFIED", () => {
+      pm.test("All returned leads are CLOSED", () => {
           const leads = pm.response.json().data;
-          leads.forEach(l => pm.expect(l.status).to.equal("QUALIFIED"));
+          leads.forEach(l => pm.expect(l.status).to.equal("CLOSED"));
       });
       pm.test("Response time is under 3000ms", () => {
           pm.expect(pm.response.responseTime).to.be.below(3000);

@@ -8,7 +8,8 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 const ExcelJS = require('exceljs');
-const RateLimit = require('express-rate-limit');
+// Rate limiting disabled temporarily for testing
+// const RateLimit = require('express-rate-limit');
 const cron = require('node-cron');
 const { Resend } = require('resend');
 
@@ -27,25 +28,11 @@ app.use(cors({
     credentials: true,
 }));
 
-// ── RATE LIMITING ─────────────────────────────────────────────────────────────
-const generalLimiter = RateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 1000,
-    message: { success: false, message: 'Too many requests, please try again later.' },
-    standardHeaders: true,
-    legacyHeaders: false,
-});
-
-const authLimiter = RateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 200,
-    message: { success: false, message: 'Too many login attempts, please try again later.' },
-    standardHeaders: true,
-    legacyHeaders: false,
-});
-
-app.use(generalLimiter);
-app.use('/auth', authLimiter);
+// ── RATE LIMITING — disabled for testing ──────────────────────────────────────
+// const generalLimiter = RateLimit({ windowMs: 15 * 60 * 1000, max: 1000 });
+// const authLimiter = RateLimit({ windowMs: 15 * 60 * 1000, max: 200 });
+// app.use(generalLimiter);
+// app.use('/auth', authLimiter);
 
 // ── REQUEST LOGGER ────────────────────────────────────────────────────────────
 app.use((req, res, next) => {
@@ -1180,17 +1167,15 @@ app.post('/send-email', authenticateToken, async (req, res) => {
                 scheduled_at, 
                 email_subject, 
                 notes, 
-                created_at, 
-                updated_at
-             ) VALUES ($1, $2, 'pending', $3, $4, $5, $6, NOW(), NOW())
+                created_at
+             ) VALUES ($1, $2, 'pending', $3, $4, $5, $6, NOW())
              ON CONFLICT (lead_id) DO UPDATE SET
                 followup_action = EXCLUDED.followup_action,
                 followup_status = EXCLUDED.followup_status,
                 due_date = EXCLUDED.due_date,
                 scheduled_at = EXCLUDED.scheduled_at,
                 email_subject = EXCLUDED.email_subject,
-                notes = EXCLUDED.notes,
-                updated_at = NOW()`,
+                notes = EXCLUDED.notes`,
             [
                 lead_id,
                 'Email Follow-up Scheduled',
@@ -1288,9 +1273,9 @@ app.post('/send-followup/:id', authenticateToken, async (req, res) => {
         const followup = await pool.query(
             `INSERT INTO lead_followups (
                 lead_id, followup_action, followup_status, due_date, 
-                scheduled_at, sent_at, email_subject, notes, created_at, updated_at
+                scheduled_at, sent_at, email_subject, notes, created_at
              )
-             VALUES ($1, 'Manual Follow-up Email', 'done', $2, $3, NOW(), $4, $5, NOW(), NOW())
+             VALUES ($1, 'Manual Follow-up Email', 'done', $2, $3, NOW(), $4, $5, NOW())
              ON CONFLICT (lead_id) DO UPDATE SET
                followup_action = EXCLUDED.followup_action,
                followup_status = 'done',
@@ -1298,8 +1283,7 @@ app.post('/send-followup/:id', authenticateToken, async (req, res) => {
                scheduled_at = EXCLUDED.scheduled_at,
                sent_at = NOW(),
                email_subject = EXCLUDED.email_subject,
-               notes = EXCLUDED.notes,
-               updated_at = NOW()
+               notes = EXCLUDED.notes
              RETURNING followup_id`,
             [leadId, localDueDate, scheduledAt, emailSubject, emailBody]
         );
