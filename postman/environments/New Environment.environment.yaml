@@ -1,8 +1,0 @@
-name: New Environment
-values:
-  - key: testEmail
-    value: ''
-  - key: createdLeadId
-    value: ''
-  - key: createdTeamId
-    value: ''

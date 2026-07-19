@@ -1,0 +1,41 @@
+$kind: http-request
+name: Admin Bulk Create Users - Missing Fields
+method: POST
+url: '{{baseUrl}}/admin/users/bulk'
+order: 260
+headers:
+  - key: Authorization
+    value: 'Bearer {{adminToken}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "users": [
+        {
+          "full_name": "Incomplete User",
+          "email": "incomplete@boothflow.com"
+        }
+      ]
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 201", () => pm.response.to.have.status(201));
+      pm.test("Response has success true", () => {
+          pm.expect(pm.response.json().success).to.be.true;
+      });
+      pm.test("Created count is 0", () => {
+          pm.expect(pm.response.json().created).to.equal(0);
+      });
+      pm.test("Failed count is 1", () => {
+          pm.expect(pm.response.json().failed).to.equal(1);
+      });
+      pm.test("Errors array is not empty", () => {
+          pm.expect(pm.response.json().errors).to.be.an("array").with.lengthOf(1);
+      });
+      pm.test("Response time is under 3000ms", () => {
+          pm.expect(pm.response.responseTime).to.be.below(3000);
+      });

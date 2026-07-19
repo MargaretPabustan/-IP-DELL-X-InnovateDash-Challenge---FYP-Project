@@ -1,0 +1,32 @@
+$kind: http-request
+name: Admin Get All Leads
+method: GET
+url: '{{baseUrl}}/admin/leads'
+order: 55
+headers:
+  - key: Authorization
+    value: 'Bearer {{adminToken}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 200", () => pm.response.to.have.status(200));
+      pm.test("Response has success true", () => {
+          pm.expect(pm.response.json().success).to.be.true;
+      });
+      pm.test("Data is an array", () => {
+          pm.expect(pm.response.json().data).to.be.an("array");
+      });
+      pm.test("Each lead has required fields", () => {
+          const leads = pm.response.json().data;
+          if (leads.length > 0) {
+              const lead = leads[0];
+              pm.expect(lead).to.have.property("lead_id");
+              pm.expect(lead).to.have.property("name");
+              pm.expect(lead).to.have.property("email");
+              pm.expect(lead).to.have.property("status");
+          }
+      });
+      pm.test("Response time is under 3000ms", () => {
+          pm.expect(pm.response.responseTime).to.be.below(3000);
+      });

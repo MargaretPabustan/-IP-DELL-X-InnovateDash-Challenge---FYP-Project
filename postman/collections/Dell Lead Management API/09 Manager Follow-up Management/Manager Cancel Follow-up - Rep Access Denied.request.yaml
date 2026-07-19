@@ -1,0 +1,27 @@
+$kind: http-request
+name: Manager Cancel Follow-up - Rep Access Denied
+method: POST
+url: '{{baseUrl}}/manager/followup/cancel'
+order: 320
+headers:
+  - key: Authorization
+    value: 'Bearer {{repToken}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "lead_id": "{{createdLeadId}}"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 403 (rep forbidden)", () => pm.response.to.have.status(403));
+      pm.test("Error message is Forbidden", () => {
+          pm.expect(pm.response.json().message).to.equal("Forbidden");
+      });
+      pm.test("Response time is under 3000ms", () => {
+          pm.expect(pm.response.responseTime).to.be.below(3000);
+      });

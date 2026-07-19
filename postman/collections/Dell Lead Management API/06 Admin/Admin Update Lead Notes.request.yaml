@@ -1,0 +1,31 @@
+$kind: http-request
+name: Admin Update Lead Notes
+method: PUT
+url: '{{baseUrl}}/admin/leads/{{createdLeadId}}/notes'
+order: 65
+headers:
+  - key: Authorization
+    value: 'Bearer {{adminToken}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "ai_notes": "High intent lead — recommend immediate follow-up for AI PCs demo.",
+      "status": "URGENT"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 200", () => pm.response.to.have.status(200));
+      pm.test("Response has success true", () => {
+          pm.expect(pm.response.json().success).to.be.true;
+      });
+      pm.test("Notes and status updated message", () => {
+          pm.expect(pm.response.json().message).to.equal("Lead notes and status updated");
+      });
+      pm.test("Response time is under 3000ms", () => {
+          pm.expect(pm.response.responseTime).to.be.below(3000);
+      });

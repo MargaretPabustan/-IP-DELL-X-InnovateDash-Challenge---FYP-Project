@@ -1,0 +1,28 @@
+$kind: http-request
+name: Send Follow-up Email - No Token
+method: POST
+url: '{{baseUrl}}/send-email'
+order: 130
+headers:
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "to": "test@example.com",
+      "subject": "Follow-up",
+      "text": "Some text",
+      "lead_id": "1"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 401 (unauthorized)", () => pm.response.to.have.status(401));
+      pm.test("Error mentions no token", () => {
+          pm.expect(pm.response.json().message).to.include("No token");
+      });
+      pm.test("Response time is under 3000ms", () => {
+          pm.expect(pm.response.responseTime).to.be.below(3000);
+      });

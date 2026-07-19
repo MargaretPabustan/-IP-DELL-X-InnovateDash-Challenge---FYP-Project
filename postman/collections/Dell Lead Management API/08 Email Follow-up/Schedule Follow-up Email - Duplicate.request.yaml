@@ -1,0 +1,34 @@
+$kind: http-request
+name: Schedule Follow-up Email - Duplicate
+method: POST
+url: '{{baseUrl}}/send-email'
+order: 120
+headers:
+  - key: Authorization
+    value: 'Bearer {{managerToken}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "to": "{{testEmail}}",
+      "subject": "Your Dell Technologies Follow-up — AI PCs",
+      "text": "Hi, thank you for visiting the Dell booth. We'd love to follow up on your interest in AI PCs.",
+      "lead_id": "{{createdLeadId}}",
+      "followupDate": "2026-08-01T10:00:00.000Z"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 409 (duplicate blocked)", () => pm.response.to.have.status(409));
+      pm.test("Response has success false", () => {
+          pm.expect(pm.response.json().success).to.be.false;
+      });
+      pm.test("Error mentions no duplicate followups", () => {
+          pm.expect(pm.response.json().message).to.include("duplicate");
+      });
+      pm.test("Response time is under 3000ms", () => {
+          pm.expect(pm.response.responseTime).to.be.below(3000);
+      });

@@ -1,0 +1,12 @@
+{
+  "name": "Local",
+  "values": [
+    { "key": "baseUrl", "value": "https://boothflow-backend.onrender.com", "enabled": true },
+    { "key": "adminEmail", "value": "sarah.tan@dell.com", "enabled": true },
+    { "key": "adminPassword", "value": "admin123", "enabled": true },
+    { "key": "managerEmail", "value": "james.lim@dell.com", "enabled": true },
+    { "key": "managerPassword", "value": "manager123", "enabled": true },
+    { "key": "repLoginEmail", "value": "rachel.ng@dell.com", "enabled": true },
+    { "key": "repLoginPassword", "value": "rep123", "enabled": true }
+  ]
+}

@@ -1,0 +1,44 @@
+$kind: http-request
+name: Admin Dashboard
+method: GET
+url: '{{baseUrl}}/admin/dashboard'
+order: 50
+headers:
+  - key: Authorization
+    value: 'Bearer {{adminToken}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 200", () => pm.response.to.have.status(200));
+      pm.test("Response has success true", () => {
+          pm.expect(pm.response.json().success).to.be.true;
+      });
+      pm.test("Response has total_leads", () => {
+          pm.expect(pm.response.json().data).to.have.property("total_leads");
+      });
+      pm.test("Response has qualified count", () => {
+          pm.expect(pm.response.json().data).to.have.property("qualified");
+      });
+      pm.test("Response has contacted count", () => {
+          pm.expect(pm.response.json().data).to.have.property("contacted");
+      });
+      pm.test("Response has new_leads count", () => {
+          pm.expect(pm.response.json().data).to.have.property("new_leads");
+      });
+      pm.test("Response has followups_done count", () => {
+          pm.expect(pm.response.json().data).to.have.property("followups_done");
+      });
+      pm.test("Response has emails_sent count", () => {
+          pm.expect(pm.response.json().data).to.have.property("emails_sent");
+      });
+      pm.test("All counts are numbers", () => {
+          const d = pm.response.json().data;
+          pm.expect(d.total_leads).to.be.a("number");
+          pm.expect(d.qualified).to.be.a("number");
+          pm.expect(d.contacted).to.be.a("number");
+          pm.expect(d.new_leads).to.be.a("number");
+      });
+      pm.test("Response time is under 3000ms", () => {
+          pm.expect(pm.response.responseTime).to.be.below(3000);
+      });

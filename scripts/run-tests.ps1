@@ -4,7 +4,7 @@ $email = "testlead.$timestamp@testcompany.com"
 
 # Run Postman tests passing all credentials as env vars
 postman collection run "postman/collections/Dell Lead Management API" `
-    --env-var "baseUrl=$env:BACKEND_URL" `
+    --env-var "baseUrl=$env:EXPO_PUBLIC_BACKEND_URL" `
     --env-var "repLoginEmail=rachel.ng@dell.com" `
     --env-var "repLoginPassword=rep123" `
     --env-var "managerEmail=james.lim@dell.com" `

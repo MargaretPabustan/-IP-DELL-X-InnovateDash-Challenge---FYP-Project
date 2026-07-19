@@ -30,7 +30,7 @@ app.use(cors({
 // ── RATE LIMITING ─────────────────────────────────────────────────────────────
 const generalLimiter = RateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 100,
+    max: 1000,
     message: { success: false, message: 'Too many requests, please try again later.' },
     standardHeaders: true,
     legacyHeaders: false,
@@ -38,7 +38,7 @@ const generalLimiter = RateLimit({
 
 const authLimiter = RateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 20,
+    max: 200,
     message: { success: false, message: 'Too many login attempts, please try again later.' },
     standardHeaders: true,
     legacyHeaders: false,
@@ -765,8 +765,7 @@ app.post('/manager/followup/cancel', authenticateToken, authorizeRoles('admin', 
         const updateResult = await pool.query(
             `UPDATE lead_followups 
              SET followup_status = 'cancelled', 
-                 followup_action = 'Cancelled Follow-up',
-                 updated_at = NOW() 
+                 followup_action = 'Cancelled Follow-up'
              WHERE lead_id = $1`,
             [targetedLeadId]
         );
@@ -813,19 +812,16 @@ app.put('/manager/followup/:leadId', authenticateToken, async (req, res) => {
                 followup_action, 
                 followup_status, 
                 notes, 
-                created_at, 
-                updated_at
-             ) VALUES ($1, $2, $3, $4, NOW(), NOW())
+                created_at
+             ) VALUES ($1, $2, $3, $4, NOW())
              ON CONFLICT (lead_id) DO UPDATE SET
                 followup_status = EXCLUDED.followup_status,
                 followup_action = COALESCE(EXCLUDED.followup_action, lead_followups.followup_action),
                 notes = COALESCE(EXCLUDED.notes, lead_followups.notes),
-                -- Keep existing email configurations intact if they exist
                 email_subject = lead_followups.email_subject,
                 scheduled_at = lead_followups.scheduled_at,
                 sent_at = lead_followups.sent_at,
-                due_date = COALESCE(lead_followups.due_date, CURRENT_DATE),
-                updated_at = NOW()`,
+                due_date = COALESCE(lead_followups.due_date, CURRENT_DATE)`,
             [leadId, actionLabel, followup_status, notes || null]
         );
 

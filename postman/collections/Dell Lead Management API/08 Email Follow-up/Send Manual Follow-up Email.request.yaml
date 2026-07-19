@@ -1,0 +1,36 @@
+$kind: http-request
+name: Send Manual Follow-up Email
+method: POST
+url: '{{baseUrl}}/send-followup/{{createdLeadId}}'
+order: 200
+headers:
+  - key: Authorization
+    value: 'Bearer {{managerToken}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "followupDate": "2026-08-01T10:00:00.000Z"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 200", () => pm.response.to.have.status(200));
+      pm.test("Response has success true", () => {
+          pm.expect(pm.response.json().success).to.be.true;
+      });
+      pm.test("Response has followup_id", () => {
+          pm.expect(pm.response.json()).to.have.property("followup_id");
+      });
+      pm.test("Response has scheduled_at", () => {
+          pm.expect(pm.response.json()).to.have.property("scheduled_at");
+      });
+      pm.test("Message confirms follow-up processed", () => {
+          pm.expect(pm.response.json().message).to.include("Follow-up");
+      });
+      pm.test("Response time is under 5000ms", () => {
+          pm.expect(pm.response.responseTime).to.be.below(5000);
+      });

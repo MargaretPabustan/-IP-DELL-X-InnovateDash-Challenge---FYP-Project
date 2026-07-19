@@ -1,0 +1,32 @@
+$kind: http-request
+name: Schedule Follow-up Email - Missing Lead ID
+method: POST
+url: '{{baseUrl}}/send-email'
+order: 110
+headers:
+  - key: Authorization
+    value: 'Bearer {{managerToken}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "to": "test@example.com",
+      "subject": "Follow-up",
+      "text": "Some follow-up text"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 400", () => pm.response.to.have.status(400));
+      pm.test("Response has success false", () => {
+          pm.expect(pm.response.json().success).to.be.false;
+      });
+      pm.test("Error mentions missing lead identification", () => {
+          pm.expect(pm.response.json().message).to.include("Missing lead");
+      });
+      pm.test("Response time is under 3000ms", () => {
+          pm.expect(pm.response.responseTime).to.be.below(3000);
+      });

@@ -1,0 +1,32 @@
+$kind: http-request
+name: Manager Update Follow-up Status
+method: PUT
+url: '{{baseUrl}}/manager/followup/{{createdLeadId}}'
+order: 200
+headers:
+  - key: Authorization
+    value: 'Bearer {{managerToken}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "followup_status": "done",
+      "followup_action": "Called and confirmed interest",
+      "notes": "Lead confirmed interest in AI PCs demo. Scheduling next week."
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 200", () => pm.response.to.have.status(200));
+      pm.test("Response has success true", () => {
+          pm.expect(pm.response.json().success).to.be.true;
+      });
+      pm.test("Message confirms status change", () => {
+          pm.expect(pm.response.json().message).to.include("done");
+      });
+      pm.test("Response time is under 3000ms", () => {
+          pm.expect(pm.response.responseTime).to.be.below(3000);
+      });
