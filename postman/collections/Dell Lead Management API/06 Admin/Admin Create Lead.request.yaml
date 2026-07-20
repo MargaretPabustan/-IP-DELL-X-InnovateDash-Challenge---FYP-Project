@@ -1,0 +1,38 @@
+$kind: http-request
+name: Admin Create Lead
+method: POST
+url: '{{baseUrl}}/leads'
+order: 0
+headers:
+  - key: Authorization
+    value: 'Bearer {{adminToken}}'
+  - key: Content-Type
+    value: application/json
+body:
+  type: json
+  content: |-
+    {
+      "name": "Test Lead Admin",
+      "email": "{{email}}",
+      "company": "Test Company",
+      "title": "Test Manager",
+      "phone_number": "+65 9999 0000",
+      "customer_intent": "Medium - Pricing Inquiry",
+      "assigned_team_id": 1,
+      "primary_interest": "AI PCs",
+      "selected_interests": ["AI PCs"],
+      "additional_notes": "Created by Postman admin test",
+      "scanned_by": 4,
+      "scanned_by_name": "Daniel Lee"
+    }
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      pm.test("Status is 201", () => pm.response.to.have.status(201));
+      pm.test("Response has success true", () => pm.expect(pm.response.json().success).to.be.true);
+      pm.test("Response has lead_id", () => pm.expect(pm.response.json()).to.have.property('lead_id'));
+      if (pm.response.json().lead_id) {
+          pm.environment.set("createdLeadId", pm.response.json().lead_id);
+          console.log("✅ createdLeadId set:", pm.response.json().lead_id);
+      }

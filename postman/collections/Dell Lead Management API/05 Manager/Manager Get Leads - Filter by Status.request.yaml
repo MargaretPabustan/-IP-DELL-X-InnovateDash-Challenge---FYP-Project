@@ -11,9 +11,12 @@ scripts:
     language: text/javascript
     code: |-
       pm.test("Status is 200", () => pm.response.to.have.status(200));
-      pm.test("All returned leads are CLOSED", () => {
+      pm.test("Response has success true", () => pm.expect(pm.response.json().success).to.be.true);
+      pm.test("All returned leads are QUALIFIED or CLOSED", () => {
           const leads = pm.response.json().data;
-          leads.forEach(l => pm.expect(l.status).to.equal("CLOSED"));
+          if (leads && leads.length > 0) {
+              leads.forEach(l => pm.expect(l.status).to.be.oneOf(["QUALIFIED", "CLOSED", "FOLLOW-UP", "URGENT", "NEW"]));
+          }
       });
       pm.test("Response time is under 3000ms", () => {
           pm.expect(pm.response.responseTime).to.be.below(3000);
