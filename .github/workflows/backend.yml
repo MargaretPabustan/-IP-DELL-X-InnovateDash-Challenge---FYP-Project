@@ -23,84 +23,22 @@ jobs:
           node-version: 20
           cache: "npm"
 
-      - name: Install backend dependencies
-        working-directory: ./backend
-        run: npm install
-
       - name: Install Newman and dependencies
         run: |
           npm install -g newman
           npm install yaml
 
-      - name: Start backend with Docker Compose
-        working-directory: ./backend
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
-          NODE_ENV: test
-          PORT: 3000
-        run: docker compose up -d
-
-      - name: Wait for server to start
-        run: sleep 20
-
-      - name: Check Docker Compose logs
-        if: always()
-        working-directory: ./backend
-        run: |
-          docker compose logs
-          docker ps -a
-
-      - name: Health check
-        run: curl -f http://localhost:3000/ || exit 1
-
       - name: Export Postman collection
         run: node scripts/export-postman-collection.js
 
-      - name: Run Postman tests
+      - name: Pre-fetch tokens and run tests
         continue-on-error: true
         shell: pwsh
-        working-directory: ./
         env:
-          BACKEND_URL: http://localhost:3000
+          BACKEND_URL: https://boothflow-backend.onrender.com
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
-          NODE_ENV: test
-        run: |
-          $timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
-          $email = "testlead.$timestamp@testcompany.com"
-          $baseUrl = $env:BACKEND_URL
-
-          $repLogin = Invoke-RestMethod -Uri "$baseUrl/auth/login" -Method POST -ContentType "application/json" -Body '{"email":"rachel.ng@dell.com","password":"rep123"}'
-          $repToken = $repLogin.token
-
-          $managerLogin = Invoke-RestMethod -Uri "$baseUrl/auth/login" -Method POST -ContentType "application/json" -Body '{"email":"james.lim@dell.com","password":"manager123"}'
-          $managerToken = $managerLogin.token
-
-          $adminLogin = Invoke-RestMethod -Uri "$baseUrl/auth/login" -Method POST -ContentType "application/json" -Body '{"email":"sarah.tan@dell.com","password":"admin123"}'
-          $adminToken = $adminLogin.token
-
-          newman run "postman/collections/Dell Lead Management API.postman_collection.json" `
-            --env-var "baseUrl=$baseUrl" `
-            --env-var "repLoginEmail=rachel.ng@dell.com" `
-            --env-var "repLoginPassword=rep123" `
-            --env-var "managerEmail=james.lim@dell.com" `
-            --env-var "managerPassword=manager123" `
-            --env-var "adminEmail=sarah.tan@dell.com" `
-            --env-var "adminPassword=admin123" `
-            --env-var "repToken=$repToken" `
-            --env-var "managerToken=$managerToken" `
-            --env-var "adminToken=$adminToken" `
-            --env-var "email=$email" `
-            --reporters cli
-
-      - name: Stop Docker Compose
-        if: always()
-        working-directory: ./backend
-        run: docker compose down
+        run: .\scripts\run-tests.ps1
 
   deploy:
     runs-on: ubuntu-latest
