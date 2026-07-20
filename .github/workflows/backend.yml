@@ -27,8 +27,10 @@ jobs:
         working-directory: ./backend
         run: npm install
 
-      - name: Install Postman CLI
-        run: curl -o- "https://dl-cli.pstmn.io/install/linux64.sh" | sh
+      - name: Install Newman and dependencies
+        run: |
+          npm install -g newman
+          npm install yaml
 
       - name: Start backend with Docker Compose
         working-directory: ./backend
@@ -38,6 +40,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
+          NODE_ENV: test
           PORT: 3000
         run: docker compose up -d
 
@@ -54,6 +57,9 @@ jobs:
       - name: Health check
         run: curl -f http://localhost:3000/ || exit 1
 
+      - name: Export Postman collection
+        run: node scripts/export-postman-collection.js
+
       - name: Run Postman tests
         continue-on-error: true
         shell: pwsh
@@ -62,7 +68,34 @@ jobs:
           BACKEND_URL: http://localhost:3000
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           RESEND_FROM_EMAIL: ${{ secrets.RESEND_FROM_EMAIL }}
-        run: .\scripts\run-tests.ps1
+          NODE_ENV: test
+        run: |
+          $timestamp = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
+          $email = "testlead.$timestamp@testcompany.com"
+          $baseUrl = $env:BACKEND_URL
+
+          $repLogin = Invoke-RestMethod -Uri "$baseUrl/auth/login" -Method POST -ContentType "application/json" -Body '{"email":"rachel.ng@dell.com","password":"rep123"}'
+          $repToken = $repLogin.token
+
+          $managerLogin = Invoke-RestMethod -Uri "$baseUrl/auth/login" -Method POST -ContentType "application/json" -Body '{"email":"james.lim@dell.com","password":"manager123"}'
+          $managerToken = $managerLogin.token
+
+          $adminLogin = Invoke-RestMethod -Uri "$baseUrl/auth/login" -Method POST -ContentType "application/json" -Body '{"email":"sarah.tan@dell.com","password":"admin123"}'
+          $adminToken = $adminLogin.token
+
+          newman run "postman/collections/Dell Lead Management API.postman_collection.json" `
+            --env-var "baseUrl=$baseUrl" `
+            --env-var "repLoginEmail=rachel.ng@dell.com" `
+            --env-var "repLoginPassword=rep123" `
+            --env-var "managerEmail=james.lim@dell.com" `
+            --env-var "managerPassword=manager123" `
+            --env-var "adminEmail=sarah.tan@dell.com" `
+            --env-var "adminPassword=admin123" `
+            --env-var "repToken=$repToken" `
+            --env-var "managerToken=$managerToken" `
+            --env-var "adminToken=$adminToken" `
+            --env-var "email=$email" `
+            --reporters cli
 
       - name: Stop Docker Compose
         if: always()

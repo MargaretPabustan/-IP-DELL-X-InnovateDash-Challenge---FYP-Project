@@ -23,8 +23,8 @@ Write-Host "Rep token: $(if ($repToken) { 'OK' } else { 'FAILED' })"
 Write-Host "Manager token: $(if ($managerToken) { 'OK' } else { 'FAILED' })"
 Write-Host "Admin token: $(if ($adminToken) { 'OK' } else { 'FAILED' })"
 
-# Run Postman tests
-postman collection run "postman/collections/Dell Lead Management API.postman_collection.json" `
+# Run tests with Newman
+newman run "postman/collections/Dell Lead Management API.postman_collection.json" `
     --env-var "baseUrl=$baseUrl" `
     --env-var "repLoginEmail=rachel.ng@dell.com" `
     --env-var "repLoginPassword=rep123" `
