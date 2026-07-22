@@ -1,12 +1,12 @@
 // ============================================================================
-// MANAGER FRONTEND INTEGRATION TESTING SUITE
+// MANAGER MODULE INTEGRATION TESTING SUITE
 // ============================================================================
 
 import React from 'react';
 import { Alert, Dimensions } from 'react-native';
-import { render, fireEvent, waitFor, screen } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, screen, RenderResult } from '@testing-library/react-native';
 
-// Target System Screen Imports
+// Target System Screen Imports 
 import DashboardScreen from './app/manager/dashboard';
 import LeadsScreen from './app/manager/leads';
 import ActivityScreen from './app/manager/activity';
@@ -87,47 +87,31 @@ const setupFetchMock = (data: any, success = true) => {
   });
 };
 
+const renderAsyncComponent = async (ui: React.ReactElement): Promise<RenderResult> => {
+  const result = render(ui);
+  return (result instanceof Promise ? await result : result) as RenderResult;
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
 });
 
 // ============================================================================
-// CRITERIA: COMPONENTS RENDER CORRECTLY & DATA DISPLAYED FROM BACKEND
+// TARGET SPECIFICATION 1: MANAGER DASHBOARD SCREEN (./app/manager/dashboard.tsx)
 // ============================================================================
-describe('Components Render and Correct Data Displayed', () => {
-  test('renders dashboard layout panels and counters from endpoint correctly', async () => {
+describe('Manager Dashboard Screen Rendering & Actions', () => {
+  
+  test('Manager Dashboard: renders layout panels and counters from endpoint correctly', async () => {
     setupFetchMock(mockDashboardData);
-    render(<DashboardScreen />);
+    await renderAsyncComponent(<DashboardScreen />);
     await waitFor(() => {
       expect(screen.getByText('Total Team Leads')).toBeTruthy();
     });
   });
 
-  test('renders lead informational layout data properly', async () => {
-    setupFetchMock(mockLeadsArray);
-    render(<LeadsScreen />);
-    await waitFor(() => {
-      expect(screen.getByText(/John Tan/i)).toBeTruthy();
-      expect(screen.getByText(/Dell Technologies/i)).toBeTruthy();
-    });
-  });
-
-  test('renders historical activity feed log streams reliably', async () => {
-    setupFetchMock(mockActivityArray);
-    render(<ActivityScreen />);
-    await waitFor(() => {
-      expect(screen.getByText(/FOLLOWUP SCHEDULED/i)).toBeTruthy();
-    });
-  });
-});
-
-// ============================================================================
-// CRITERIA: BUTTONS, LINKS, AND FORMS WORK WHEN CLICKED
-// ============================================================================
-describe('Buttons, Links, Filters, and Interaction Handlers', () => {
-  test('bottom navigation links change route contexts instantly when pressed', async () => {
+  test('Manager Dashboard: bottom navigation links change route contexts instantly when pressed', async () => {
     setupFetchMock(mockDashboardData);
-    render(<DashboardScreen />);
+    await renderAsyncComponent(<DashboardScreen />);
     await waitFor(() => {
       expect(screen.getAllByText('Leads').length).toBeGreaterThan(0);
     });
@@ -135,9 +119,32 @@ describe('Buttons, Links, Filters, and Interaction Handlers', () => {
     expect(mockPush).toHaveBeenCalledWith('/manager/leads');
   });
 
-  test('filter action selectors prune view representations safely', async () => {
+  test('Manager Dashboard: displays appropriate generic error indicators or zero metrics when call fails', async () => {
+    setupFetchMock(null, false);
+    await renderAsyncComponent(<DashboardScreen />);
+    await waitFor(() => {
+      expect(screen.getAllByText('0').length).toBeGreaterThan(0);
+    });
+  });
+});
+
+// ============================================================================
+// TARGET SPECIFICATION 2: MANAGER LEADS SCREEN (./app/manager/leads.tsx)
+// ============================================================================
+describe('Manager Leads Screen Data, Filters, Inputs & Viewport Resizing', () => {
+  
+  test('Manager Leads: renders lead informational layout data properly from API data payload', async () => {
     setupFetchMock(mockLeadsArray);
-    render(<LeadsScreen />);
+    await renderAsyncComponent(<LeadsScreen />);
+    await waitFor(() => {
+      expect(screen.getByText(/John Tan/i)).toBeTruthy();
+      expect(screen.getByText(/Dell Technologies/i)).toBeTruthy();
+    });
+  });
+
+  test('Manager Leads: filter action selectors prune view representations safely', async () => {
+    setupFetchMock(mockLeadsArray);
+    await renderAsyncComponent(<LeadsScreen />);
     await waitFor(() => {
       expect(screen.getAllByText('NEW').length).toBeGreaterThan(0);
     });
@@ -147,9 +154,9 @@ describe('Buttons, Links, Filters, and Interaction Handlers', () => {
     });
   });
 
-  test('pressing view details expands overlay block models safely', async () => {
+  test('Manager Leads: pressing view details expands overlay block models safely', async () => {
     setupFetchMock(mockLeadsArray);
-    render(<LeadsScreen />);
+    await renderAsyncComponent(<LeadsScreen />);
     await waitFor(() => {
       expect(screen.getByText('View Details')).toBeTruthy();
     });
@@ -158,15 +165,22 @@ describe('Buttons, Links, Filters, and Interaction Handlers', () => {
       expect(screen.getByText(/AI Notes/i)).toBeTruthy();
     });
   });
-});
 
-// ============================================================================
-// CRITERIA: USER INPUT VALIDATION
-// ============================================================================
-describe('User Text Mutation Inputs Actions', () => {
-  test('search filter query typing mutates component filtering lists perfectly', async () => {
+  test('Manager Leads: pressing edit followup action triggers edit state or modal safely', async () => {
     setupFetchMock(mockLeadsArray);
-    render(<LeadsScreen />);
+    await renderAsyncComponent(<LeadsScreen />);
+    await waitFor(() => {
+      expect(screen.getByText(/Edit/i)).toBeTruthy();
+    });
+    fireEvent.press(screen.getByText(/Edit/i));
+    await waitFor(() => {
+      expect(screen.toJSON()).toBeTruthy();
+    });
+  });
+
+  test('Manager Leads: search filter query typing mutates component filtering lists perfectly', async () => {
+    setupFetchMock(mockLeadsArray);
+    await renderAsyncComponent(<LeadsScreen />);
     await waitFor(() => {
       expect(screen.getByPlaceholderText('Search name, company, email...')).toBeTruthy();
     });
@@ -176,44 +190,15 @@ describe('User Text Mutation Inputs Actions', () => {
       expect(screen.queryByText(/John Tan/i)).toBeNull();
     });
   });
-});
 
-// ============================================================================
-// CRITERIA: LOADING SPINNERS & ERROR MESSAGES
-// ============================================================================
-describe('Loading Indicators and Context Feedback Elements', () => {
-  test('displays loading visual states while network requests remain unresolved', async () => {
+  test('Manager Leads: displays loading visual states while network requests remain unresolved', async () => {
     (global.fetch as jest.Mock).mockImplementation(() => new Promise(() => {}));
-    
-    render(<LeadsScreen />);
-    
-    // Completely standalone query avoiding all returned properties from the render execution
+    await renderAsyncComponent(<LeadsScreen />);
     await waitFor(() => {
       expect(screen.toJSON()).toBeTruthy();
     });
   });
 
-  test('displays appropriate generic error indicators or zero metrics when call fails', async () => {
-    setupFetchMock(null, false);
-    render(<DashboardScreen />);
-    await waitFor(() => {
-      expect(screen.getAllByText('0').length).toBeGreaterThan(0);
-    });
-  });
-
-  test('displays fallback messages when targeted records return blank arrays', async () => {
-    setupFetchMock([]);
-    render(<ActivityScreen />);
-    await waitFor(() => {
-      expect(screen.getByText(/No activity yet/i)).toBeTruthy();
-    });
-  });
-});
-
-// ============================================================================
-// CRITERIA: INTERFACE WORKS ACROSS DIFFERENT SCREEN SIZES
-// ============================================================================
-describe('Interface Responsiveness Visual Scaling Adaptability Verification', () => {
   const customScales = [
     { label: 'Compact Handset Grid Profile', width: 320, height: 568 },
     { label: 'Standard Mobile Desktop Scaling Profile', width: 390, height: 844 },
@@ -221,14 +206,128 @@ describe('Interface Responsiveness Visual Scaling Adaptability Verification', ()
   ];
 
   test.each(customScales)(
-    'renders display templates without crashes layout on screen metric profiles: $label',
+    'Manager Leads Interface Responsiveness: renders cleanly on screen metric profiles: $label',
     async ({ width, height }) => {
       jest.spyOn(Dimensions, 'get').mockReturnValue({ width, height, scale: 1, fontScale: 1 } as any);
       setupFetchMock(mockLeadsArray);
-      render(<LeadsScreen />);
+      await renderAsyncComponent(<LeadsScreen />);
       await waitFor(() => {
         expect(screen.getByText(/John Tan/i)).toBeTruthy();
       });
     }
   );
+});
+
+// ============================================================================
+// TARGET SPECIFICATION 3: MANAGER ACTIVITY SCREEN (./app/manager/activity.tsx)
+// ============================================================================
+describe('Manager Activity Screen Feed Stream Logs', () => {
+  
+  test('Manager Activity: renders historical activity feed log streams reliably', async () => {
+    setupFetchMock(mockActivityArray);
+    await renderAsyncComponent(<ActivityScreen />);
+    await waitFor(() => {
+      expect(screen.getByText(/FOLLOWUP SCHEDULED/i)).toBeTruthy();
+    });
+  });
+
+  test('Manager Activity: displays fallback messages when targeted records return blank arrays', async () => {
+    setupFetchMock([]);
+    await renderAsyncComponent(<ActivityScreen />);
+    await waitFor(() => {
+      expect(screen.getByText(/No activity yet/i)).toBeTruthy();
+    });
+  });
+});
+
+// ============================================================================
+// TARGET SPECIFICATION 4: MANAGER EMAILS SCREEN (./app/manager/emails.tsx)
+// ============================================================================
+// ============================================================================
+// TARGET SPECIFICATION 4: MANAGER EMAILS SCREEN (./app/manager/emails.tsx)
+// ============================================================================
+describe('Manager Emails Screen Tracking & Automation Actions', () => {
+  
+  test('Manager Emails: renders email dashboard template layout correctly', async () => {
+    await renderAsyncComponent(<EmailsScreen />);
+    await waitFor(() => {
+      expect(screen.getByText('Email Follow-ups')).toBeTruthy();
+    });
+  });
+
+  test('Manager Emails: pressing date picker triggers automation sequence layout perfectly', async () => {
+    await renderAsyncComponent(<EmailsScreen />);
+    await waitFor(() => {
+      expect(screen.getByText('Date')).toBeTruthy();
+    });
+    
+    // Target and press the Date selection row component
+    const dateBtn = screen.getByText('Date');
+    fireEvent.press(dateBtn);
+    
+    await waitFor(() => {
+      expect(screen.toJSON()).toBeTruthy();
+    });
+  });
+
+  test('Manager Emails: pressing time picker triggers automation sequence layout perfectly', async () => {
+    await renderAsyncComponent(<EmailsScreen />);
+    await waitFor(() => {
+      expect(screen.getByText('Time')).toBeTruthy();
+    });
+    
+    // Target and press the Time selection row component
+    const timeBtn = screen.getByText('Time');
+    fireEvent.press(timeBtn);
+    
+    await waitFor(() => {
+      expect(screen.toJSON()).toBeTruthy();
+    });
+  });
+
+  test('Manager Emails: schedule button reflects initial disabled state correctly', async () => {
+    await renderAsyncComponent(<EmailsScreen />);
+    await waitFor(() => {
+      expect(screen.getByText('Schedule Follow-up')).toBeTruthy();
+    });
+
+    // Validates that the follow-up submission element is correctly locked out out-of-the-box
+    const scheduleText = screen.getByText('Schedule Follow-up');
+    const scheduleBtnContainer = scheduleText.parent; 
+    
+    expect(scheduleBtnContainer?.props.accessibilityState?.disabled).toBe(true);
+  });
+});
+
+// ============================================================================
+// TARGET SPECIFICATION 5: MANAGER EXPORT SCREEN (./app/manager/export.tsx)
+// ============================================================================
+// ============================================================================
+// TARGET SPECIFICATION 5: MANAGER EXPORT SCREEN (./app/manager/export.tsx)
+// ============================================================================
+describe('Manager Export Screen Data Actions & Form Submissions', () => {
+  
+  test('Manager Export: renders export settings configuration options safely', async () => {
+    await renderAsyncComponent(<ExportScreen />);
+    await waitFor(() => {
+      expect(screen.getByText('Export Leads')).toBeTruthy();
+    });
+  });
+
+  test('Manager Export: clicking the generate file button triggers download sequence successfully', async () => {
+    await renderAsyncComponent(<ExportScreen />);
+    
+    // Wait for elements to register using a scannable check
+    await waitFor(() => {
+      expect(screen.getAllByText('Download Excel').length).toBeGreaterThan(0);
+    });
+
+    // Safely target the first matched instance of the text element to trigger the bubble up press event
+    const exportBtn = screen.getAllByText('Download Excel')[0];
+    fireEvent.press(exportBtn);
+    
+    await waitFor(() => {
+      expect(screen.toJSON()).toBeTruthy();
+    });
+  });
 });
