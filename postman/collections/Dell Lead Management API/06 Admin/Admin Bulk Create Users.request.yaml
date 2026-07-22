@@ -15,14 +15,14 @@ body:
       "users": [
         {
           "full_name": "Bulk Rep One",
-          "email": "bulkrep1.{{$timestamp}}@boothflow.com",
+          "email": "bulkrep1@boothflow.com",
           "password": "BulkPass123",
           "role": "rep",
           "team_id": 1
         },
         {
           "full_name": "Bulk Rep Two",
-          "email": "bulkrep2.{{$timestamp}}@boothflow.com",
+          "email": "bulkrep2@boothflow.com",
           "password": "BulkPass123",
           "role": "rep",
           "team_id": 2
@@ -30,17 +30,6 @@ body:
       ]
     }
 scripts:
-  - type: beforeRequest
-    language: text/javascript
-    code: |-
-      const ts = Date.now();
-      const body = {
-          users: [
-              { full_name: "Bulk Rep One", email: `bulkrep1.${ts}@boothflow.com`, password: "BulkPass123", role: "rep", team_id: 1 },
-              { full_name: "Bulk Rep Two", email: `bulkrep2.${ts}@boothflow.com`, password: "BulkPass123", role: "rep", team_id: 2 }
-          ]
-      };
-      pm.request.body.update({ mode: "raw", raw: JSON.stringify(body) });
   - type: afterResponse
     language: text/javascript
     code: |-
@@ -60,3 +49,8 @@ scripts:
       pm.test("Response time is under 5000ms", () => {
           pm.expect(pm.response.responseTime).to.be.below(5000);
       });
+      const emails = pm.response.json().created_emails;
+      if (emails && emails.length > 0) {
+          pm.environment.set("bulkCreatedEmails", JSON.stringify(emails));
+          console.log("✅ Bulk created emails saved:", emails);
+      }

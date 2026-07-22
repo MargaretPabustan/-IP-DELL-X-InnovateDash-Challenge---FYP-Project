@@ -24,7 +24,7 @@
             "url": "{{baseUrl}}/leads",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Test Lead Admin\",\n  \"email\": \"{{email}}\",\n  \"company\": \"Test Company\",\n  \"title\": \"Test Manager\",\n  \"phone_number\": \"+65 9999 0000\",\n  \"customer_intent\": \"Medium - Pricing Inquiry\",\n  \"assigned_team_id\": 1,\n  \"primary_interest\": \"AI PCs\",\n  \"selected_interests\": [\"AI PCs\"],\n  \"additional_notes\": \"Created by Postman admin test\",\n  \"scanned_by\": 4,\n  \"scanned_by_name\": \"Daniel Lee\"\n}",
+              "raw": "{\n  \"name\": \"Admin Test Lead\",\n  \"email\": \"admintest.{{$timestamp}}@testcompany.com\",\n  \"company\": \"Admin Test Company\",\n  \"title\": \"Test Manager\",\n  \"phone_number\": \"+65 9999 1111\",\n  \"customer_intent\": \"Medium - Pricing Inquiry\",\n  \"assigned_team_id\": 1,\n  \"primary_interest\": \"AI PCs\",\n  \"selected_interests\": [\"AI PCs\"],\n  \"additional_notes\": \"Created by Postman admin test\",\n  \"scanned_by\": 4,\n  \"scanned_by_name\": \"Daniel Lee\"\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -43,8 +43,9 @@
                   "pm.test(\"Response has success true\", () => pm.expect(pm.response.json().success).to.be.true);",
                   "pm.test(\"Response has lead_id\", () => pm.expect(pm.response.json()).to.have.property('lead_id'));",
                   "if (pm.response.json().lead_id) {",
+                  "    pm.environment.set(\"adminCreatedLeadId\", pm.response.json().lead_id);",
                   "    pm.environment.set(\"createdLeadId\", pm.response.json().lead_id);",
-                  "    console.log(\"✅ createdLeadId set:\", pm.response.json().lead_id);",
+                  "    console.log(\"✅ Admin createdLeadId set:\", pm.response.json().lead_id);",
                   "}"
                 ]
               }
@@ -380,7 +381,7 @@
             "url": "{{baseUrl}}/admin/users/bulk",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"users\": [\n    {\n      \"full_name\": \"Bulk Rep One\",\n      \"email\": \"bulkrep1.{{$timestamp}}@boothflow.com\",\n      \"password\": \"BulkPass123\",\n      \"role\": \"rep\",\n      \"team_id\": 1\n    },\n    {\n      \"full_name\": \"Bulk Rep Two\",\n      \"email\": \"bulkrep2.{{$timestamp}}@boothflow.com\",\n      \"password\": \"BulkPass123\",\n      \"role\": \"rep\",\n      \"team_id\": 2\n    }\n  ]\n}",
+              "raw": "{\n  \"users\": [\n    {\n      \"full_name\": \"Bulk Rep One\",\n      \"email\": \"bulkrep1@boothflow.com\",\n      \"password\": \"BulkPass123\",\n      \"role\": \"rep\",\n      \"team_id\": 1\n    },\n    {\n      \"full_name\": \"Bulk Rep Two\",\n      \"email\": \"bulkrep2@boothflow.com\",\n      \"password\": \"BulkPass123\",\n      \"role\": \"rep\",\n      \"team_id\": 2\n    }\n  ]\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -390,22 +391,6 @@
           },
           "response": [],
           "event": [
-            {
-              "listen": "prerequest",
-              "script": {
-                "type": "text/javascript",
-                "exec": [
-                  "const ts = Date.now();",
-                  "const body = {",
-                  "    users: [",
-                  "        { full_name: \"Bulk Rep One\", email: `bulkrep1.${ts}@boothflow.com`, password: \"BulkPass123\", role: \"rep\", team_id: 1 },",
-                  "        { full_name: \"Bulk Rep Two\", email: `bulkrep2.${ts}@boothflow.com`, password: \"BulkPass123\", role: \"rep\", team_id: 2 }",
-                  "    ]",
-                  "};",
-                  "pm.request.body.update({ mode: \"raw\", raw: JSON.stringify(body) });"
-                ]
-              }
-            },
             {
               "listen": "test",
               "script": {
@@ -426,7 +411,12 @@
                   "});",
                   "pm.test(\"Response time is under 5000ms\", () => {",
                   "    pm.expect(pm.response.responseTime).to.be.below(5000);",
-                  "});"
+                  "});",
+                  "const emails = pm.response.json().created_emails;",
+                  "if (emails && emails.length > 0) {",
+                  "    pm.environment.set(\"bulkCreatedEmails\", JSON.stringify(emails));",
+                  "    console.log(\"✅ Bulk created emails saved:\", emails);",
+                  "}"
                 ]
               }
             }
@@ -2609,7 +2599,40 @@
           ]
         },
         {
-          "name": "Delete Jane Doe Lead",
+          "name": "Cleanup Admin Test Lead",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/leads/{{adminCreatedLeadId}}"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"Admin lead deleted successfully\", () => {",
+                  "    pm.expect(pm.response.json().success).to.be.true;",
+                  "});",
+                  "pm.test(\"Response time is under 3000ms\", () => {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(3000);",
+                  "});",
+                  "pm.environment.unset(\"adminCreatedLeadId\");",
+                  "console.log(\"✅ Admin test lead cleaned up\");"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Jane Doe Lead from Leads",
           "request": {
             "method": "DELETE",
             "header": [
