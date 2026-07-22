@@ -1,0 +1,34 @@
+$kind: http-request
+name: Cleanup Bulk Created Users
+method: DELETE
+url: '{{baseUrl}}/admin/users/by-email/bulkuser1@testcompany.com'
+order: 1540
+headers:
+  - key: Authorization
+    value: 'Bearer {{adminToken}}'
+scripts:
+  - type: afterResponse
+    language: text/javascript
+    code: |-
+      // Delete all bulk created users by email
+      const baseUrl = pm.environment.get("baseUrl");
+      const adminToken = pm.environment.get("adminToken");
+      const emailsRaw = pm.environment.get("bulkCreatedEmails");
+
+      pm.test("Status is 200", () => pm.response.to.have.status(200));
+
+      if (emailsRaw) {
+          const emails = JSON.parse(emailsRaw);
+          emails.forEach(email => {
+              pm.sendRequest({
+                  url: baseUrl + "/admin/users/by-email/" + encodeURIComponent(email),
+                  method: "DELETE",
+                  header: { "Authorization": "Bearer " + adminToken }
+              }, function(err, res) {
+                  if (!err) console.log("✅ Deleted bulk user:", email, res.code);
+                  else console.log("❌ Failed to delete:", email, err);
+              });
+          });
+          pm.environment.unset("bulkCreatedEmails");
+          console.log("✅ Bulk user cleanup complete");
+      }

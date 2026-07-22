@@ -1083,7 +1083,9 @@
                   "    const json = pm.response.json();",
                   "    pm.expect(Number(json.lead_id)).to.be.a('number').and.to.be.above(0);",
                   "    pm.environment.set(\"createdLeadId\", String(json.lead_id));",
+                  "    pm.environment.set(\"janeDoeLeadId\", String(json.lead_id));",
                   "    console.log(\"createdLeadId set to:\", json.lead_id);",
+                  "    console.log(\"janeDoeLeadId set to:\", json.lead_id);",
                   "});",
                   "pm.test(\"Response contains assigned_team_id\", () => {",
                   "    const json = pm.response.json();",
@@ -2573,7 +2575,41 @@
           ]
         },
         {
-          "name": "Delete Lead",
+          "name": "Delete Test Admin User",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/users/{{createdUserId}}"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"User deleted successfully\", () => {",
+                  "    pm.expect(pm.response.json().message).to.equal(\"User deleted\");",
+                  "});",
+                  "pm.test(\"Response time is under 3000ms\", () => {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(3000);",
+                  "});",
+                  "pm.environment.unset(\"createdUserId\");",
+                  "pm.environment.unset(\"repEmail\");",
+                  "console.log(\"✅ Test admin user cleaned up\");"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Delete Jane Doe Lead",
           "request": {
             "method": "DELETE",
             "header": [
@@ -2582,7 +2618,7 @@
                 "value": "Bearer {{authToken}}"
               }
             ],
-            "url": "{{baseUrl}}/leads/{{createdLeadId}}"
+            "url": "{{baseUrl}}/leads/{{janeDoeLeadId}}"
           },
           "response": [],
           "event": [
@@ -2596,7 +2632,59 @@
                   "    const json = pm.response.json();",
                   "    pm.expect(json.success).to.be.true;",
                   "    pm.expect(json.message).to.equal('Lead deleted successfully');",
-                  "});"
+                  "});",
+                  "pm.test(\"Response time is under 3000ms\", () => {",
+                  "    pm.expect(pm.response.responseTime).to.be.below(3000);",
+                  "});",
+                  "pm.environment.unset(\"janeDoeLeadId\");",
+                  "pm.environment.unset(\"testEmail\");",
+                  "console.log(\"✅ Jane Doe lead cleaned up\");"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cleanup Bulk Created Users",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/admin/users/by-email/bulkuser1@testcompany.com"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Delete all bulk created users by email",
+                  "const baseUrl = pm.environment.get(\"baseUrl\");",
+                  "const adminToken = pm.environment.get(\"adminToken\");",
+                  "const emailsRaw = pm.environment.get(\"bulkCreatedEmails\");",
+                  "",
+                  "pm.test(\"Status is 200\", () => pm.response.to.have.status(200));",
+                  "",
+                  "if (emailsRaw) {",
+                  "    const emails = JSON.parse(emailsRaw);",
+                  "    emails.forEach(email => {",
+                  "        pm.sendRequest({",
+                  "            url: baseUrl + \"/admin/users/by-email/\" + encodeURIComponent(email),",
+                  "            method: \"DELETE\",",
+                  "            header: { \"Authorization\": \"Bearer \" + adminToken }",
+                  "        }, function(err, res) {",
+                  "            if (!err) console.log(\"✅ Deleted bulk user:\", email, res.code);",
+                  "            else console.log(\"❌ Failed to delete:\", email, err);",
+                  "        });",
+                  "    });",
+                  "    pm.environment.unset(\"bulkCreatedEmails\");",
+                  "    console.log(\"✅ Bulk user cleanup complete\");",
+                  "}"
                 ]
               }
             }

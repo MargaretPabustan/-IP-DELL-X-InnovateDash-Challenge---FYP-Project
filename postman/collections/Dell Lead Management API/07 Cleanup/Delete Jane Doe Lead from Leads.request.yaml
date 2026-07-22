@@ -1,8 +1,8 @@
 $kind: http-request
-name: Delete Lead
+name: Delete Jane Doe Lead from Leads 
 method: DELETE
-url: '{{baseUrl}}/leads/{{createdLeadId}}'
-order: 1500
+url: '{{baseUrl}}/leads/{{janeDoeLeadId}}'
+order: 1520
 headers:
   - key: Authorization
     value: 'Bearer {{authToken}}'
@@ -16,3 +16,9 @@ scripts:
           pm.expect(json.success).to.be.true;
           pm.expect(json.message).to.equal('Lead deleted successfully');
       });
+      pm.test("Response time is under 3000ms", () => {
+          pm.expect(pm.response.responseTime).to.be.below(3000);
+      });
+      pm.environment.unset("janeDoeLeadId");
+      pm.environment.unset("testEmail");
+      console.log("✅ Jane Doe lead cleaned up");

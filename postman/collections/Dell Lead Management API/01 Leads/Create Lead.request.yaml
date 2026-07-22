@@ -40,7 +40,9 @@ scripts:
           const json = pm.response.json();
           pm.expect(Number(json.lead_id)).to.be.a('number').and.to.be.above(0);
           pm.environment.set("createdLeadId", String(json.lead_id));
+          pm.environment.set("janeDoeLeadId", String(json.lead_id));
           console.log("createdLeadId set to:", json.lead_id);
+          console.log("janeDoeLeadId set to:", json.lead_id);
       });
       pm.test("Response contains assigned_team_id", () => {
           const json = pm.response.json();

@@ -865,7 +865,7 @@ app.post('/admin/users/bulk', authenticateToken, authorizeRoles('admin'), async 
     if (!Array.isArray(users) || users.length === 0) {
         return res.status(400).json({ success: false, message: 'No users provided' });
     }
-    const results = { created: 0, failed: 0, errors: [] };
+    const results = { created: 0, failed: 0, errors: [], created_emails: [] };
     for (const user of users) {
         try {
             const { full_name, email, password, role, team_id } = user;
@@ -880,6 +880,7 @@ app.post('/admin/users/bulk', authenticateToken, authorizeRoles('admin'), async 
                 [full_name, email, hashedPassword, role, team_id || null]
             );
             results.created++;
+            results.created_emails.push(email);
         } catch (err) {
             results.failed++;
             results.errors.push(`${user.email}: ${err.message}`);
@@ -906,6 +907,13 @@ app.put('/admin/users/:id', authenticateToken, authorizeRoles('admin'), async (r
     }
     res.json({ success: true, message: 'User updated' });
   } catch (err) { res.status(500).json({ success: false, message: err.message }); }
+});
+
+app.delete('/admin/users/by-email/:email', authenticateToken, authorizeRoles('admin'), async (req, res) => {
+    try {
+        await pool.query('DELETE FROM users WHERE email = $1', [req.params.email]);
+        res.json({ success: true, message: 'User deleted by email' });
+    } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 app.delete('/admin/users/:id', authenticateToken, authorizeRoles('admin'), async (req, res) => {
@@ -1281,7 +1289,17 @@ app.post('/send-followup/:id', authenticateToken, async (req, res) => {
         const emailHtml = buildFollowUpEmailHtml(lead, aiData, interests);
 
         // 4. Trigger transactional email pipeline execution
-        await sendEmail({ to: lead.email, subject: emailSubject, text: emailBody, html: emailHtml });
+        // Skip actual email sending in test environment
+        if (process.env.NODE_ENV === 'test') {
+            console.log(`🧪 Test mode — skipping email send to ${lead.email}`);
+        } else {
+        // Skip actual email sending in test environment
+        if (process.env.NODE_ENV === 'test') {
+            console.log(`🧪 Test mode — skipping email send to ${lead.email}`);
+        } else {
+            await sendEmail({ to: lead.email, subject: emailSubject, text: emailBody, html: emailHtml });
+        }
+        }
 
         // 5. Commit state persistence inside an atomic transaction scope
         await pool.query('BEGIN');

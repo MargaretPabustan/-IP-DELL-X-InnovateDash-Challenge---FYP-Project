@@ -12,11 +12,11 @@ body:
   type: json
   content: |-
     {
-      "name": "Test Lead Admin",
-      "email": "{{email}}",
-      "company": "Test Company",
+      "name": "Admin Test Lead",
+      "email": "admintest.{{$timestamp}}@testcompany.com",
+      "company": "Admin Test Company",
       "title": "Test Manager",
-      "phone_number": "+65 9999 0000",
+      "phone_number": "+65 9999 1111",
       "customer_intent": "Medium - Pricing Inquiry",
       "assigned_team_id": 1,
       "primary_interest": "AI PCs",
@@ -33,6 +33,7 @@ scripts:
       pm.test("Response has success true", () => pm.expect(pm.response.json().success).to.be.true);
       pm.test("Response has lead_id", () => pm.expect(pm.response.json()).to.have.property('lead_id'));
       if (pm.response.json().lead_id) {
+          pm.environment.set("adminCreatedLeadId", pm.response.json().lead_id);
           pm.environment.set("createdLeadId", pm.response.json().lead_id);
-          console.log("✅ createdLeadId set:", pm.response.json().lead_id);
+          console.log("✅ Admin createdLeadId set:", pm.response.json().lead_id);
       }
