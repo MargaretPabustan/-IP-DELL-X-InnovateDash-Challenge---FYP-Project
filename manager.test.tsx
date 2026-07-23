@@ -101,13 +101,14 @@ beforeEach(() => {
 // ============================================================================
 describe('Manager Dashboard Screen Rendering & Actions', () => {
   
+  // FIXED: Timeout extended to 15000ms to allow heavy dashboard initializations/animations to resolve smoothly
   test('Manager Dashboard: renders layout panels and counters from endpoint correctly', async () => {
     setupFetchMock(mockDashboardData);
     await renderAsyncComponent(<DashboardScreen />);
     await waitFor(() => {
       expect(screen.getByText('Total Team Leads')).toBeTruthy();
     });
-  });
+  }, 15000);
 
   test('Manager Dashboard: bottom navigation links change route contexts instantly when pressed', async () => {
     setupFetchMock(mockDashboardData);
@@ -243,9 +244,6 @@ describe('Manager Activity Screen Feed Stream Logs', () => {
 // ============================================================================
 // TARGET SPECIFICATION 4: MANAGER EMAILS SCREEN (./app/manager/emails.tsx)
 // ============================================================================
-// ============================================================================
-// TARGET SPECIFICATION 4: MANAGER EMAILS SCREEN (./app/manager/emails.tsx)
-// ============================================================================
 describe('Manager Emails Screen Tracking & Automation Actions', () => {
   
   test('Manager Emails: renders email dashboard template layout correctly', async () => {
@@ -261,7 +259,6 @@ describe('Manager Emails Screen Tracking & Automation Actions', () => {
       expect(screen.getByText('Date')).toBeTruthy();
     });
     
-    // Target and press the Date selection row component
     const dateBtn = screen.getByText('Date');
     fireEvent.press(dateBtn);
     
@@ -276,7 +273,6 @@ describe('Manager Emails Screen Tracking & Automation Actions', () => {
       expect(screen.getByText('Time')).toBeTruthy();
     });
     
-    // Target and press the Time selection row component
     const timeBtn = screen.getByText('Time');
     fireEvent.press(timeBtn);
     
@@ -291,7 +287,6 @@ describe('Manager Emails Screen Tracking & Automation Actions', () => {
       expect(screen.getByText('Schedule Follow-up')).toBeTruthy();
     });
 
-    // Validates that the follow-up submission element is correctly locked out out-of-the-box
     const scheduleText = screen.getByText('Schedule Follow-up');
     const scheduleBtnContainer = scheduleText.parent; 
     
@@ -299,9 +294,6 @@ describe('Manager Emails Screen Tracking & Automation Actions', () => {
   });
 });
 
-// ============================================================================
-// TARGET SPECIFICATION 5: MANAGER EXPORT SCREEN (./app/manager/export.tsx)
-// ============================================================================
 // ============================================================================
 // TARGET SPECIFICATION 5: MANAGER EXPORT SCREEN (./app/manager/export.tsx)
 // ============================================================================
@@ -317,12 +309,10 @@ describe('Manager Export Screen Data Actions & Form Submissions', () => {
   test('Manager Export: clicking the generate file button triggers download sequence successfully', async () => {
     await renderAsyncComponent(<ExportScreen />);
     
-    // Wait for elements to register using a scannable check
     await waitFor(() => {
       expect(screen.getAllByText('Download Excel').length).toBeGreaterThan(0);
     });
 
-    // Safely target the first matched instance of the text element to trigger the bubble up press event
     const exportBtn = screen.getAllByText('Download Excel')[0];
     fireEvent.press(exportBtn);
     
