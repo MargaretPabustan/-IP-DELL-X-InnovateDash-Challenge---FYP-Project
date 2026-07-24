@@ -233,8 +233,8 @@ export default function AdminDashboard() {
             <Text style={[styles.sectionLabel, { color: theme.subText }]}>OVERVIEW</Text>
             <View style={styles.statsGrid}>
               <StatCard label="Total Leads" value={stats?.total_leads} icon="people"           color="#3b82f6" />
-              <StatCard label="Qualified"   value={stats?.qualified}   icon="checkmark-circle" color="#22c55e" />
-              <StatCard label="Contacted"   value={stats?.contacted}   icon="call"             color="#f59e0b" />
+              <StatCard label="Urgent"   value={stats?.qualified}   icon="checkmark-circle" color="#22c55e" />
+              <StatCard label="Follow-up"   value={stats?.contacted}   icon="call"             color="#f59e0b" />
               <StatCard label="New"         value={stats?.new_leads}   icon="add-circle"       color="#6366f1" />
             </View>
 
