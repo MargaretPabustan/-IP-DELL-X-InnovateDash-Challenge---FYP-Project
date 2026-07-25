@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, SafeAreaView, TouchableOpacity,
+  View, Text, StyleSheet, SafeAreaView, TouchableOpacity, Alert,
   StatusBar, Platform, ScrollView, ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -8,6 +8,10 @@ import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { useAppTheme } from '../../src/constants/useAppTheme';
 import * as SecureStore from 'expo-secure-store';
 import Svg, { Path, Circle, Line, Text as SvgText, Defs, LinearGradient as SvgGradient, Stop } from 'react-native-svg';
+import ViewShot, { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Print from 'expo-print';
 import { Dimensions } from 'react-native';
 
 const API_URL       = process.env.EXPO_PUBLIC_API_URL || '';
@@ -41,6 +45,27 @@ const HOUR_SLOTS = [
 ];
 
 export default function ActivityScreen() {
+  const chartRef = React.useRef(null);
+
+  const handleExportPDF = async () => {
+    try {
+      const uri = await captureRef(chartRef, { format: 'png', quality: 1 });
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      const html = `
+        <html>
+          <body style="margin:24px; font-family: Arial, sans-serif; background:#fff;">
+            <h2 style="color:#0f2557; margin-bottom:4px;">BoothFlow — Activity Analytics</h2>
+            <p style="color:#666; font-size:13px; margin-bottom:16px;">Exported on ${new Date().toLocaleDateString('en-SG', { day: '2-digit', month: 'short', year: 'numeric' })}</p>
+            <img src="data:image/png;base64,${base64}" style="width:100%; max-width:600px; border-radius:8px;" />
+          </body>
+        </html>
+      `;
+      const { uri: pdfUri } = await Print.printToFileAsync({ html, base64: false });
+      await Sharing.shareAsync(pdfUri, { mimeType: 'application/pdf', dialogTitle: 'Export Activity Chart as PDF' });
+    } catch (err: any) {
+      Alert.alert('Export Failed', err.message || 'Could not export chart as PDF.');
+    }
+  };
   const router = useRouter();
   const { theme } = useAppTheme();
 
@@ -328,7 +353,16 @@ export default function ActivityScreen() {
               </View>
             )}
 
-            {/* ALL TIME — Line Chart */}
+            {/* Export Button */}
+              <TouchableOpacity
+                onPress={handleExportPDF}
+                style={{ alignSelf: 'flex-end', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: theme.navy, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8, marginBottom: 12 }}
+              >
+                <Ionicons name="download-outline" size={16} color="#fff" />
+                <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>Export Chart</Text>
+              </TouchableOpacity>
+              <ViewShot ref={chartRef} options={{ format: 'png', quality: 1 }}>
+              {/* ALL TIME — Line Chart */}
             {activeTab === 'alltime' && (
               <View style={[styles.chartCard, { backgroundColor: theme.card }]}>
                 <Text style={[styles.chartTitle, { color: theme.text }]}>
@@ -422,6 +456,7 @@ export default function ActivityScreen() {
                 );
               })
             )}
+            </ViewShot>
           </>
         )}
       </ScrollView>

@@ -16,7 +16,7 @@
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#0f2557"
       },
-      "edgeToEdgeEnabled": true,
+      "edgeToEdgeEnabled": false,
       "predictiveBackGestureEnabled": false,
       "package": "com.renvrose.dellleadapp"
     },

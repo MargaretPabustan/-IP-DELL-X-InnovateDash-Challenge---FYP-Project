@@ -1,4 +1,5 @@
 import { Stack, useRouter, useSegments } from 'expo-router';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, SafeAreaView, TouchableOpacity, AppState, Alert, ActivityIndicator } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
@@ -162,7 +163,7 @@ export default function RootLayout() {
   }
 
   return (
-    <>
+    <SafeAreaProvider>
       {syncStatus === 'syncing' && (
         <View style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 999, backgroundColor: '#007DB8', paddingTop: 48, paddingBottom: 8, paddingHorizontal: 16, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           <ActivityIndicator size="small" color="#fff" />
@@ -182,7 +183,7 @@ export default function RootLayout() {
       <Stack.Screen name="manager" />
       <Stack.Screen name="admin" />
     </Stack>
-    </>
+    </SafeAreaProvider>
   );
 }
 
