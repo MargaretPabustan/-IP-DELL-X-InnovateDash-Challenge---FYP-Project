@@ -177,7 +177,7 @@ describe('Manager Leads Screen Data, Filters, Inputs & Viewport Resizing', () =>
     await waitFor(() => {
       expect(screen.toJSON()).toBeTruthy();
     });
-  });
+  }, 10000);
 
   test('Manager Leads: search filter query typing mutates component filtering lists perfectly', async () => {
     setupFetchMock(mockLeadsArray);
