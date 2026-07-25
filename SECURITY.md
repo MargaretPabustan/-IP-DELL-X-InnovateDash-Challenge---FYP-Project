@@ -39,11 +39,10 @@ Instead, contact the development team directly via email. We will respond within
 - All data stored in Supabase with SSL-encrypted connections
 
 ### Frontend Security
-- **Screenshot & Screen Recording Prevention** — enabled via `expo-screen-capture`
 - **Session Timeout** — auto logout on app inactivity via `AppState`
 - **Secure Token Storage** — JWT never exposed to JavaScript memory directly
 
 ### CI/CD Security
 - GitHub Actions secrets used for all sensitive values
-- Docker images pushed to GHCR with authentication
+- Docker images pushed to GHCR as a private container with authentication
 - No credentials hardcoded in workflow files

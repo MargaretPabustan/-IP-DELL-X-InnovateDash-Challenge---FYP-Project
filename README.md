@@ -28,13 +28,13 @@ Boothflow is a mobile application that enables Dell Technologies booth represent
 | QR Code Scanning | Instant lead capture via QR code at the booth |
 | AI Lead Analysis | Google Gemini 2.5 Flash analyses customer intent with confidence scoring |
 | Rule-Based Fallback | Ensures AI analysis continues even if Gemini API is unavailable |
-| Automated Email Follow-ups | Leads receive a follow-up email 3 hours after capture via Brevo |
+| Automated Email Follow-ups | Leads receive a follow-up email 3 hours after capture via Resend |
 | Manual Email Scheduling | Managers can override and schedule follow-ups at any time |
 | Manager Dashboard | Real-time team lead stats, charts, activity logs and Excel export |
 | Role-Based Access Control | Three roles — Rep, Manager, Admin — with JWT authentication |
 | Theme System | Four UI themes — Navy, Matcha, Dark, Aurora |
 | PDPA Compliance | Personal data handling aligned with Singapore's PDPA guidelines |
-| Docker + Kubernetes | Containerised backend deployed on AWS EKS with HPA |
+| Docker + Kubernetes | Containerised backend with Kubernetes/AWS EKS deployment demonstrated for orchestration purposes; production backend hosted on Render |
 | CI/CD Pipeline | Automated testing and deployment via GitHub Actions |
 
 ---
@@ -47,9 +47,10 @@ Boothflow is a mobile application that enables Dell Technologies booth represent
 | Backend | Node.js, Express.js, REST API |
 | Database | Supabase (PostgreSQL) |
 | AI | Google Gemini 2.5 Flash + Rule-Based Fallback |
-| Email | Brevo (Transactional Email API) |
+| Email | Resend (Transactional Email API) |
 | DevOps | Docker, Docker Compose, GitHub Actions CI/CD |
-| Orchestration | Kubernetes (AWS EKS), Horizontal Pod Autoscaling |
+| Orchestration | Kubernetes (AWS EKS), Horizontal Pod Autoscaling — demo only |
+| Hosting | Render (production backend) |
 | Image Registry | GitHub Container Registry (GHCR) |
 | Security | JWT, bcrypt, Rate Limiting, Helmet.js, Expo SecureStore |
 
@@ -60,12 +61,12 @@ Boothflow is a mobile application that enables Dell Technologies booth represent
 ```
 Mobile App (Expo/React Native)
         ↓ REST API (HTTPS)
-Backend (Node.js/Express) ──→ Google Gemini 2.5 Flash API
-        ↓                 ──→ Brevo Transactional Email
+Backend (Node.js/Express, hosted on Render) ──→ Google Gemini 2.5 Flash API
+        ↓                 ──→ Resend Transactional Email
 Supabase (PostgreSQL)
 
 CI/CD Pipeline:
-GitHub → GitHub Actions → Docker Build → GHCR → AWS EKS (Kubernetes)
+GitHub → GitHub Actions → Docker Build → GHCR → AWS EKS (Kubernetes, demo only)
 ```
 
 ---
@@ -83,8 +84,8 @@ GitHub → GitHub Actions → Docker Build → GHCR → AWS EKS (Kubernetes)
 ## Testing
 
 The backend is tested using a comprehensive Postman collection:
-- **46 test cases** across 7 test folders
-- **143 assertions** covering authentication, leads, teams, AI analysis, manager and admin routes
+- **70 test cases** across 10 test folders
+- **246 assertions** covering authentication, leads, teams, AI analysis, manager and admin routes
 - Automated test execution via GitHub Actions CI/CD on every push to main
 
 Frontend validation testing is covered using **Jest** and `@testing-library/react-native`.
@@ -132,10 +133,10 @@ fyp-project/
 
 | Member | Key Contributions |
 |--------|------------------|
-| Sahana | Frontend development, AI integration, DevOps, API testing |
-| Margaret | Backend routes, database design, authentication, email integration |
-| Thanmaee | Backend routes, CI/CD pipeline, email scheduling, SMTP setup |
-| Thanushri | Kubernetes deployment, system architecture, project documentation |
+| Sahana | Frontend development (Booth Rep & Admin portals), AI integration, email integration, app security, deployment, API/E2E testing |
+| Margaret | Database design, authentication system, backend routes (Teams, Follow-ups, Manager, Admin), Manager frontend, frontend testing |
+| Thanmaee | Backend routes (Leads, AI analysis, Excel export), email scheduling & SMTP migration, CI/CD pipeline, backend security |
+| Thanushri | Wireframes, Kubernetes deployment & demo, system architecture, project documentation |
 
 ---
 
