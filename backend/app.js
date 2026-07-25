@@ -438,10 +438,10 @@ app.post('/leads', async (req, res) => {
                         );
                     }
                 } catch (interestErr) {
-                    console.warn(`⚠️ Could not insert interest ${interestName}:`, interestErr.message);
+                    console.warn('⚠️ Could not insert interest:', interestName, interestErr.message);
                 }
             }
-            console.log(`✅ Interests saved for lead ${leadId}: ${selected_interests.join(', ')}`);
+            console.log('✅ Interests saved for lead', leadId, ':', selected_interests.join(', '));
         }
 
         res.status(201).json({ success: true, message: 'Lead created successfully', lead_id: leadId, assigned_team_id: teamId });
