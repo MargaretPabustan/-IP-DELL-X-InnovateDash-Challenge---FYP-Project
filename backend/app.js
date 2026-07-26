@@ -438,10 +438,10 @@ app.post('/leads', async (req, res) => {
                         );
                     }
                 } catch (interestErr) {
-                    console.warn('⚠️ Could not insert interest:', interestName, interestErr.message);
+                    console.warn(`⚠️ Could not insert interest ${interestName}:`, interestErr.message);
                 }
             }
-            console.log('✅ Interests saved for lead', leadId, ':', selected_interests.join(', '));
+            console.log(`✅ Interests saved for lead ${leadId}: ${selected_interests.join(', ')}`);
         }
 
         res.status(201).json({ success: true, message: 'Lead created successfully', lead_id: leadId, assigned_team_id: teamId });
@@ -819,7 +819,10 @@ app.put('/manager/followup/:leadId', authenticateToken, async (req, res) => {
                 followup_action = COALESCE(EXCLUDED.followup_action, lead_followups.followup_action),
                 notes = COALESCE(EXCLUDED.notes, lead_followups.notes),
                 email_subject = lead_followups.email_subject,
-                scheduled_at = lead_followups.scheduled_at,
+                scheduled_at = CASE 
+                    WHEN EXCLUDED.followup_status = 'pending' THEN NOW() + INTERVAL '3 hours'
+                    ELSE lead_followups.scheduled_at 
+                END,
                 sent_at = lead_followups.sent_at,
                 due_date = COALESCE(lead_followups.due_date, CURRENT_DATE)`,
             [leadId, actionLabel, followup_status, notes || null]
@@ -1352,7 +1355,7 @@ app.post('/send-followup/:id', authenticateToken, async (req, res) => {
 
 
 // ── CRON JOB — runs every 5 minutes, sends pending emails ────────────────────
-cron.schedule('*/5 * * * *', async () => {
+cron.schedule('0 */3 * * *', async () => {
     console.log('⏰ Cron running — checking pending followups...');
     try {
         const followups = await pool.query(`
