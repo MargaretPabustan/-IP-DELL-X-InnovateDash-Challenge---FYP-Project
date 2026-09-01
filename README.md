@@ -140,6 +140,19 @@ fyp-project/
 | Thanushri | Wireframes, Kubernetes deployment & demo, system architecture, project documentation |
 
 ---
+## Challenges & Solutions
+## Challenges & Solutions
+
+| Challenge                                                                                                                                                                                                       | Solution                                                                                                                                                                                |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Learning React Native** — The team had to quickly learn React Native and Expo while developing a mobile application, resulting in a steep learning curve.                                                     | Researched React Native and Expo documentation, experimented with the framework through development, and gradually applied the concepts to build and refine the application.            |
+| **Frontend–Backend Integration** — Connecting the React Native frontend with the Node.js/Express backend required coordinating API requests, authentication, data handling and different application workflows. | Tested API endpoints systematically and integrated the frontend with the backend incrementally, resolving issues as each feature was connected and validated.                           |
+| **Database Issues** — The project initially encountered issues with the original database setup, affecting backend development and data management.                                                             | Evaluated alternative database solutions and migrated the backend database to **Supabase PostgreSQL**, improving reliability and providing a more suitable environment for the project. |
+| **Frontend Testing** — Testing the React Native application was time-consuming, particularly when validating different components and user workflows.                                                           | Implemented automated frontend testing using **Jest and React Native Testing Library** to systematically validate application behaviour and identify issues.                            |
+| **Workload & Team Coordination** — Balancing development tasks, testing, documentation and other project requirements while attending weekly team meetings required consistent coordination.                    | The leader divided responsibilities among team members, tracked progress regularly and used weekly meetings to discuss issues, coordinate development and keep the project on schedule.            |
+
+
+
 
 *Republic Polytechnic — Diploma in Information Technology | AY2025/2026*
 *Developed for Dell Technologies Forum Singapore*
