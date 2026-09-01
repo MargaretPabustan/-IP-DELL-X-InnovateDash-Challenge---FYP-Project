@@ -150,6 +150,17 @@ fyp-project/
 | **Frontend Testing** — Testing the React Native application was time-consuming, particularly when validating different components and user workflows.                                                           | Implemented automated frontend testing using **Jest and React Native Testing Library** to systematically validate application behaviour and identify issues.                            |
 | **Workload & Team Coordination** — Balancing development tasks, testing, documentation and other project requirements while attending weekly team meetings required consistent coordination.                    | The leader divided responsibilities among team members, tracked progress regularly and used weekly meetings to discuss issues, coordinate development and keep the project on schedule.            |
 
+## Key Learning Outcomes
+
+* Gained practical experience in **full-stack mobile application development** using React Native, Expo, Node.js and Express.js.
+* Developed a stronger understanding of **frontend–backend integration**, including REST APIs, authentication and data handling.
+* Gained experience in **database design and migration**, including migrating the project database to Supabase PostgreSQL.
+* Applied **AI integration** using Google Gemini 2.5 Flash and implemented a rule-based fallback for improved system reliability.
+* Developed practical skills in **software testing**, using Postman for backend API testing and Jest with React Native Testing Library for frontend testing.
+* Gained hands-on experience with **Docker, Kubernetes, AWS EKS and CI/CD** through deployment and orchestration activities.
+* Improved **team collaboration, task management and communication** through weekly meetings, shared responsibilities and iterative development.
+* Strengthened problem-solving skills by troubleshooting **technical, integration and deployment issues** throughout the project lifecycle.
+
 
 
 
